@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Team Workload Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -352,6 +353,22 @@ select option{background:#fff}
 }
 
 .hidden{display:none}
+
+/* Notes canvas */
+.nb-note-content:empty:before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;font-style:italic}
+.nb-note-content ul{padding-left:20px;margin:4px 0}
+.nb-note-content li{margin:2px 0}
+/* Todo list — mirrors bullets but with checkbox toggle */
+.nb-todo-list{list-style:none;padding-left:4px;margin:4px 0}
+.nb-todo-list li{display:flex;align-items:flex-start;gap:0;padding:2px 0;cursor:default}
+.nb-todo-list li::before{content:'☐';font-size:15px;color:#888;flex-shrink:0;cursor:pointer;line-height:1.75;margin-right:8px;min-width:18px}
+.nb-todo-list li.done{text-decoration:line-through;color:var(--muted)}
+.nb-todo-list li.done::before{content:'☑';color:var(--green)}
+.nb-note-content table{border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0}
+.nb-note-content td,.nb-note-content th{border:1px solid var(--border);padding:8px 10px;vertical-align:top;min-width:60px}
+.nb-note-content th{background:var(--surface2);font-weight:600}
+.nb-note:hover .nb-note-bar{opacity:1!important}
+.nb-note:focus-within .nb-note-bar{opacity:1!important}
 </style>
 </head>
 <body>
@@ -436,7 +453,9 @@ select option{background:#fff}
 
 <div class="header">
   <div class="header-left">
-    <div class="logo">W</div>
+    <div class="logo" style="background:transparent;padding:0;width:auto;height:36px;border-radius:0">
+      <img src="data:image/png;base64,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" style="height:36px;width:auto;display:block">
+    </div>
     <div>
       <div class="header-title">Workload Tracker</div>
       <div class="header-date" id="headerDate"></div>
@@ -459,7 +478,7 @@ select option{background:#fff}
         <span style="font-size:10px;color:var(--muted);margin-left:2px">▾</span>
       </div>
       <div id="userMenu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-lg);min-width:160px;z-index:100;overflow:hidden">
-        <div onclick="openSettingsModal()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">⚙️ Settings</div>
+        <div id="userMenuSettings" onclick="openSettingsModal()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">⚙️ Settings</div>
         <div onclick="exportData()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background 0.1s" onmouseenter="this.style.background='var(--surface2)'" onmouseleave="this.style.background=''">📤 Export Data</div>
         <div style="height:1px;background:var(--border)"></div>
         <div onclick="doLogout()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--red);transition:background 0.1s" onmouseenter="this.style.background='var(--red-bg)'" onmouseleave="this.style.background=''">→ Sign Out</div>
@@ -468,12 +487,14 @@ select option{background:#fff}
   </div>
 </div>
 
-<div class="tabs">
-  <div class="tab active" onclick="switchTab('weekly',this)">Weekly Grid</div>
-  <div class="tab" onclick="switchTab('monthly',this)">Monthly Calendar</div>
-  <div class="tab" onclick="switchTab('projects',this)">Projects</div>
-  <div class="tab" onclick="switchTab('mywork',this)" id="myworkTab">My Work <span id="inboxBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px"></span></div>
-  <div class="tab" onclick="switchTab('finder',this)">🔍 Capacity Finder</div>
+<div class="tabs" id="mainTabs">
+  <div class="tab active" onclick="switchTab('weekly',this)" data-view="weekly">Weekly Grid</div>
+  <div class="tab" onclick="switchTab('monthly',this)" data-view="monthly">Monthly Calendar</div>
+  <div class="tab" onclick="switchTab('projects',this)" data-view="projects">Projects</div>
+  <div class="tab" onclick="switchTab('mywork',this)" id="myworkTab" data-view="mywork">My Work <span id="inboxBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px"></span></div>
+  <div class="tab" onclick="switchTab('finder',this)" data-view="finder">🔍 Capacity Finder</div>
+  <div class="tab" onclick="switchTab('notes',this)" data-view="notes">📝 My Notes</div>
+  <div class="tab" onclick="switchTab('timesheet',this)" data-view="timesheet">🕐 Timesheet</div>
 </div>
 
 <div class="main">
@@ -498,6 +519,7 @@ select option{background:#fff}
           <button class="nav-btn" onclick="shiftWeek(-1)">‹</button>
           <span class="nav-label" id="weekLabel"></span>
           <button class="nav-btn" onclick="shiftWeek(1)">›</button>
+          <button class="btn btn-sm" onclick="weekOffset=0;renderWeekly();updateSummary()" style="font-size:11px;padding:4px 10px">Today</button>
         </div>
         <div class="nav-controls" id="yearNavControls" style="display:none">
           <button class="nav-btn" onclick="shiftYear(-1)">‹</button>
@@ -524,6 +546,7 @@ select option{background:#fff}
         <button class="nav-btn" onclick="shiftMonth(-1)">‹</button>
         <span class="nav-label" id="monthLabel"></span>
         <button class="nav-btn" onclick="shiftMonth(1)">›</button>
+        <button class="btn btn-sm" onclick="monthOffset=0;renderMonthly()" style="font-size:11px;padding:4px 10px">This Month</button>
       </div>
     </div>
     <div class="cal-wrap">
@@ -556,7 +579,9 @@ select option{background:#fff}
   </div>
 
   <div id="view-finder" class="hidden">
-    <div class="section-header"><div class="section-title">Capacity Finder</div></div>
+    <div class="section-header">
+      <div class="section-title">Capacity Finder</div>
+    </div>
     <div class="finder-panel">
       <div class="finder-panel-top">
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
@@ -574,6 +599,187 @@ select option{background:#fff}
         </div>
       </div>
       <div class="finder-panel-body"><div class="finder-grid" id="finderGrid"></div></div>
+    </div>
+  </div>
+
+  <div id="view-notes" class="hidden">
+    <!-- Compact toolbar -->
+    <div style="padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:3px;flex-wrap:wrap;position:sticky;top:0;z-index:10">
+      <button title="Undo (Ctrl+Z)" onclick="nbUndo()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">↩</button>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <button title="Bold" onmousedown="event.preventDefault();document.execCommand('bold')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text)">B</button>
+      <button title="Italic" onmousedown="event.preventDefault();document.execCommand('italic')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:13px;font-style:italic;color:var(--text)">I</button>
+      <button title="Underline" onmousedown="event.preventDefault();document.execCommand('underline')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:13px;text-decoration:underline;color:var(--text)">U</button>
+      <button title="Strikethrough" onmousedown="event.preventDefault();document.execCommand('strikeThrough')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:13px;text-decoration:line-through;color:var(--text)">S</button>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <button title="Yellow" onmousedown="event.preventDefault();document.execCommand('hiliteColor',false,'#FFF9C4')" style="background:#FFF9C4;border:1px solid #d4b800;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:700">A</button>
+      <button title="Green" onmousedown="event.preventDefault();document.execCommand('hiliteColor',false,'#C8F7C5')" style="background:#C8F7C5;border:1px solid #5cb85c;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:700">A</button>
+      <button title="Blue" onmousedown="event.preventDefault();document.execCommand('hiliteColor',false,'#C5E8F7')" style="background:#C5E8F7;border:1px solid #5bc0de;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:700">A</button>
+      <button title="Pink" onmousedown="event.preventDefault();document.execCommand('hiliteColor',false,'#FFC5C5')" style="background:#FFC5C5;border:1px solid #d9534f;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:700">A</button>
+      <button title="Clear highlight" onmousedown="event.preventDefault();document.execCommand('hiliteColor',false,'inherit')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;cursor:pointer;font-size:10px;color:var(--muted)">✕</button>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <button title="Bullet list" onclick="nbInsertBullet()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">• ≡</button>
+      <button title="To-do" onclick="nbInsertTodo()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">☑</button>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <select onchange="nbFontSize(this.value);this.value=''" title="Font size" style="padding:3px 5px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text);cursor:pointer;width:62px">
+        <option value="">px…</option>
+        <option value="11">11</option><option value="12">12</option><option value="14">14</option>
+        <option value="16">16</option><option value="18">18</option><option value="20">20</option>
+        <option value="24">24</option><option value="28">28</option><option value="32">32</option>
+      </select>
+      <div style="position:relative;display:inline-block">
+        <button title="Insert table" onclick="nbShowTablePicker(event)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">⊞ Table</button>
+        <div id="nbTablePicker" style="display:none;position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.15)">
+          <div id="nbTableGrid" style="display:grid;grid-template-columns:repeat(6,22px);gap:3px"></div>
+          <div id="nbTableLabel" style="text-align:center;font-size:11px;margin-top:8px;color:var(--text2);font-weight:600">Hover to select size</div>
+        </div>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn btn-accent" onclick="nbAddNote()" style="font-size:12px;padding:4px 12px">＋ Add Note</button>
+    </div>
+    <div style="display:flex;height:calc(100vh - 108px)">
+      <!-- Sidebar -->
+      <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:14px 10px;overflow-y:auto;background:var(--surface2)">
+        <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">My Sections</div>
+        <div id="notesSidebar"></div>
+        <button class="btn btn-accent" style="width:100%;justify-content:center;margin-top:10px;font-size:11px;padding:5px" onclick="openAddNoteSection()">＋ New Section</button>
+      </div>
+      <!-- Free-form canvas area -->
+      <div style="flex:1;overflow:auto;background:var(--bg);position:relative">
+        <div id="nbSectionHeader" style="display:none;padding:16px 24px 0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div id="nbSectionTitle" style="font-family:'Fraunces',serif;font-size:22px;font-weight:700"></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="addSticky(currentNoteSection)" style="font-size:11px">📌 Sticky</button>
+              <button class="btn btn-sm" onclick="deleteNoteSection(currentNoteSection)" style="font-size:11px;color:var(--muted)">Delete Section</button>
+            </div>
+          </div>
+          <div id="nbStickies" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+          <hr style="border:none;border-top:1px solid var(--border);margin-bottom:0">
+        </div>
+        <!-- Canvas: notes are absolutely positioned here -->
+        <div id="nbCanvas" style="position:relative;min-height:700px;padding:20px"></div>
+        <div id="nbEmpty" style="text-align:center;padding:100px 40px;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">📝</div>
+          <div style="font-family:'Fraunces',serif;font-size:17px;margin-bottom:6px">Select a section</div>
+          <div style="font-size:13px">Or create a new one</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-timesheet" class="hidden">
+    <!-- Regular user timesheet -->
+    <div id="tsUserView">
+      <div class="section-header">
+        <div>
+          <div class="section-title">🕐 My Timesheet</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Log your daily hours per project</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="tsMonthSel" onchange="loadUserTimesheet()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+          <div id="tsStatusBadge"></div>
+          <button class="btn btn-accent" id="tsExportBtn" onclick="exportMyTimesheet()" style="font-size:12px">📥 Export</button>
+          <button class="btn btn-primary" id="tsSubmitBtn" onclick="confirmSubmitTimesheet()">Submit & Lock</button>
+        </div>
+      </div>
+      <!-- Add column row -->
+      <div id="tsAddColRow" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+        <select id="tsColSel" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);flex:1;max-width:300px">
+          <option value="">＋ Add project column…</option>
+        </select>
+        <input type="text" id="tsOtherName" placeholder="Custom label (if Other)" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:180px;display:none">
+        <button class="btn" onclick="tsAddColumn()" style="font-size:12px">Add Column</button>
+      </div>
+      <div style="overflow-x:auto">
+        <div id="tsMatrix"></div>
+      </div>
+    </div>
+    <!-- HR view -->
+    <div id="tsHRView" style="display:none">
+      <div class="section-header">
+        <div>
+          <div class="section-title">🕐 Team Timesheets</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">View and export all team members' timesheets</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select id="hrMonthSel" onchange="loadHRTimesheets()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+          <button class="btn btn-accent" onclick="exportAllTimesheets(false)" style="font-size:12px">📥 Export All (One File)</button>
+          <button class="btn btn-accent" onclick="exportAllTimesheets(true)" style="font-size:12px">📥 Export Individual</button>
+        </div>
+      </div>
+      <div id="tsHRList"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ADD NOTE CARD MODAL -->
+<div class="overlay" id="addNoteCardModal">
+  <div class="modal" style="width:420px">
+    <button class="modal-close" onclick="closeModal('addNoteCardModal')">×</button>
+    <h2>Add Card</h2>
+    <div class="field"><label>Card Title</label><input type="text" id="noteCardTitle" placeholder="e.g. Main To Do List, Flora/Fauna..."></div>
+    <div class="field"><label>Type</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <div onclick="selectCardType('todo',this)" class="note-type-opt selected" style="padding:10px;border:2px solid var(--green);border-radius:8px;cursor:pointer;text-align:center;background:var(--green-bg)">
+          <div style="font-size:18px;margin-bottom:4px">✅</div>
+          <div style="font-size:11px;font-weight:600;color:var(--green)">To-Do List</div>
+        </div>
+        <div onclick="selectCardType('freetext',this)" class="note-type-opt" style="padding:10px;border:2px solid var(--border);border-radius:8px;cursor:pointer;text-align:center">
+          <div style="font-size:18px;margin-bottom:4px">📝</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text2)">Free Notes</div>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" id="noteCardType" value="todo">
+    <div class="field"><label>Size</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px">
+        <div onclick="selectCardSize('small',this)" class="card-size-opt selected" style="padding:8px;border:2px solid var(--green);border-radius:8px;cursor:pointer;text-align:center;background:var(--green-bg)">
+          <div style="font-size:11px;font-weight:600;color:var(--green)">Small</div>
+          <div style="font-size:10px;color:var(--muted)">1 column</div>
+        </div>
+        <div onclick="selectCardSize('medium',this)" class="card-size-opt" style="padding:8px;border:2px solid var(--border);border-radius:8px;cursor:pointer;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:var(--text2)">Medium</div>
+          <div style="font-size:10px;color:var(--muted)">2 columns</div>
+        </div>
+        <div onclick="selectCardSize('large',this)" class="card-size-opt" style="padding:8px;border:2px solid var(--border);border-radius:8px;cursor:pointer;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:var(--text2)">Large</div>
+          <div style="font-size:10px;color:var(--muted)">Full width</div>
+        </div>
+      </div>
+    </div>
+    <input type="hidden" id="noteCardSize" value="small">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('addNoteCardModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNoteCard()">Add Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM SUBMIT TIMESHEET MODAL -->
+<div class="overlay" id="confirmTsModal">
+  <div class="modal" style="width:400px">
+    <button class="modal-close" onclick="closeModal('confirmTsModal')">×</button>
+    <h2>Submit Timesheet?</h2>
+    <p class="modal-sub">Once submitted, your timesheet will be locked and sent to HR. You will not be able to edit it unless HR unlocks it.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('confirmTsModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitUserTimesheet()">Yes, Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD NOTE SECTION MODAL -->
+<div class="overlay" id="addNoteSectionModal">
+  <div class="modal" style="width:400px">
+    <button class="modal-close" onclick="closeModal('addNoteSectionModal')">×</button>
+    <h2>New Section</h2>
+    <p class="modal-sub">Create a workspace to organise your notes and tasks</p>
+    <div class="field"><label>Section Title</label><input type="text" id="noteSectionTitle" placeholder="e.g. Dibbeen Project, ESIA, General…" onkeydown="if(event.key==='Enter')saveNoteSection()"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('addNoteSectionModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNoteSection()">Create</button>
     </div>
   </div>
 </div>
@@ -605,7 +811,7 @@ select option{background:#fff}
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('overrideModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveOverrideForm()">Save</button>
+      <button class="btn btn-primary" id="ovSaveBtn" onclick="saveOverrideForm()">Save</button>
     </div>
   </div>
 </div>
@@ -617,7 +823,7 @@ select option{background:#fff}
     <h2>Add Project</h2>
     <p class="modal-sub">Projects set the baseline workload automatically across their entire duration</p>
     <div class="two-col">
-      <div class="field"><label>Project Name</label><input type="text" id="pjName" placeholder="e.g. Dibbeen ESIA"></div>
+      <div class="field"><label>Project Name</label><input type="text" id="pjName" placeholder="e.g. Dibbeen Jerash"></div>
       <div class="field"><label>Client</label><input type="text" id="pjClient" placeholder="e.g. RSCN"></div>
     </div>
     <div class="two-col">
@@ -663,17 +869,12 @@ select option{background:#fff}
     <h2>Add Team Member</h2>
     <p class="modal-sub">Only admins can create accounts.</p>
     <div class="field"><label>Full Name</label><input type="text" id="mName" placeholder="e.g. Sarah Chen"></div>
-    <div class="two-col">
-      <div class="field"><label>Title</label>
-        <select id="mTitle">
-          <option value="">— Select title —</option>
-          <option>Intern</option><option>Analyst</option><option>Senior Analyst</option>
-          <option>Consultant</option><option>Senior Consultant</option><option>Manager</option><option>Partner</option>
-        </select>
-      </div>
-      <div class="field"><label>Department</label>
-        <select id="mDept"><option>ESIA</option><option>Ecology</option><option>Socioeconomic</option><option>Air &amp; Noise</option><option>GIS</option><option>Project Management</option><option>Management</option><option>Other</option></select>
-      </div>
+    <div class="field"><label>Title</label>
+      <select id="mTitle">
+        <option value="">— Select title —</option>
+        <option>Intern</option><option>Analyst</option><option>Senior Analyst</option>
+        <option>Consultant</option><option>Senior Consultant</option><option>Manager</option><option>Partner</option>
+      </select>
     </div>
     <div class="field"><label>Initial Password</label><input type="password" id="mPassword" placeholder="Min 4 characters" autocomplete="new-password"></div>
     <div class="info-box">The person will use this password to log in. They can change it in Settings.</div>
@@ -704,14 +905,7 @@ select option{background:#fff}
     <h2>Edit Deliverable</h2>
     <p class="modal-sub" id="editDelivProjLabel"></p>
     <div class="field"><label>Deliverable Name</label><input type="text" id="editDelivName"></div>
-    <div class="two-col">
-      <div class="field"><label>Due Date</label><input type="date" id="editDelivDate"></div>
-      <div class="field">
-        <label>Effort (working days)</label>
-        <input type="number" min="1" max="60" step="1" value="5" id="editDelivEffort" placeholder="e.g. 5">
-        <div style="font-size:10px;color:var(--muted);margin-top:3px">Load added to assignee before due date</div>
-      </div>
-    </div>
+    <div class="field"><label>Due Date</label><input type="date" id="editDelivDate"></div>
     <div class="field"><label>Assigned To</label><select id="editDelivAssigned"></select></div>
     <div class="modal-actions">
       <button class="btn btn-danger" onclick="deleteDeliverableFromEdit()">Delete</button>
@@ -728,14 +922,7 @@ select option{background:#fff}
     <h2>Add Deliverable</h2>
     <p class="modal-sub" id="delivProjLabel"></p>
     <div class="field"><label>Deliverable Name</label><input type="text" id="delivName" placeholder="e.g. Scoping Report, Baseline Survey, Final Submission..."></div>
-    <div class="two-col">
-      <div class="field"><label>Due Date</label><input type="date" id="delivDate"></div>
-      <div class="field">
-        <label>Effort (working days)</label>
-        <input type="number" min="1" max="60" step="1" value="5" id="delivEffort" placeholder="e.g. 5">
-        <div style="font-size:10px;color:var(--muted);margin-top:3px">Load added to assignee before due date</div>
-      </div>
-    </div>
+    <div class="field"><label>Due Date</label><input type="date" id="delivDate"></div>
     <div class="field"><label>Assigned To</label><select id="delivAssigned"></select></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('addDelivModal')">Cancel</button>
@@ -761,8 +948,9 @@ select option{background:#fff}
     <h2>Settings</h2>
     <p class="modal-sub" id="settingsSubtitle"></p>
     <div id="adminTeamSection" style="display:none;margin-bottom:18px">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">Manage Team — Titles</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">Manage Team</div>
       <div id="adminTeamList"></div>
+      <button class="btn btn-accent" style="width:100%;justify-content:center;margin-top:8px" onclick="closeModal('settingsModal');openAddMemberModal()">＋ Add Team Member</button>
     </div>
     <div id="regularNameSection">
       <div class="field"><label>Display Name</label><input type="text" id="settingsName" placeholder="Your name"></div>
@@ -797,7 +985,10 @@ let assigningProjectId = null;
 
 const TITLES = ['Intern','Analyst','Senior Analyst','Consultant','Senior Consultant','Manager','Partner'];
 
-function isAdmin()   { return currentUser && currentUser.id === 0; }
+const HR_USER = {id:9999, name:'HR', title:'HR', dept:'HR', c:{bg:'#e8f0fc',fg:'#2563b0'}};
+
+function isAdmin()   { return currentUser && currentUser.title === 'Partner'; }
+function isHR()      { return currentUser && currentUser.id === 9999; }
 function isPartner() { return currentUser && currentUser.title === 'Partner'; }
 function canEditProject(proj) {
   if(!currentUser) return false;
@@ -807,87 +998,14 @@ function canEditProject(proj) {
 function canCreateAccounts() { return isAdmin(); }
 
 let team = [
-  {id:1, name:'Mounir Mounayer', title:'Senior Consultant', dept:'ESIA', c:PALETTE[0]},
-  {id:2, name:'Noor Haddad',     title:'Senior Analyst',    dept:'ESIA', c:PALETTE[1]},
-  {id:3, name:'Yasmine Khoury',  title:'Consultant',        dept:'ESIA', c:PALETTE[2]},
-  {id:4, name:'Leen Kraishan',   title:'Senior Analyst',    dept:'ESIA', c:PALETTE[3]},
-  {id:5, name:'Farah Khoury',    title:'Senior Consultant', dept:'ESIA', c:PALETTE[4]},
-  {id:6, name:'Aya Nihad',       title:'Senior Analyst',    dept:'ESIA', c:PALETTE[5]},
-  {id:7, name:'Aya Ramadan',     title:'Senior Analyst',    dept:'ESIA', c:PALETTE[6]},
-  {id:8, name:'Suhair Hassuneh', title:'Analyst',           dept:'ESIA', c:PALETTE[7]},
+  {id:1, name:'Ibrahim Masri', title:'Partner', dept:'ESIA', c:PALETTE[0]},
 ];
 
 let currentUser = null;
 
-let projects = [
-  {
-    id: 1772668989451,
-    name: 'EGYPT WFs', client: 'RCREEE',
-    start: '2026-01-01', end: '2026-05-31',
-    creatorId: 1, notes: '',
-    deliverables: [
-      {id:'d1772706052656', name:'testLK',                 date:'2026-03-12', effortDays:5,  assignedTo:4, pendingApproval:false, completed:true},
-      {id:'d1772669524524', name:'Scoping Report Amunet',  date:'2026-04-08', effortDays:20, assignedTo:3},
-      {id:'d1772669059787', name:'Scoping Report SCATEC',  date:'2026-04-08', effortDays:20, assignedTo:4, completed:true},
-      {id:'d1772669557796', name:'Scoping Report North',   date:'2026-04-08', effortDays:20, assignedTo:2},
-      {id:'d1772669595957', name:'ESIA 1',                 date:'2026-04-30', effortDays:20, assignedTo:4, pendingApproval:false, completed:true},
-      {id:'d1772669609981', name:'ESIA 2',                 date:'2026-04-30', effortDays:20, assignedTo:3},
-      {id:'d1772669627396', name:'ESIA 3',                 date:'2026-04-30', effortDays:20, assignedTo:2},
-    ],
-    members: [
-      {personId:1, allocation:20, role:'pm'},
-      {personId:2, allocation:40, role:'coordinator'},
-      {personId:3, allocation:40, role:'coordinator'},
-      {personId:4, allocation:40, role:'coordinator'},
-    ]
-  },
-  {
-    id: 1772669828164,
-    name: 'Dibbeen', client: 'Sama Dibbeen',
-    start: '2025-12-08', end: '2026-09-30',
-    creatorId: 4, notes: '',
-    deliverables: [
-      {id:'d1772705182278', name:'Scoping Report', date:'2026-04-16', effortDays:25, assignedTo:6},
-      {id:'d1772706222932', name:'ESIA',            date:'2026-09-30', effortDays:30, assignedTo:4},
-    ],
-    members: [
-      {personId:4, allocation:60, role:'pm'},
-      {personId:6, allocation:5,  role:'coordinator'},
-    ]
-  },
-  {
-    id: 1772707074600,
-    name: 'FULL CAPACITY PROJECT', client: '',
-    start: '2026-04-01', end: '2026-04-30',
-    creatorId: 5, notes: '',
-    deliverables: [
-      {id:'d1772707126752', name:'ESIA 1', date:'2026-04-30', effortDays:20, assignedTo:5},
-      {id:'d1772707142435', name:'ESIA 2', date:'2026-04-30', effortDays:20, assignedTo:8},
-    ],
-    members: [
-      {personId:5, allocation:100, role:'pm'},
-      {personId:8, allocation:100, role:'coordinator'},
-    ]
-  },
-];
-
-let overrides = [
-  {id:'sp1772710810074', personId:4, start:'2026-03-05', end:'2026-03-05', load:50, reason:'OHTL review for Ibrahim', savedAt:1772710810074},
-  {id:'sp1772711005315', personId:4, start:'2026-03-05', end:'2026-03-05', load:50, reason:'OTL for @Ibrahim',        savedAt:1772711005315},
-  {id:'sp1772711890314', personId:4, start:'2026-03-05', end:'2026-03-05', load:90, reason:'OHTL by @mounir',         savedAt:1772711890314},
-];
-
-let notifications = [
-  {id:'n1772664115046ktfe', toPersonId:4, type:'task_completed', data:{delivName:'Site Assessment',        projName:'Project Gamma',  projId:'103',           delivId:'d8'},              readAt:1772664115159, createdAt:1772664115046},
-  {id:'n1772664118061vh6r', toPersonId:4, type:'task_completed', data:{delivName:'Final Report',           projName:'Project Zeta',   projId:'106',           delivId:'d22'},             readAt:1772664118171, createdAt:1772664118061},
-  {id:'n1772669059787it79', toPersonId:4, type:'task_assigned',  data:{delivName:'Scoping Report SCATEC', projName:'EGYPT WFs',      date:'2026-03-01',      delivId:'d1772669059787',   projId:1772668989451}, readAt:1772669695056, createdAt:1772669059787},
-  {id:'n1772669524524qama', toPersonId:3, type:'task_assigned',  data:{delivName:'Scoping Report Amunet', projName:'EGYPT WFs',      date:'2026-04-08',      delivId:'d1772669524524',   projId:1772668989451}, readAt:null,          createdAt:1772669524524},
-  {id:'n1772669557797pmui', toPersonId:2, type:'task_assigned',  data:{delivName:'Scoping Report North',  projName:'EGYPT WFs',      date:'2026-04-08',      delivId:'d1772669557796',   projId:1772668989451}, readAt:null,          createdAt:1772669557797},
-  {id:'n17726695959572iqb', toPersonId:4, type:'task_assigned',  data:{delivName:'ESIA 1',                projName:'EGYPT WFs',      date:'2026-04-30',      delivId:'d1772669595957',   projId:1772668989451}, readAt:1772669695056, createdAt:1772669595957},
-  {id:'n1772669609981571y', toPersonId:3, type:'task_assigned',  data:{delivName:'ESIA 2',                projName:'EGYPT WFs',      date:'2026-04-30',      delivId:'d1772669609981',   projId:1772668989451}, readAt:null,          createdAt:1772669609981},
-  {id:'n1772669627397fdry', toPersonId:2, type:'task_assigned',  data:{delivName:'ESIA 3',                projName:'EGYPT WFs',      date:'2026-04-30',      delivId:'d1772669627396',   projId:1772668989451}, readAt:null,          createdAt:1772669627397},
-  {id:'n1772669710105q3fo', toPersonId:4, type:'task_completed', data:{delivName:'Scoping Report SCATEC', projName:'EGYPT WFs',      projId:'1772668989451', delivId:'d1772669059787'},  readAt:1772669710212, createdAt:1772669710105},
-];
+let projects = [];
+let overrides = [];
+let notifications = [];
 
 function weekStart(date, offset=0) {
   const d=new Date(date); d.setDate(d.getDate()-d.getDay()+offset*7); d.setHours(0,0,0,0); return d;
@@ -936,23 +1054,14 @@ function daysUntil(dateStr) {
   const m=Math.round(d/30.4); return m+' month'+(m>1?'s':'')+' left';
 }
 
-function getActiveTasks(personId, weekKeyStr) {
-  const ws = new Date(weekKeyStr+'T12:00:00');
-  const we = new Date(ws); we.setDate(we.getDate()+6);
+function getActiveTasks(personId) {
+  // Returns deliverables assigned to person that are not completed
   const tasks = [];
   projects.forEach(proj => {
     (proj.deliverables||[]).forEach(d => {
       if(d.assignedTo !== personId) return;
       if(d.completed) return;
-      const due = new Date(d.date+'T23:59:59');
-      const effort = d.effortDays||0;
-      if(!effort) return;
-      const calDays = Math.ceil(effort * 7/5 * 1.5);
-      const windowStart = new Date(due);
-      windowStart.setDate(windowStart.getDate() - calDays);
-      if(ws <= due && we >= windowStart) {
-        tasks.push({name: d.name, projName: proj.name, effortDays: effort, dueDate: d.date});
-      }
+      tasks.push({name: d.name, projName: proj.name, dueDate: d.date});
     });
   });
   return tasks;
@@ -960,52 +1069,56 @@ function getActiveTasks(personId, weekKeyStr) {
 
 function getEffectiveLoad(personId, weekKeyStr) {
   const ws = new Date(weekKeyStr+'T12:00:00');
-  const we = new Date(ws); we.setDate(we.getDate()+4);
 
-  let baselineLoad = 0;
-  let activeProjects = [];
-  projects.forEach(p => {
-    if(!dateInRange(ws, p.start, p.end)) return;
-    const member = p.members.find(m=>m.personId===personId);
-    if(member && member.allocation > 0) {
-      baselineLoad += member.allocation;
-      activeProjects.push({name:p.name, alloc:member.allocation});
-    }
-  });
-
-  const activeTasks = getActiveTasks(personId, weekKeyStr);
-
+  // Check each work day individually
   const workDays = [];
   for(let i=0; i<5; i++) {
     const d = new Date(ws); d.setDate(d.getDate()+i);
     const dStr = wKey(d);
-    const daySpikes = overrides.filter(o =>
+
+    // Baseline for THIS specific day = sum of projects active on this exact day
+    let dayBaseline = 0;
+    let dayProjects = [];
+    projects.forEach(p => {
+      if(!dateInRange(d, p.start, p.end)) return;
+      const member = p.members.find(m=>m.personId===personId);
+      if(member && member.allocation > 0) {
+        dayBaseline += member.allocation;
+        dayProjects.push({name:p.name, alloc:member.allocation});
+      }
+    });
+
+    // Check overrides for this specific day
+    const dayOverrides = overrides.filter(o =>
       o.personId === personId && o.start <= dStr && o.end >= dStr
     );
-    if(daySpikes.length) {
-      workDays.push({load: Math.max(...daySpikes.map(s=>s.load)), isSpike:true, reasons: daySpikes.map(s=>s.reason)});
+    if(dayOverrides.length) {
+      workDays.push({load: Math.max(...dayOverrides.map(o=>o.load)), isOverride:true,
+        baseline:dayBaseline, reasons:dayOverrides.map(o=>o.reason), projects:dayProjects});
     } else {
-      workDays.push({load: baselineLoad, isSpike:false, reasons:[]});
+      workDays.push({load:dayBaseline, isOverride:false, baseline:dayBaseline, reasons:[], projects:dayProjects});
     }
   }
 
-  const spikedays = workDays.filter(d=>d.isSpike);
-  const hasSpike = spikedays.length > 0;
-
-  if(!hasSpike) {
-    return { load: baselineLoad||0, isOverride:false, baseline:baselineLoad, reason:'', projects:activeProjects, activeTasks, delivLoad:0 };
-  }
-
+  // Weekly summary
+  const overrideDays = workDays.filter(d=>d.isOverride);
+  const hasOverride = overrideDays.length > 0;
   const avgLoad = Math.round(workDays.reduce((s,d)=>s+d.load,0) / workDays.length);
-  const allReasons = [...new Set(spikedays.flatMap(d=>d.reasons))].filter(Boolean);
-  const spikeCount = spikedays.length;
-  const reasonLabel = allReasons.length ? allReasons.join(' · ') : '';
-  const isFullWeek = spikedays.length === 5;
+
+  // Use Mon as reference for project tags (most representative workday)
+  const refDay = workDays[1] || workDays[0];
+  const activeProjects = refDay ? refDay.projects : [];
+  const baselineLoad = refDay ? refDay.baseline : 0;
+  const allReasons = [...new Set(overrideDays.flatMap(d=>d.reasons))].filter(Boolean);
 
   return {
-    load: avgLoad, isOverride: true, isFullWeek, spikeCount,
-    baseline: baselineLoad, reason: reasonLabel,
-    projects: activeProjects, activeTasks, delivLoad: 0
+    load: avgLoad,
+    isOverride: hasOverride,
+    baseline: baselineLoad,
+    reason: allReasons.join(' · '),
+    projects: activeProjects,
+    overrideDays,
+    workDays
   };
 }
 
@@ -1040,38 +1153,49 @@ function renderWeekly() {
     const eff = getEffectiveLoad(p.id, wk);
     const isMe = currentUser && currentUser.id === p.id;
     const projTags = eff.projects.length
-      ? eff.projects.map(x=>`<span class="proj-tag">${x.name}</span>`).join('')
+      ? eff.projects.map(x=>`<span class="proj-tag">${x.name} <span style="opacity:0.7">${x.alloc}%</span></span>`).join('')
       : '<span style="color:var(--muted);font-size:10px">No active projects</span>';
-    const overBy = eff.load > 100 ? eff.load - 100 : 0;
-    const cells = days.map(d=>{
+
+    const cells = days.map((d,di)=>{
       const dow=d.getDay(), isWE=dow===5||dow===6;
       if(isWE) return `<div class="day-cell weekend"><div class="weekend-label">Weekend</div></div>`;
-      const spikeLabel = eff.isOverride
-        ? (eff.isFullWeek ? (eff.load>eff.baseline?'⚡ Spike':'↓ Drop') : `⚡ ${eff.spikeCount}d task`)
-        : '';
-      return `<div class="day-cell${isToday(d)?' today-col':''}${isMe?' clickable-cell':''}" ${isMe?`onclick="openOverrideForPerson(${p.id},'${wk}')"`:''} style="${isMe?'':'cursor:default'}">
+
+      // Use per-day data from getEffectiveLoad (indices 0-4 = Sun-Thu)
+      const dayData = eff.workDays ? eff.workDays[di > 4 ? 4 : di] : null;
+      const dayLoad = dayData ? dayData.load : 0;
+      const isDayOverride = dayData ? dayData.isOverride : false;
+      const dayBaseline = dayData ? dayData.baseline : 0;
+      const dayReason = dayData ? dayData.reasons.filter(Boolean).join(' · ') : '';
+      const overBy = dayLoad > 100 ? dayLoad - 100 : 0;
+
+      return `<div class="day-cell${isToday(d)?' today-col':''}${isMe?' clickable-cell':''}"
+        ${isMe?`onclick="openOverrideForPerson(${p.id},'${wk}')"`:''} style="${isMe?'':'cursor:default'}">
         <div class="load-row">
-          <span class="load-pct" style="color:${loadColor(eff.load)}">${eff.load}%</span>
-          ${eff.isOverride
-            ? `<span class="spike-badge">${spikeLabel}</span>`
-            : `<span class="chip ${chipClass(eff.load)}">${chipLabel(eff.load)}</span>`}
+          <span class="load-pct" style="color:${loadColor(dayLoad)}">${dayLoad}%</span>
+          ${isDayOverride
+            ? `<span class="spike-badge">⚡</span>`
+            : `<span class="chip ${chipClass(dayLoad)}">${chipLabel(dayLoad)}</span>`}
         </div>
         <div class="bar-wrap">
-          ${eff.isOverride?`<div class="bar-fill" style="width:${Math.min(eff.baseline,100)}%;background:#b8dfc9;opacity:0.5"></div>`:''}
-          <div class="bar-fill" style="width:${Math.min(eff.load,100)}%;background:${loadBg(eff.load)};margin-top:${eff.isOverride?'2px':'0'}"></div>
+          ${isDayOverride?`<div class="bar-fill" style="width:${Math.min(dayBaseline,100)}%;background:#b8dfc9;opacity:0.4"></div>`:''}
+          <div class="bar-fill" style="width:${Math.min(dayLoad,100)}%;background:${loadBg(dayLoad)};margin-top:${isDayOverride?'2px':'0'}"></div>
         </div>
-        ${overBy>0?`<div style="font-size:9px;font-weight:700;color:var(--red);margin-top:2px">⚠ ${overBy}% over capacity</div>`:''}
-        <div class="load-proj">${projTags}</div>
-        ${eff.activeTasks.length>0?`<div style="font-size:9px;color:var(--orange);margin-top:2px">📌 ${eff.activeTasks.length} task${eff.activeTasks.length>1?'s':''}</div>`:''}
-        ${eff.isOverride && eff.reason ? `<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${eff.reason.length>28?eff.reason.slice(0,28)+'…':eff.reason}</div>` : ''}
-        ${eff.isOverride ? `<div style="font-size:9px;color:${eff.load>eff.baseline?'var(--orange)':'var(--green)'};margin-top:1px">${eff.load>eff.baseline?'↑':'↓'} ${Math.abs(eff.load-eff.baseline)}% vs baseline</div>` : ''}
+        ${overBy>0?`<div style="font-size:9px;font-weight:700;color:var(--red);margin-top:2px">⚠ ${overBy}% over</div>`:''}
+        ${isDayOverride && dayReason ? `<div style="font-size:9px;color:var(--muted);margin-top:2px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${dayReason.length>28?dayReason.slice(0,28)+'…':dayReason}</div>` : ''}
         ${isMe?`<div style="font-size:9px;color:var(--muted);margin-top:3px;opacity:0.6">✎ Edit</div>`:''}
       </div>`;
     }).join('');
+
+    const overBy = eff.load > 100 ? eff.load - 100 : 0;
     return `<div class="g-row">
       <div class="person-cell">
         <div class="avatar" style="background:${p.c.bg};color:${p.c.fg}">${initials(p.name)}</div>
-        <div><div class="p-name">${p.name}</div>${isAdmin()?`<div class="p-role">${p.title||''}</div>`:''}</div>
+        <div>
+          <div class="p-name">${p.name}</div>
+          <div style="margin-top:3px">${projTags}</div>
+          ${eff.load>0?`<div style="font-size:10px;font-weight:600;color:${loadColor(eff.load)};margin-top:2px">${eff.load}% this week${eff.isOverride?' (avg)':''}</div>`:''}
+          ${overBy>0?`<div style="font-size:9px;font-weight:700;color:var(--red)">⚠ ${overBy}% over capacity</div>`:''}
+        </div>
       </div>${cells}
     </div>`;
   }).join('');
@@ -1467,7 +1591,7 @@ function loadPersistedSession() {
     const saved = localStorage.getItem('wt_session');
     if(!saved) return false;
     const { userId } = JSON.parse(saved);
-    const user = userId === 0 ? ADMIN_USER : team.find(p=>p.id===userId);
+    const user = userId === 9999 ? HR_USER : team.find(p=>p.id===userId);
     if(!user) return false;
     currentUser = user;
     applyLogin();
@@ -1479,7 +1603,6 @@ function clearSession() { try { localStorage.removeItem('wt_session'); } catch(e
 
 function loadPins() {
   try { const saved = localStorage.getItem('wt_pins'); if(saved) Object.assign(pins, JSON.parse(saved)); } catch(e){}
-  if(!pins[0]) pins[0] = 'admin1234';
   team.forEach(p=>{ if(!pins[p.id]) pins[p.id]='1234'; });
 }
 function savePins() { try { localStorage.setItem('wt_pins', JSON.stringify(pins)); } catch(e){} }
@@ -1489,22 +1612,22 @@ function loadNames() {
 }
 function saveNames() { try { const names={}; team.forEach(p=>names[p.id]=p.name); localStorage.setItem('wt_names', JSON.stringify(names)); } catch(e){} }
 
-const ADMIN_USER = { id:0, name:'Admin', title:'Admin', dept:'System', c:{bg:'#1a1714',fg:'#fff'} };
-
-function getLoginUsers() { return [ADMIN_USER, ...team]; }
+function getLoginUsers() { return [...team, HR_USER]; }
 
 function populateLoginSelect() {
   const sel = document.getElementById('loginSelect');
   sel.innerHTML = `<option value="">— Who are you? —</option>` +
-    getLoginUsers().map(p=>`<option value="${p.id}">${p.name}${p.id===0?' (Admin)':''}</option>`).join('');
+    getLoginUsers().map(p=>`<option value="${p.id}">${p.name}${isAdminUser(p)?' (Admin)':''}</option>`).join('');
 }
+
+function isAdminUser(p) { return p.title === 'Partner'; }
 
 function doDirectLogin() {
   const sel = document.getElementById('loginSelect');
   const val = sel.value;
   if(val === '') { showToast('Please select your name'); return; }
   const id = parseInt(val);
-  currentUser = id === 0 ? ADMIN_USER : team.find(p=>p.id===id);
+  currentUser = id === 9999 ? HR_USER : team.find(p=>p.id===id);
   if(!currentUser) { showToast('Please select your name'); return; }
   document.getElementById('loginScreen').style.display='none';
   persistSession();
@@ -1516,16 +1639,30 @@ function applyLogin() {
   av.style.background=currentUser.c.bg;
   av.style.color=currentUser.c.fg;
   av.textContent=initials(currentUser.name);
-  const badge = isAdmin() ? ' 🔑' : '';
+  const badge = isAdmin() ? ' 🔑' : isHR() ? ' 👤' : '';
   document.getElementById('userPillName').textContent=currentUser.name + badge;
   const addRow = document.querySelector('.add-row');
   if(addRow) addRow.style.display = canCreateAccounts() ? 'flex' : 'none';
-  const myworkTab = document.getElementById('myworkTab');
-  if(myworkTab) myworkTab.style.display = isAdmin() ? 'none' : '';
-  updateSummary();
-  renderWeekly();
-  updateLogThisWeekBtn();
-  updateInboxBadge();
+
+  // HR sees only timesheet tab
+  const allTabs = document.querySelectorAll('#mainTabs .tab');
+  if(isHR()) {
+    allTabs.forEach(t=>{
+      const view = t.getAttribute('data-view');
+      t.style.display = view==='timesheet' ? '' : 'none';
+    });
+    // Switch to timesheet
+    const tsTab = document.querySelector('[data-view="timesheet"]');
+    if(tsTab) switchTab('timesheet', tsTab);
+    document.getElementById('userMenuSettings').style.display='none';
+  } else {
+    allTabs.forEach(t=>t.style.display='');
+    document.getElementById('userMenuSettings').style.display='';
+    updateSummary();
+    renderWeekly();
+    updateLogThisWeekBtn();
+    updateInboxBadge();
+  }
 }
 
 function toggleUserMenu() {
@@ -1587,7 +1724,7 @@ function doLogout() {
 function openSettingsModal() {
   document.getElementById('userMenu').style.display='none';
   const adminMode = isAdmin();
-  document.getElementById('settingsSubtitle').textContent = adminMode ? 'Administrator Account' : 'Logged in as '+currentUser.name;
+  document.getElementById('settingsSubtitle').textContent = adminMode ? 'Administrator — '+currentUser.name : 'Logged in as '+currentUser.name;
   document.getElementById('adminTeamSection').style.display = adminMode ? 'block' : 'none';
   document.getElementById('regularNameSection').style.display = adminMode ? 'none' : 'block';
   document.getElementById('settingsName').value = currentUser.name;
@@ -1596,13 +1733,13 @@ function openSettingsModal() {
   document.getElementById('settingsConfirmPin').value='';
   if(adminMode) {
     document.getElementById('adminTeamList').innerHTML = team.map(p=>`
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
         <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(p.name)}</div>
-        <span style="flex:1;font-size:13px;font-weight:500;min-width:0">${p.name}</span>
-        <select id="adminTitle_${p.id}" style="width:140px;padding:5px 8px;font-size:12px">
+        <input type="text" id="adminName_${p.id}" value="${p.name}" style="flex:1;min-width:0;padding:5px 8px;font-size:13px;font-weight:500;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <select id="adminTitle_${p.id}" style="width:130px;padding:5px 8px;font-size:12px;flex-shrink:0">
           ${TITLES.map(t=>`<option value="${t}"${p.title===t?' selected':''}>${t}</option>`).join('')}
         </select>
-        <button class="btn btn-sm btn-danger" onclick="adminRemoveMember(${p.id})" title="Remove">✕</button>
+        <button class="btn btn-sm btn-danger" onclick="adminRemoveMember(${p.id})" title="Remove" style="flex-shrink:0">✕</button>
       </div>`).join('');
   }
   openOverlay('settingsModal');
@@ -1613,8 +1750,15 @@ function saveSettings() {
   const newPin = document.getElementById('settingsNewPin').value;
   const confirmPin = document.getElementById('settingsConfirmPin').value;
   if(isAdmin()) {
-    team.forEach(p=>{ const sel = document.getElementById('adminTitle_'+p.id); if(sel) p.title = sel.value; });
-    team.forEach(p=>saveTeamMember(p)); populateLoginSelect();
+    team.forEach(p=>{
+      const nameInput = document.getElementById('adminName_'+p.id);
+      const titleSel = document.getElementById('adminTitle_'+p.id);
+      if(nameInput && nameInput.value.trim()) p.name = nameInput.value.trim();
+      if(titleSel) p.title = titleSel.value;
+      if(p.id === currentUser.id) currentUser.name = p.name;
+    });
+    team.forEach(p=>saveTeamMember(p));
+    populateLoginSelect();
   } else {
     const newName = document.getElementById('settingsName').value.trim();
     if(!newName) { showToast('Name cannot be empty'); return; }
@@ -1663,8 +1807,8 @@ function showNoAccess(projId, pmPersonId) {
 
 function switchTab(view, el) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  el.classList.add('active');
-  ['weekly','monthly','projects','mywork','finder'].forEach(v=>{
+  if(el) el.classList.add('active');
+  ['weekly','monthly','projects','mywork','finder','notes','timesheet'].forEach(v=>{
     const el2 = document.getElementById('view-'+v);
     if(el2) el2.classList.toggle('hidden',v!==view);
   });
@@ -1674,6 +1818,8 @@ function switchTab(view, el) {
   if(view==='projects') renderProjects();
   if(view==='mywork') renderMyWork();
   if(view==='finder') { populateFinderWeeks(); renderFinder(); }
+  if(view==='notes') renderNotesView();
+  if(view==='timesheet') renderTimesheetView();
 }
 
 function addNotification(toPersonId, type, data) {
@@ -1685,7 +1831,7 @@ function addNotification(toPersonId, type, data) {
 
 function updateInboxBadge() {
   const badge = document.getElementById('inboxBadge');
-  if(!badge || !currentUser || isAdmin()) return;
+  if(!badge || !currentUser) return;
   const unreadNotifs = notifications.filter(n=>n.toPersonId===currentUser.id && !n.readAt).length;
   const pendingApprovals = projects.filter(p=>p.creatorId===currentUser.id).flatMap(p=>(p.deliverables||[]).filter(d=>d.pendingApproval)).length;
   const total = unreadNotifs + pendingApprovals;
@@ -1694,8 +1840,8 @@ function updateInboxBadge() {
 }
 
 function renderMyWork() {
-  if(!currentUser || isAdmin()) {
-    document.getElementById('myworkTasks').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Sign in as a team member to see your work.</div>';
+  if(!currentUser) {
+    document.getElementById('myworkTasks').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Sign in to see your work.</div>';
     document.getElementById('myworkNotifs').innerHTML=''; return;
   }
   const iAmPM = projects.some(p=>p.creatorId===currentUser.id);
@@ -1721,7 +1867,6 @@ function renderMyWork() {
   });
   activeTasks.sort((a,b)=>new Date(a.date)-new Date(b.date));
   completedThisMonth.sort((a,b)=>new Date(b.date)-new Date(a.date));
-  completedHistory.sort((a,b)=>new Date(b.date)-new Date(a.date));
 
   const pendingApproval=[];
   if(iAmPM) {
@@ -1733,108 +1878,111 @@ function renderMyWork() {
     });
   }
 
+  // LEFT PANEL — Tasks
   let tasksHtml='';
   if(pendingApproval.length) {
-    tasksHtml+=`<div class="mywork-col-label" style="color:var(--orange)">⏳ Awaiting Your Approval</div>`;
-    tasksHtml+=pendingApproval.map(t=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#fff9e6;border:1px solid #ffc107;border-radius:10px;margin-bottom:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600">${t.name}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">📁 ${t.projName} · ${t.assignee?t.assignee.name:'Unassigned'} submitted</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="btn btn-sm" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="approveDeliverable('${t.projId}','${t.id}',true)">✓ Approve</button>
-          <button class="btn btn-sm btn-danger" onclick="approveDeliverable('${t.projId}','${t.id}',false)">× Reject</button>
-        </div>
-      </div>`).join('');
-    tasksHtml+=`<div style="height:16px"></div>`;
+    tasksHtml+=`<div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">⏳ Awaiting Approval</div>
+      ${pendingApproval.map(t=>`
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fffbf0;border:1px solid #f0d080;border-radius:12px;margin-bottom:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">${t.name}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:3px">📁 ${t.projName} · ${t.assignee?t.assignee.name:'Unassigned'}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-sm" style="background:var(--green);color:#fff;border-color:var(--green)" onclick="approveDeliverable('${t.projId}','${t.id}',true)">✓</button>
+            <button class="btn btn-sm btn-danger" onclick="approveDeliverable('${t.projId}','${t.id}',false)">✕</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
   }
 
-  tasksHtml+=`<div class="mywork-col-label">Active Tasks</div>`;
+  tasksHtml+=`<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">Active Tasks</div>`;
   if(activeTasks.length) {
     tasksHtml+=activeTasks.map(t=>{
       const due=daysUntil(t.date);
       const isOverdue=due==='Overdue';
       const isUrgent=!isOverdue&&due.includes('day')&&parseInt(due)<7;
-      const dotColor=t.pendingApproval?'var(--orange)':isOverdue?'var(--red)':isUrgent?'var(--orange)':'var(--text2)';
-      const statusLabel=t.pendingApproval?'⏳ Awaiting PM approval':'';
-      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:${t.pendingApproval?'#fff9e6':'var(--surface)'};border:1px solid ${t.pendingApproval?'#ffc107':'var(--border)'};border-radius:10px;margin-bottom:8px;box-shadow:var(--shadow)">
-        <input type="checkbox" ${t.pendingApproval?'checked':''} style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;flex-shrink:0" onchange="submitTaskForApproval('${t.projId}','${t.id}',this)">
+      const urgentColor=isOverdue?'var(--red)':isUrgent?'var(--orange)':'var(--text2)';
+      return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;box-shadow:var(--shadow)">
+        <input type="checkbox" ${t.pendingApproval?'checked':''} style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;flex-shrink:0" onchange="submitTaskForApproval('${t.projId}','${t.id}',this)">
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600">${t.name}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">📁 ${t.projName} · ${t.effortDays||'?'} days LOE</div>
-          ${statusLabel?`<div style="font-size:10px;font-weight:600;color:${dotColor};margin-top:2px">${statusLabel}</div>`:''}
+          <div style="font-size:13px;font-weight:600${t.pendingApproval?';color:var(--muted);text-decoration:line-through':''}">${t.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">📁 ${t.projName}</div>
+          ${t.pendingApproval?`<div style="font-size:10px;font-weight:600;color:var(--orange);margin-top:2px">⏳ Awaiting PM approval</div>`:''}
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:11px;font-weight:600;color:${dotColor}">${new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-          <div style="font-size:10px;color:${dotColor}">${t.pendingApproval?'Pending':due}</div>
+          <div style="font-size:12px;font-weight:600;color:${urgentColor}">${new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+          <div style="font-size:10px;color:${urgentColor};margin-top:2px">${due}</div>
         </div>
       </div>`;
     }).join('');
   } else {
-    tasksHtml+=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">No active tasks right now.</div>`;
+    tasksHtml+=`<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:12px">No active tasks 🎉</div>`;
   }
 
-  const monthName=now.toLocaleDateString('en-US',{month:'long'});
-  tasksHtml+=`<div style="height:16px"></div><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="mywork-col-label" style="margin-bottom:0">Completed — ${monthName}</div>${completedHistory.length?`<button class="btn btn-sm" onclick="toggleCompletedHistory(this)" data-open="0" style="font-size:10px">🕐 History (${completedHistory.length})</button>`:''}</div>`;
   if(completedThisMonth.length) {
+    tasksHtml+=`<div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.7px;margin:20px 0 10px">✓ Completed This Month</div>`;
     tasksHtml+=completedThisMonth.map(t=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#f0f9f4;border:1px solid #b8dfc9;border-radius:10px;margin-bottom:6px;opacity:0.85">
-        <span style="font-size:16px;flex-shrink:0">✅</span>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--green-bg);border:1px solid #b8dfc9;border-radius:12px;margin-bottom:6px;opacity:0.85">
+        <span style="font-size:15px;flex-shrink:0">✅</span>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:600;text-decoration:line-through;color:var(--muted)">${t.name}</div>
+          <div style="font-size:13px;font-weight:500;text-decoration:line-through;color:var(--muted)">${t.name}</div>
           <div style="font-size:11px;color:var(--muted)">📁 ${t.projName}</div>
         </div>
-        <div style="font-size:10px;color:var(--green);font-weight:600">Done</div>
       </div>`).join('');
-  } else {
-    tasksHtml+=`<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:6px">None completed this month yet.</div>`;
-  }
-  if(completedHistory.length) {
-    tasksHtml+=`<div id="completedHistoryList" style="display:none">`+completedHistory.map(t=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;opacity:0.6">
-        <span style="font-size:16px;flex-shrink:0">✅</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:600;text-decoration:line-through;color:var(--muted)">${t.name}</div>
-          <div style="font-size:11px;color:var(--muted)">📁 ${t.projName}</div>
-        </div>
-        <div style="font-size:10px;color:var(--muted)">${new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-      </div>`).join('')+`</div>`;
   }
   document.getElementById('myworkTasks').innerHTML=tasksHtml;
 
-  const myNotes=notifications.filter(n=>n.toPersonId===currentUser.id).sort((a,b)=>b.createdAt-a.createdAt);
-  let notifsHtml=`<div class="mywork-col-label">Recent Updates</div>`;
-  if(myNotes.length) {
-    notifsHtml+=myNotes.slice(0,20).map(n=>{
+  // RIGHT PANEL — Activity feed + Tag
+  const myNotifs=notifications.filter(n=>n.toPersonId===currentUser.id).sort((a,b)=>b.createdAt-a.createdAt);
+  
+  let rightHtml=`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+        <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600">Activity</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Your recent updates & notifications</div>
+      </div>
+      <div style="padding:14px;max-height:400px;overflow-y:auto">`;
+
+  if(myNotifs.length) {
+    rightHtml+=myNotifs.slice(0,15).map(n=>{
       const age=Math.round((Date.now()-n.createdAt)/3600000);
-      const ageLabel=age<1?'just now':age<24?age+'h ago':Math.round(age/24)+'d ago';
-      let icon='📋',msg='';
-      if(n.type==='task_assigned'){icon='📌';msg=`Assigned: <strong>${n.data.delivName}</strong> on ${n.data.projName}${n.data.date?' — due '+new Date(n.data.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''}`;}
-      else if(n.type==='task_submitted'){icon='⏳';msg=`You submitted <strong>${n.data.delivName}</strong> for PM approval`;}
-      else if(n.type==='task_approved'){icon='✅';msg=`<strong>${n.data.delivName}</strong> approved by ${n.data.pmName}`;}
-      else if(n.type==='task_rejected'){icon='↩️';msg=`<strong>${n.data.delivName}</strong> sent back by ${n.data.pmName}`;}
-      else if(n.type==='task_pending_pm'){icon='🔔';msg=`<strong>${n.data.assigneeName}</strong> submitted <strong>${n.data.delivName}</strong> for your approval`;}
-      else if(n.type==='tagged'){icon='🏷️';msg=`<strong>${n.data.fromName}</strong> tagged you: <em>${n.data.message}</em>`;}
-      return `<div style="display:flex;gap:10px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:6px"><span style="font-size:15px;flex-shrink:0;margin-top:1px">${icon}</span><div style="flex:1;min-width:0"><div style="font-size:12px;line-height:1.5">${msg}</div><div style="font-size:10px;color:var(--muted);margin-top:2px">${ageLabel}</div></div></div>`;
+      const ageLabel=age<1?'Just now':age<24?age+'h ago':Math.round(age/24)+'d ago';
+      let icon='📋',msg='',color='var(--text2)';
+      if(n.type==='task_assigned'){icon='📌';msg=`<strong>${n.data.delivName}</strong> assigned on ${n.data.projName}`;color='var(--blue)';}
+      else if(n.type==='task_submitted'){icon='⏳';msg=`You submitted <strong>${n.data.delivName}</strong> for approval`;color='var(--orange)';}
+      else if(n.type==='task_approved'){icon='✅';msg=`<strong>${n.data.delivName}</strong> approved by ${n.data.pmName}`;color='var(--green)';}
+      else if(n.type==='task_rejected'){icon='↩️';msg=`<strong>${n.data.delivName}</strong> needs revision`;color='var(--red)';}
+      else if(n.type==='task_pending_pm'){icon='🔔';msg=`<strong>${n.data.assigneeName}</strong> submitted <strong>${n.data.delivName}</strong>`;color='var(--orange)';}
+      else if(n.type==='tagged'){icon='💬';msg=`<strong>${n.data.fromName}:</strong> ${n.data.message}`;color='var(--blue)';}
+      return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;line-height:1.5;color:var(--text)">${msg}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${ageLabel}</div>
+        </div>
+      </div>`;
     }).join('');
   } else {
-    notifsHtml+=`<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:10px">No updates yet.</div>`;
+    rightHtml+=`<div style="text-align:center;padding:30px;color:var(--muted);font-size:12px">No activity yet</div>`;
   }
-  notifsHtml+=`<div style="margin-top:16px;padding:14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
-    <div class="mywork-col-label" style="margin-bottom:8px">@ Tag a Colleague</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Notify a team member directly.</div>
-    <select id="tagPerson" style="width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);margin-bottom:8px">
-      <option value="">— Select person —</option>
-      ${team.filter(t=>t.id!==currentUser.id).map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
-    </select>
-    <textarea id="tagMessage" rows="2" placeholder="e.g. Please review the Dibbeen ESIA draft by Thursday" style="width:100%;padding:8px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:8px"></textarea>
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="sendTag()">Send Notification</button>
-  </div>`;
-  document.getElementById('myworkNotifs').innerHTML=notifsHtml;
 
+  rightHtml+=`</div></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-top:16px;box-shadow:var(--shadow)">
+      <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin-bottom:4px">💬 Tag a Colleague</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Send a quick notification to a team member</div>
+      <select id="tagPerson" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);margin-bottom:8px">
+        <option value="">— Select person —</option>
+        ${team.filter(t=>t.id!==currentUser.id).map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+      </select>
+      <textarea id="tagMessage" rows="2" placeholder="e.g. Please review the Dibbeen draft by Thursday…" style="width:100%;padding:8px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);resize:none;margin-bottom:8px"></textarea>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="sendTag()">Send</button>
+    </div>`;
+
+  document.getElementById('myworkNotifs').innerHTML=rightHtml;
   const myProjects=projects.filter(p=>p.members.some(m=>m.personId===currentUser.id));
-  document.getElementById('myworkSubtitle').textContent=myProjects.length?`Across ${myProjects.length} project${myProjects.length>1?'s':''}` :'';
+  document.getElementById('myworkSubtitle').textContent=myProjects.length?`${myProjects.length} project${myProjects.length>1?'s':''}` :'';
 }
 
 function toggleCompletedHistory(btn) {
@@ -1860,14 +2008,21 @@ function sendTag() {
 function submitTaskForApproval(projId, delivId, checkbox) {
   const proj = projects.find(p=>p.id==projId); if(!proj) return;
   const deliv = (proj.deliverables||[]).find(d=>d.id===delivId); if(!deliv) return;
+  const iAmPM = proj.creatorId === currentUser.id;
   if(checkbox.checked) {
-    deliv.pendingApproval = true; deliv.completed = false;
-    addNotification(proj.creatorId, 'task_pending_pm', {delivName:deliv.name, projName:proj.name, assigneeName:currentUser.name, delivId, projId});
-    addNotification(currentUser.id, 'task_submitted', {delivName:deliv.name, projName:proj.name, delivId, projId});
-    showToast('Submitted for PM approval ✓');
+    if(iAmPM) {
+      // PM completing their own task — instant, no approval needed
+      deliv.completed = true; deliv.pendingApproval = false;
+      showToast('Task completed ✓');
+    } else {
+      deliv.pendingApproval = true; deliv.completed = false;
+      addNotification(proj.creatorId, 'task_pending_pm', {delivName:deliv.name, projName:proj.name, assigneeName:currentUser.name, delivId, projId});
+      addNotification(currentUser.id, 'task_submitted', {delivName:deliv.name, projName:proj.name, delivId, projId});
+      showToast('Submitted for PM approval ✓');
+    }
   } else {
     deliv.pendingApproval = false; deliv.completed = false;
-    showToast('Submission cancelled');
+    showToast('Unmarked');
   }
   saveProject(proj); renderWeekly(); updateSummary();
   setTimeout(()=>renderMyWork(), 80);
@@ -1937,6 +2092,8 @@ function openWeeklyOverrideModal() {
   document.getElementById('ovLoad').value = eff.load||80;
   document.getElementById('ovLoadVal').textContent = (eff.load||80)+'%';
   document.getElementById('ovReason').value = '';
+  editingOverrideId = null;
+  document.getElementById('ovSaveBtn').textContent = 'Save';
   updateOvUI(); renderOverrideHistory(currentUser.id); openOverlay('overrideModal');
 }
 function openOverrideForPerson(pid, wk) {
@@ -1950,41 +2107,63 @@ function openOverrideForPerson(pid, wk) {
   document.getElementById('ovLoad').value = eff.load||80;
   document.getElementById('ovLoadVal').textContent = (eff.load||80)+'%';
   document.getElementById('ovReason').value = eff.reason||'';
+  editingOverrideId = null;
+  document.getElementById('ovSaveBtn').textContent = 'Save';
   updateOvUI(); renderOverrideHistory(pid); openOverlay('overrideModal');
 }
+let editingOverrideId = null;
+
 function renderOverrideHistory(pid) {
   const now = Date.now();
   const eightWeeksAgo = now - 56*24*60*60*1000;
   overrides = overrides.filter(o => o.personId!==pid || new Date(o.end).getTime() >= eightWeeksAgo);
-  const hist = overrides.filter(o => o.personId===pid && new Date(o.end).getTime() < now)
-    .sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,5);
+  const hist = overrides.filter(o => o.personId===pid)
+    .sort((a,b)=>new Date(b.start)-new Date(a.start)).slice(0,10);
   const sec = document.getElementById('ovHistorySection');
   if(!hist.length) { sec.style.display='none'; return; }
   sec.style.display='block';
-  document.getElementById('ovHistoryList').innerHTML = hist.map(h=>`
-    <div class="override-hist-item">
+  document.getElementById('ovHistoryList').innerHTML = hist.map(h=>{
+    const isFuture = new Date(h.end+'T23:59:59').getTime() >= now;
+    return `<div class="override-hist-item" style="background:${isFuture?'var(--green-bg)':''}">
       <div>
-        <div style="font-size:12px;font-weight:600">${new Date(h.start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} → ${new Date(h.end+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-        <div style="font-size:11px;color:var(--muted)">${h.reason||'No reason noted'}</div>
+        <div style="font-size:12px;font-weight:600">${new Date(h.start+'T12:00:00').toLocaleDateString('en-GB')} → ${new Date(h.end+'T12:00:00').toLocaleDateString('en-GB')}</div>
+        <div style="font-size:11px;color:var(--muted)">${h.reason||'No reason noted'} ${isFuture?'<span style="color:var(--green);font-weight:600">● Active</span>':''}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:6px">
         <span style="font-size:13px;font-weight:700;color:${loadColor(h.load)}">${h.load}%</span>
+        <button class="btn btn-sm" onclick="editOverride('${h.id}')" style="font-size:10px">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="clearOverride('${h.id}')">Clear</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
+
+function editOverride(spikeId) {
+  const ov = overrides.find(o=>o.id===spikeId); if(!ov) return;
+  editingOverrideId = spikeId;
+  document.getElementById('ovStart').value = ov.start;
+  document.getElementById('ovEnd').value = ov.end;
+  document.getElementById('ovLoad').value = ov.load;
+  document.getElementById('ovReason').value = ov.reason||'';
+  document.getElementById('ovSaveBtn').textContent = 'Update';
+  updateOvUI();
+}
+
 function clearOverride(spikeId) {
   overrides = overrides.filter(o=>o.id!==spikeId);
   deleteOverrideFromDB(spikeId);
+  if(editingOverrideId===spikeId) { editingOverrideId=null; document.getElementById('ovSaveBtn').textContent='Save'; }
   renderWeekly(); renderMonthly(); updateSummary();
   if(currentUser) renderOverrideHistory(currentUser.id);
   showToast('Busy period cleared');
 }
+
 function updateOvUI() {
   const v=parseInt(document.getElementById('ovLoad').value);
   const el=document.getElementById('ovLoadVal');
   el.textContent=v+'%'; el.style.color=loadColor(v);
 }
+
 function saveOverrideForm() {
   if(!currentUser) return;
   const pid = currentUser.id;
@@ -1994,13 +2173,24 @@ function saveOverrideForm() {
   const reason = document.getElementById('ovReason').value.trim();
   if(!start||!end) { showToast('Please set a start and end date'); return; }
   if(new Date(end) < new Date(start)) { showToast('End date must be after start date'); return; }
-  const newOv = {id:'sp'+Date.now(), personId:pid, start, end, load, reason, savedAt:Date.now()};
-  overrides.push(newOv);
+
+  if(editingOverrideId) {
+    // Update existing override
+    const ov = overrides.find(o=>o.id===editingOverrideId);
+    if(ov) { ov.start=start; ov.end=end; ov.load=load; ov.reason=reason; ov.savedAt=Date.now(); saveOverride(ov); }
+    editingOverrideId = null;
+    document.getElementById('ovSaveBtn').textContent = 'Save';
+    showToast('Busy period updated ✓');
+  } else {
+    const newOv = {id:'sp'+Date.now(), personId:pid, start, end, load, reason, savedAt:Date.now()};
+    overrides.push(newOv);
+    saveOverride(newOv);
+    showToast('Busy period saved ✓');
+  }
+
   closeModal('overrideModal');
   renderWeekly(); renderMonthly(); updateSummary();
-  saveOverride(newOv);
   if(!document.getElementById('view-finder').classList.contains('hidden')) renderFinder();
-  showToast('Busy period saved ✓');
 }
 
 function openAddProjectModal() {
@@ -2014,16 +2204,37 @@ function openAddProjectModal() {
   };
   document.getElementById('pjNotes').value='';
   const wrap=document.getElementById('pjMembersWrap');
-  wrap.innerHTML=`<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Assign Team Members</div>`+
-    team.map(p=>`
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-        <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px">${initials(p.name)}</div>
-        <span style="flex:1;font-size:13px;font-weight:500">${p.name}</span>
-        <label style="font-size:11px;color:var(--muted)">Allocation:</label>
-        <input type="number" min="0" max="100" step="5" value="0" id="pjAlloc_${p.id}" style="width:65px;text-align:center;padding:5px 8px" placeholder="0%">
-        <span style="font-size:11px;color:var(--muted)">%</span>
-      </div>`).join('');
+  wrap.innerHTML=`
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Assign Team Members</div>
+    <div id="pjAddedMembers"></div>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <select id="pjAddPersonSel" style="flex:1;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+        <option value="">＋ Add a person…</option>
+        ${team.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+      <button class="btn" onclick="pjAddPerson()" style="flex-shrink:0">Add</button>
+    </div>`;
   openOverlay('addProjModal');
+}
+
+function pjAddPerson() {
+  const sel = document.getElementById('pjAddPersonSel');
+  const pid = parseInt(sel.value); if(!pid) return;
+  const p = team.find(t=>t.id===pid); if(!p) return;
+  if(document.getElementById('pjAllocRow_'+pid)) { showToast(p.name.split(' ')[0]+' already added'); return; }
+  const wrap = document.getElementById('pjAddedMembers');
+  const div = document.createElement('div');
+  div.id = 'pjAllocRow_'+pid;
+  div.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)';
+  div.innerHTML=`
+    <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(p.name)}</div>
+    <span style="flex:1;font-size:13px;font-weight:500">${p.name}</span>
+    <label style="font-size:11px;color:var(--muted)">Allocation:</label>
+    <input type="number" min="0" max="100" step="5" value="50" id="pjAlloc_${pid}" style="width:65px;text-align:center;padding:5px 8px" placeholder="0%">
+    <span style="font-size:11px;color:var(--muted)">%</span>
+    <button onclick="document.getElementById('pjAllocRow_${pid}').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0 2px" title="Remove">×</button>`;
+  wrap.appendChild(div);
+  sel.value = '';
 }
 
 function getMaxProjectAlloc(personId, start, end, excludeProjectId) {
@@ -2048,13 +2259,16 @@ function saveNewProject() {
   if(end<=start){showToast('⚠ End date must be after start date');return;}
   const creatorId = currentUser ? currentUser.id : (team[0]?.id||1);
   const members=[]; let blockingErrors=[];
-  team.forEach(p=>{
-    const v=parseInt(document.getElementById('pjAlloc_'+p.id).value)||0;
+  const addedRows = document.querySelectorAll('[id^="pjAllocRow_"]');
+  addedRows.forEach(row=>{
+    const pid = parseInt(row.id.replace('pjAllocRow_',''));
+    const p = team.find(t=>t.id===pid); if(!p) return;
+    const v=parseInt(document.getElementById('pjAlloc_'+pid).value)||0;
     if(v<=0) return;
     if(v>100){blockingErrors.push(`${p.name.split(' ')[0]}: allocation cannot exceed 100%`);return;}
-    const existingLoad=getMaxProjectAlloc(p.id,start,end,null);
+    const existingLoad=getMaxProjectAlloc(pid,start,end,null);
     if(existingLoad+v>100){blockingErrors.push(`${p.name.split(' ')[0]}: already at ${existingLoad}% — adding ${v}% would exceed 100%`);return;}
-    members.push({personId:p.id,allocation:v,role:p.id===creatorId?'pm':'coordinator'});
+    members.push({personId:pid,allocation:v,role:pid===creatorId?'pm':'coordinator'});
   });
   if(blockingErrors.length){showToast('⚠ Cannot save:\n'+blockingErrors.join('\n'),6000);return;}
   if(!members.find(m=>m.personId===creatorId)) members.unshift({personId:creatorId,allocation:0,role:'pm'});
@@ -2073,7 +2287,10 @@ function openAssignMember(projId) {
   assigningProjectId=projId;
   document.getElementById('assignProjLabel').textContent=`Assign to: ${proj.name}`;
   const sel=document.getElementById('assignPerson');
-  sel.innerHTML=team.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  const unassigned = team.filter(p=>!proj.members.find(m=>m.personId===p.id));
+  sel.innerHTML=unassigned.length
+    ? unassigned.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
+    : `<option value="">All team members already assigned</option>`;
   document.getElementById('assignAlloc').value=50;
   document.getElementById('assignAllocVal').textContent='50%';
   document.getElementById('allocWarning').style.display='none';
@@ -2112,12 +2329,8 @@ function saveEditDeliverable() {
   if(!newDate){showToast('⚠ Please set a due date');return;}
   if(newDate<proj.start){showToast(`⚠ Due date cannot be before project start (${proj.start})`);return;}
   if(newDate>proj.end){showToast(`⚠ Due date cannot be after project end (${proj.end})`);return;}
-  const newEffort=parseInt(document.getElementById('editDelivEffort').value)||5;
-  const projWorkDays=Math.round((new Date(proj.end)-new Date(proj.start))/86400000*5/7);
-  if(newEffort<1){showToast('⚠ Effort must be at least 1 day');return;}
-  if(newEffort>projWorkDays){showToast(`⚠ Effort (${newEffort} days) exceeds project duration (~${projWorkDays} working days)`);return;}
   const oldAssignee=deliv.assignedTo;
-  deliv.name=newName; deliv.date=newDate; deliv.effortDays=newEffort;
+  deliv.name=newName; deliv.date=newDate;
   const assignedVal=document.getElementById('editDelivAssigned').value;
   deliv.assignedTo=assignedVal?parseInt(assignedVal):null;
   proj.deliverables.sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -2147,7 +2360,6 @@ function openEditDeliverable(projId, delivId) {
   document.getElementById('editDelivName').value=deliv.name;
   const dateInput=document.getElementById('editDelivDate');
   dateInput.value=deliv.date; dateInput.min=proj.start; dateInput.max=proj.end;
-  document.getElementById('editDelivEffort').value=deliv.effortDays||5;
   populateDelivAssign('editDelivAssigned',proj,deliv.assignedTo||null);
   openOverlay('editDelivModal');
 }
@@ -2167,19 +2379,15 @@ function openAddDeliverable(projId) {
 function saveDeliverable() {
   const name=document.getElementById('delivName').value.trim();
   const date=document.getElementById('delivDate').value;
-  const effortDays=parseInt(document.getElementById('delivEffort').value)||5;
   if(!name){showToast('⚠ Please enter a deliverable name');return;}
   if(!date){showToast('⚠ Please set a due date');return;}
   const proj=projects.find(p=>p.id===addingDeliverableToProjectId);
   if(date<proj.start){showToast(`⚠ Due date cannot be before project start (${proj.start})`);return;}
   if(date>proj.end){showToast(`⚠ Due date cannot be after project end (${proj.end})`);return;}
-  const projWorkDays=Math.round((new Date(proj.end)-new Date(proj.start))/86400000*5/7);
-  if(effortDays<1){showToast('⚠ Effort must be at least 1 day');return;}
-  if(effortDays>projWorkDays){showToast(`⚠ Effort (${effortDays} days) exceeds project duration (~${projWorkDays} working days)`);return;}
   if(!proj.deliverables) proj.deliverables=[];
   const assignedVal=document.getElementById('delivAssigned').value;
   const assignedTo=assignedVal?parseInt(assignedVal):null;
-  const newDeliv={id:'d'+Date.now(),name,date,effortDays,assignedTo};
+  const newDeliv={id:'d'+Date.now(),name,date,assignedTo};
   proj.deliverables.push(newDeliv);
   proj.deliverables.sort((a,b)=>new Date(a.date)-new Date(b.date));
   if(assignedTo) addNotification(assignedTo,'task_assigned',{delivName:name,projName:proj.name,date,delivId:newDeliv.id,projId:proj.id});
@@ -2205,7 +2413,7 @@ function addMember() {
   if(!title){showToast('Please select a title');return;}
   if(!password||password.length<4){showToast('Please set a password (min 4 characters)');return;}
   const newId=Date.now();
-  const newMember = {id:newId,name,title,dept:document.getElementById('mDept').value,c:PALETTE[team.length%PALETTE.length]};
+  const newMember = {id:newId,name,title,dept:'ESIA',c:PALETTE[team.length%PALETTE.length]};
   team.push(newMember);
   pins[newId]=password; savePins();
   saveTeamMember(newMember);
@@ -2239,6 +2447,860 @@ function openDayModal(dateStr) {
   openOverlay('dayModal');
 }
 
+// ═══════════════════════════════════════════════
+//  NOTES — OneNote-style text boxes
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  NOTES — Free-form canvas (OneNote style)
+// ═══════════════════════════════════════════════
+let currentNoteSection = null;
+let nbSaveTimer = null;
+let lastFocusedNote = null;
+let nbUndoStack = [];
+let nbSavedRange = null; // saves cursor position before table picker opens
+const NB_UNDO_MAX = 20;
+const NOTE_DEFAULT_W = 380;
+
+function notesKey() { return currentUser ? 'wt_notes_'+currentUser.id : null; }
+function loadNotes() {
+  const k=notesKey(); if(!k) return [];
+  try { return JSON.parse(localStorage.getItem(k)||'[]'); } catch(e) { return []; }
+}
+function saveNotes(sections) {
+  const k=notesKey(); if(!k) return;
+  localStorage.setItem(k, JSON.stringify(sections));
+}
+
+// ── Section management ─────────────────────────
+function openAddNoteSection() {
+  if(!currentUser){showToast('Please log in first');return;}
+  document.getElementById('noteSectionTitle').value='';
+  openOverlay('addNoteSectionModal');
+  setTimeout(()=>document.getElementById('noteSectionTitle').focus(),100);
+}
+
+function saveNoteSection() {
+  const title=document.getElementById('noteSectionTitle').value.trim();
+  if(!title){showToast('Please enter a section title');return;}
+  const sections=loadNotes();
+  const newSec={id:'ns'+Date.now(),title,notes:[{id:'n'+Date.now(),content:'',x:20,y:20,w:NOTE_DEFAULT_W,createdAt:Date.now()}],stickies:[]};
+  sections.push(newSec);
+  saveNotes(sections);
+  currentNoteSection=newSec.id;
+  closeModal('addNoteSectionModal');
+  renderNotesView();
+  showToast('Section created ✓');
+}
+
+function deleteNoteSection(sectionId) {
+  if(!confirm('Delete this section and all its content?')) return;
+  const sections=loadNotes().filter(s=>s.id!==sectionId);
+  saveNotes(sections);
+  if(currentNoteSection===sectionId){currentNoteSection=null;}
+  renderNotesView();
+  showToast('Section deleted');
+}
+
+// ── View rendering ─────────────────────────────
+function renderNotesView() {
+  if(!currentUser) return;
+  const sections=loadNotes();
+  const sb=document.getElementById('notesSidebar');
+  if(sb) sb.innerHTML=sections.map(s=>`
+    <div onclick="selectNoteSection('${s.id}')"
+      style="padding:7px 9px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;margin-bottom:3px;
+      background:${currentNoteSection===s.id?'var(--green-bg)':''};
+      color:${currentNoteSection===s.id?'var(--green)':'var(--text)'};transition:background 0.1s"
+      onmouseenter="if('${s.id}'!==currentNoteSection)this.style.background='var(--surface)'"
+      onmouseleave="if('${s.id}'!==currentNoteSection)this.style.background=''">
+      📁 ${s.title}</div>`).join('');
+
+  if(currentNoteSection) renderNoteEditor(currentNoteSection);
+  else {
+    document.getElementById('nbSectionHeader').style.display='none';
+    document.getElementById('nbCanvas').innerHTML='';
+    document.getElementById('nbEmpty').style.display='block';
+  }
+}
+
+function selectNoteSection(sectionId) {
+  if(currentNoteSection) saveAllNotes(currentNoteSection);
+  currentNoteSection=sectionId;
+  nbUndoStack=[];
+  renderNotesView();
+}
+
+function renderNoteEditor(sectionId) {
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===sectionId); if(!s) return;
+  if(!s.notes||!s.notes.length) s.notes=[{id:'n'+Date.now(),content:'',x:20,y:20,w:NOTE_DEFAULT_W,createdAt:Date.now()}];
+
+  document.getElementById('nbSectionHeader').style.display='block';
+  document.getElementById('nbSectionTitle').textContent=s.title;
+  document.getElementById('nbEmpty').style.display='none';
+  renderStickies(s);
+
+  const canvas=document.getElementById('nbCanvas');
+  canvas.innerHTML='';
+  s.notes.forEach(n=>canvas.appendChild(createNoteEl(n, sectionId)));
+  updateCanvasHeight();
+}
+
+function createNoteEl(n, sectionId) {
+  const el=document.createElement('div');
+  el.className='nb-note';
+  el.dataset.id=n.id;
+  el.style.cssText=`position:absolute;left:${n.x||20}px;top:${n.y||20}px;width:${n.w||NOTE_DEFAULT_W}px;
+    min-width:220px;min-height:120px;background:var(--surface);border:1px solid var(--border);
+    border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;
+    resize:horizontal;overflow:hidden;box-sizing:border-box`;
+
+  el.innerHTML=`
+    <div class="nb-note-bar" style="display:flex;align-items:center;padding:6px 10px;background:var(--surface2);
+      border-bottom:1px solid var(--border);gap:6px;cursor:grab;user-select:none;flex-shrink:0;border-radius:11px 11px 0 0">
+      <span style="color:var(--muted);font-size:13px;flex-shrink:0">⠿</span>
+      <span style="font-size:11px;color:var(--muted);font-weight:500;flex:1">Note</span>
+      <button onmousedown="event.stopPropagation()" onclick="nbDeleteNote('${n.id}')"
+        style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:0 4px;line-height:1;flex-shrink:0">✕</button>
+    </div>
+    <div class="nb-note-content" contenteditable="true" data-placeholder="Start typing…"
+      style="flex:1;padding:14px 16px;outline:none;font-size:14px;line-height:1.8;
+      word-break:break-word;overflow-wrap:break-word;overflow-y:auto;min-height:80px"
+      onfocus="lastFocusedNote=this">${n.content||''}</div>`;
+
+  // Make draggable by title bar
+  const bar=el.querySelector('.nb-note-bar');
+  bar.addEventListener('mousedown', function(e) {
+    if(e.target.tagName==='BUTTON') return;
+    e.preventDefault();
+    const startX=e.clientX, startY=e.clientY;
+    const startL=parseInt(el.style.left)||0, startT=parseInt(el.style.top)||0;
+    el.style.zIndex=100; el.style.boxShadow='0 8px 30px rgba(0,0,0,0.15)';
+    function onMove(e) {
+      const canvas=document.getElementById('nbCanvas');
+      const maxLeft=canvas?canvas.offsetWidth-el.offsetWidth-4:9999;
+      el.style.left=Math.max(0,Math.min(maxLeft,startL+e.clientX-startX))+'px';
+      el.style.top=Math.max(0,startT+e.clientY-startY)+'px';
+      updateCanvasHeight();
+    }
+    function onUp() {
+      el.style.zIndex=''; el.style.boxShadow='var(--shadow)';
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      saveAllNotes(sectionId);
+    }
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+
+  // Save on content change
+  const content=el.querySelector('.nb-note-content');
+  content.addEventListener('input',()=>{
+    clearTimeout(nbSaveTimer);
+    nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),800);
+  });
+
+  // Toggle todo items by clicking the checkbox area (::before pseudo-element)
+  content.addEventListener('mousedown', function(e) {
+    const li=e.target.closest('.nb-todo-list li');
+    if(li){
+      const rect=li.getBoundingClientRect();
+      if(e.clientX-rect.left < 26){
+        e.preventDefault();
+        li.classList.toggle('done');
+        clearTimeout(nbSaveTimer);
+        nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
+      }
+    }
+  });
+
+  // Track width resize — clamp to canvas edge
+  const ro=new ResizeObserver(()=>{
+    const canvas=document.getElementById('nbCanvas');
+    if(canvas){
+      const noteLeft=parseInt(el.style.left)||0;
+      const maxW=canvas.offsetWidth-noteLeft-16;
+      if(el.offsetWidth>maxW) el.style.width=maxW+'px';
+    }
+    clearTimeout(nbSaveTimer);
+    nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),500);
+  });
+  ro.observe(el);
+
+  // Focus highlight
+  el.addEventListener('focusin',()=>{el.style.borderColor='var(--green)';el.style.boxShadow='0 0 0 2px rgba(45,143,94,0.12),var(--shadow)';});
+  el.addEventListener('focusout',()=>{el.style.borderColor='var(--border)';el.style.boxShadow='var(--shadow)';});
+
+  return el;
+}
+
+function updateCanvasHeight() {
+  const canvas=document.getElementById('nbCanvas'); if(!canvas) return;
+  let maxBottom=500;
+  canvas.querySelectorAll('.nb-note').forEach(n=>{
+    const b=(parseInt(n.style.top)||0)+n.offsetHeight+40;
+    if(b>maxBottom) maxBottom=b;
+  });
+  canvas.style.minHeight=maxBottom+'px';
+}
+
+function saveAllNotes(sectionId) {
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===sectionId); if(!s) return;
+  const canvas=document.getElementById('nbCanvas'); if(!canvas) return;
+  const notes=[];
+  canvas.querySelectorAll('.nb-note').forEach(el=>{
+    const id=el.dataset.id;
+    const c=el.querySelector('.nb-note-content');
+    notes.push({
+      id, content:c?c.innerHTML:'',
+      x:parseInt(el.style.left)||20,
+      y:parseInt(el.style.top)||20,
+      w:el.offsetWidth||NOTE_DEFAULT_W,
+      createdAt:Date.now()
+    });
+  });
+  s.notes=notes;
+  saveNotes(sections);
+}
+
+function nbAddNote() {
+  if(!currentNoteSection){showToast('Select a section first');return;}
+  nbPushUndo();
+  // Find a smart position — to the right of last note or below
+  const canvas=document.getElementById('nbCanvas');
+  const existing=canvas.querySelectorAll('.nb-note');
+  let x=20, y=20;
+  if(existing.length) {
+    const last=existing[existing.length-1];
+    const lx=parseInt(last.style.left)||20;
+    const lw=last.offsetWidth||NOTE_DEFAULT_W;
+    const canvasW=canvas.offsetWidth;
+    if(lx+lw+NOTE_DEFAULT_W+30 < canvasW) {
+      // Place to the right
+      x=lx+lw+20; y=parseInt(last.style.top)||20;
+    } else {
+      // Place below
+      let maxBottom=0;
+      existing.forEach(n=>{const b=(parseInt(n.style.top)||0)+n.offsetHeight; if(b>maxBottom)maxBottom=b;});
+      x=20; y=maxBottom+20;
+    }
+  }
+  const sections=loadNotes();
+  const s=sections.find(sec=>sec.id===currentNoteSection); if(!s) return;
+  const newNote={id:'n'+Date.now(),content:'',x,y,w:NOTE_DEFAULT_W,createdAt:Date.now()};
+  if(!s.notes) s.notes=[];
+  s.notes.push(newNote);
+  saveNotes(sections);
+  const el=createNoteEl(newNote,currentNoteSection);
+  canvas.appendChild(el);
+  updateCanvasHeight();
+  const c=el.querySelector('.nb-note-content');
+  if(c){c.focus();lastFocusedNote=c;}
+}
+
+function nbDeleteNote(noteId) {
+  nbPushUndo();
+  const el=document.querySelector('.nb-note[data-id="'+noteId+'"]'); if(!el) return;
+  const canvas=document.getElementById('nbCanvas');
+  if(canvas.querySelectorAll('.nb-note').length<=1){
+    const c=el.querySelector('.nb-note-content');
+    if(c){c.innerHTML='';c.focus();lastFocusedNote=c;}
+    saveAllNotes(currentNoteSection);
+    return;
+  }
+  el.remove();
+  saveAllNotes(currentNoteSection);
+  showToast('Note removed');
+}
+
+// ── Undo ──────────────────────────────────────
+function nbPushUndo() {
+  if(!currentNoteSection) return;
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===currentNoteSection); if(!s) return;
+  nbUndoStack.push(JSON.stringify(s.notes||[]));
+  if(nbUndoStack.length>NB_UNDO_MAX) nbUndoStack.shift();
+}
+
+function nbUndo() {
+  if(!currentNoteSection||!nbUndoStack.length){showToast('Nothing to undo');return;}
+  const snapshot=nbUndoStack.pop();
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===currentNoteSection); if(!s) return;
+  s.notes=JSON.parse(snapshot);
+  saveNotes(sections);
+  renderNoteEditor(currentNoteSection);
+  showToast('Undone ✓');
+}
+
+document.addEventListener('keydown',function(e){
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'){
+    const nv=document.getElementById('view-notes');
+    if(nv&&!nv.classList.contains('hidden')&&nbUndoStack.length>0){
+      const active=document.activeElement;
+      if(!active||active.contentEditable!=='true'){e.preventDefault();nbUndo();}
+    }
+  }
+});
+
+// ── Toolbar actions ────────────────────────────
+function nbFontSize(size) {
+  if(!size) return;
+  if(lastFocusedNote) lastFocusedNote.focus();
+  document.execCommand('fontSize',false,'7');
+  document.querySelectorAll('font[size="7"]').forEach(f=>{f.removeAttribute('size');f.style.fontSize=size+'px';});
+}
+
+function nbInsertBullet() {
+  if(!lastFocusedNote){showToast('Click inside a note first');return;}
+  lastFocusedNote.focus();
+  document.execCommand('insertUnorderedList');
+}
+
+function nbInsertTodo() {
+  if(!lastFocusedNote){showToast('Click inside a note first');return;}
+  lastFocusedNote.focus();
+  const sel=window.getSelection();
+  if(sel&&sel.rangeCount>0){const r=sel.getRangeAt(0);r.collapse(false);}
+  // Use same mechanism as bullets
+  document.execCommand('insertUnorderedList');
+  // Find the created/current UL and mark as todo list
+  const sel2=window.getSelection();
+  if(sel2&&sel2.focusNode){
+    let node=sel2.focusNode;
+    while(node&&node!==lastFocusedNote){
+      if(node.nodeName==='UL'){node.classList.add('nb-todo-list');break;}
+      if(node.nodeName==='LI'&&node.parentNode){node.parentNode.classList.add('nb-todo-list');break;}
+      node=node.parentNode;
+    }
+  }
+}
+
+// Table picker with hover grid
+function nbShowTablePicker(event) {
+  // Save cursor position BEFORE picker opens and steals focus
+  const sel=window.getSelection();
+  if(sel&&sel.rangeCount>0) nbSavedRange=sel.getRangeAt(0).cloneRange();
+  const picker=document.getElementById('nbTablePicker');
+  const grid=document.getElementById('nbTableGrid');
+  if(picker.style.display==='block'){picker.style.display='none';return;}
+  const btn=event.currentTarget;
+  const rect=btn.getBoundingClientRect();
+  picker.style.top=(rect.bottom+4)+'px';
+  picker.style.left=rect.left+'px';
+  // Build 6x6 grid
+  grid.innerHTML='';
+  for(let r=1;r<=6;r++) for(let c=1;c<=6;c++){
+    const cell=document.createElement('div');
+    cell.style.cssText='width:22px;height:22px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:var(--surface2);transition:all 0.1s';
+    cell.dataset.r=r; cell.dataset.c=c;
+    cell.onmouseenter=function(){
+      const mr=parseInt(this.dataset.r),mc=parseInt(this.dataset.c);
+      grid.querySelectorAll('div').forEach(d=>{
+        const active=parseInt(d.dataset.r)<=mr&&parseInt(d.dataset.c)<=mc;
+        d.style.background=active?'var(--green-bg)':'var(--surface2)';
+        d.style.borderColor=active?'var(--green)':'var(--border)';
+      });
+      document.getElementById('nbTableLabel').textContent=mr+' rows × '+mc+' cols';
+    };
+    cell.onclick=function(){nbInsertTable(parseInt(this.dataset.r),parseInt(this.dataset.c));};
+    grid.appendChild(cell);
+  }
+  document.getElementById('nbTableLabel').textContent='Hover to select size';
+  picker.style.display='block';
+  setTimeout(()=>document.addEventListener('click',function h(e){
+    if(!picker.contains(e.target)&&!event.currentTarget.contains(e.target)){picker.style.display='none';document.removeEventListener('click',h);}
+  }),10);
+}
+
+function nbInsertTable(rows,cols) {
+  document.getElementById('nbTablePicker').style.display='none';
+  if(!lastFocusedNote){showToast('Click inside a note first');return;}
+  // Restore saved cursor position
+  lastFocusedNote.focus();
+  if(nbSavedRange){
+    const sel=window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(nbSavedRange);
+    nbSavedRange=null;
+  }
+  const colW=Math.floor(100/cols);
+  let html='<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin:10px 0">';
+  html+=`<colgroup>${Array(cols).fill(`<col style="width:${colW}%">`).join('')}</colgroup>`;
+  for(let r=0;r<rows;r++){
+    html+='<tr>';
+    for(let c=0;c<cols;c++){
+      const isH=r===0;
+      html+=`<${isH?'th':'td'} style="border:1px solid var(--border);padding:8px 10px;vertical-align:top;text-align:left;${isH?'background:var(--surface2);font-weight:600;':''}">${isH?'Header':'Cell'}</${isH?'th':'td'}>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table>';
+  document.execCommand('insertHTML',false,html);
+}
+
+// ── Stickies ──────────────────────────────────
+function renderStickies(s) {
+  const el=document.getElementById('nbStickies'); if(!el) return;
+  const stickies=s.stickies||[];
+  const colors=['#FFF9C4','#C8F7C5','#C5E8F7','#FFC5C5'];
+  el.innerHTML=stickies.map(st=>`
+    <div style="background:${st.color};border:1px solid rgba(0,0,0,0.1);border-radius:10px;padding:10px 14px;
+      min-width:150px;max-width:200px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,0.08);flex-shrink:0">
+      <button onclick="removeSticky('${s.id}','${st.id}')"
+        style="position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;font-size:13px;color:rgba(0,0,0,0.3)">×</button>
+      <div contenteditable="true" style="font-size:14px;line-height:1.6;outline:none;min-height:40px;padding-right:12px;color:#333"
+        onblur="saveStickyText('${s.id}','${st.id}',this.innerText)">${st.text||''}</div>
+    </div>`).join('')+
+    `<button onclick="addSticky('${s.id}')" style="align-self:center;background:none;border:1px dashed var(--border);
+      border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0"
+      onmouseenter="this.style.borderColor='var(--green)'" onmouseleave="this.style.borderColor='var(--border)'">📌 Add sticky</button>`;
+}
+
+function addSticky(sectionId) {
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===sectionId); if(!s) return;
+  if(!s.stickies) s.stickies=[];
+  const colors=['#FFF9C4','#C8F7C5','#C5E8F7','#FFC5C5'];
+  s.stickies.push({id:'st'+Date.now(),text:'',color:colors[s.stickies.length%4]});
+  saveNotes(sections);
+  renderStickies(s);
+}
+function removeSticky(sectionId,stickyId) {
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===sectionId); if(!s) return;
+  s.stickies=(s.stickies||[]).filter(x=>x.id!==stickyId);
+  saveNotes(sections);
+  renderStickies(s);
+}
+function saveStickyText(sectionId,stickyId,text) {
+  const sections=loadNotes();
+  const s=sections.find(x=>x.id===sectionId); if(!s) return;
+  const st=(s.stickies||[]).find(x=>x.id===stickyId); if(!st) return;
+  st.text=text; saveNotes(sections);
+}
+
+// Stubs
+function selectNoteType(){}
+function globalFmt(cmd){document.execCommand(cmd,false,null);}
+function globalHighlight(c){document.execCommand('hiliteColor',false,c);}
+function globalFontSize(s){nbFontSize(s);}
+function captureLastFocused(){}
+function changeBlockType(){}
+function nbBlockHtml(){}
+function attachSingleBlockListeners(){}
+function addBlockAfter(){}
+function removeBlock(){}
+function attachSingleDnD(){}
+function attachDnDListeners(){}
+function saveSectionFromDOM(){}
+function renderNoteEditor_old(){}
+
+
+function getTsMonthOptions() {
+  const opts=[];
+  const now=new Date();
+  for(let i=5;i>=0;i--) {
+    const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const label=d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    opts.push({val,label});
+  }
+  return opts;
+}
+
+function renderTimesheetView() {
+  if(isHR()) {
+    document.getElementById('tsUserView').style.display='none';
+    document.getElementById('tsHRView').style.display='';
+    const sel=document.getElementById('hrMonthSel');
+    const opts=getTsMonthOptions();
+    sel.innerHTML=opts.map(o=>`<option value="${o.val}">${o.label}</option>`).join('');
+    sel.value=opts[opts.length-1].val;
+    loadHRTimesheets();
+  } else {
+    document.getElementById('tsUserView').style.display='';
+    document.getElementById('tsHRView').style.display='none';
+    const sel=document.getElementById('tsMonthSel');
+    const opts=getTsMonthOptions();
+    sel.innerHTML=opts.map(o=>`<option value="${o.val}">${o.label}</option>`).join('');
+    sel.value=opts[opts.length-1].val;
+    loadUserTimesheet();
+  }
+}
+
+async function loadUserTimesheet() {
+  const month=document.getElementById('tsMonthSel').value;
+  const personId=currentUser.id;
+  const id=personId+'_'+month;
+  setLoading(true);
+  const {data}=await sb.from('timesheets').select('*').eq('id',id).maybeSingle();
+  setLoading(false);
+  tsData=data||{id,person_id:personId,month,columns:[],rows:{},submitted:false,locked:false};
+  populateTsColDropdown();
+  renderTsMatrix();
+  updateTsStatus();
+}
+
+function populateTsColDropdown() {
+  const sel=document.getElementById('tsColSel');
+  const otherInp=document.getElementById('tsOtherName');
+  // Projects assigned to this user
+  const myProjects=projects.filter(p=>p.members.some(m=>m.personId===currentUser.id));
+  const existingIds=new Set((tsData.columns||[]).map(c=>c.projectId||c.name));
+  sel.innerHTML=`<option value="">＋ Add project column…</option>`+
+    myProjects.filter(p=>!existingIds.has(String(p.id))).map(p=>`<option value="proj_${p.id}">${p.name}</option>`).join('')+
+    `<option value="leave">Annual Leave</option>`+
+    `<option value="site_visit">Site Visit</option>`+
+    `<option value="other">Other (custom)…</option>`;
+  sel.onchange=function(){
+    otherInp.style.display=this.value==='other'?'':'none';
+  };
+}
+
+function tsAddColumn() {
+  const sel=document.getElementById('tsColSel');
+  const val=sel.value; if(!val) return;
+  let col;
+  if(val.startsWith('proj_')) {
+    const pid=parseInt(val.replace('proj_',''));
+    const proj=projects.find(p=>p.id===pid);
+    if(!proj) return;
+    col={id:'col'+Date.now(),name:proj.name,type:'project',projectId:String(pid)};
+  } else if(val==='other') {
+    const custom=document.getElementById('tsOtherName').value.trim();
+    if(!custom){showToast('Please enter a label');return;}
+    col={id:'col'+Date.now(),name:custom,type:'other'};
+  } else if(val==='leave') {
+    col={id:'col'+Date.now(),name:'Annual Leave',type:'leave'};
+  } else if(val==='site_visit') {
+    col={id:'col'+Date.now(),name:'Site Visit',type:'site_visit'};
+  }
+  if(!tsData.columns) tsData.columns=[];
+  tsData.columns.push(col);
+  sel.value='';
+  document.getElementById('tsOtherName').style.display='none';
+  populateTsColDropdown();
+  renderTsMatrix();
+  saveTsDraft();
+}
+
+function renderTsMatrix() {
+  const container=document.getElementById('tsMatrix');
+  if(!tsData){container.innerHTML='';return;}
+  const month=tsData.month;
+  const [yr,mo]=month.split('-').map(Number);
+  const daysInMonth=new Date(yr,mo,0).getDate();
+  const cols=tsData.columns||[];
+  const rows=tsData.rows||{};
+  const locked=tsData.locked||tsData.submitted;
+
+  if(!cols.length) {
+    container.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px">
+      Add your first project column above to start logging hours.</div>`;
+    return;
+  }
+
+  const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2';
+  const tdStyle='padding:4px 6px;border:1px solid var(--border);text-align:center;';
+
+  let html=`<table style="border-collapse:collapse;width:100%;font-size:12px">
+    <thead><tr>
+      <th style="${thStyle};text-align:left;min-width:60px">Day</th>
+      <th style="${thStyle};text-align:left;min-width:110px;position:sticky;left:0;z-index:3">Date</th>
+      ${cols.map(c=>`<th style="${thStyle};min-width:110px">${c.name}${locked?'':` <button onclick="removeTsCol('${c.id}')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;margin-left:2px">×</button>`}</th>`).join('')}
+      <th style="${thStyle};color:var(--text2);min-width:70px">Total</th>
+    </tr></thead><tbody>`;
+
+  for(let d=1;d<=daysInMonth;d++) {
+    const date=new Date(yr,mo-1,d);
+    const dow=date.getDay(); // 0=Sun,5=Fri,6=Sat
+    const isWeekend=dow===5||dow===6;
+    const dateStr=month+'-'+String(d).padStart(2,'0');
+    const displayDate=String(d).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'/'+yr;
+    const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dayLabel=dayNames[dow];
+    const rowData=rows[dateStr]||{};
+    const rowTotal=cols.reduce((s,c)=>s+(parseFloat(rowData[c.id])||0),0);
+    const isOverday=rowTotal>8;
+    const today=new Date(); today.setHours(0,0,0,0);
+    const rowDate=new Date(yr,mo-1,d);
+    const isMissing=TS_WORKDAYS.includes(dow)&&rowTotal===0&&rowDate<today&&!locked;
+    const bgRow=isWeekend?'background:#f5f3ef':'';
+    const totalColor=isOverday?'color:var(--red);font-weight:700':rowTotal>0?'color:var(--green)':'';
+
+    html+=`<tr style="${bgRow}">
+      <td style="${tdStyle};color:${isWeekend?'var(--muted)':'var(--text)'};">${dayLabel}</td>
+      <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;background:${isWeekend?'#f5f3ef':'var(--surface)'}">
+        ${isMissing?'🔴 ':''}<span style="color:${isWeekend?'var(--muted)':'var(--text)'}">${displayDate}</span>
+      </td>
+      ${cols.map(c=>{
+        const val=rowData[c.id]||'';
+        return locked
+          ? `<td style="${tdStyle};color:${val?'var(--text)':'var(--muted)'}">${val||'—'}</td>`
+          : `<td style="${tdStyle}"><input type="number" min="0" max="24" step="0.5" value="${val}"
+              style="width:70px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:5px;
+              background:${isWeekend?'#f0ede8':'var(--surface)'};font-size:12px"
+              onchange="updateTsCell('${dateStr}','${c.id}',this.value)"
+              ></td>`;
+      }).join('')}
+      <td style="${tdStyle};font-weight:600;${totalColor}">${rowTotal||'—'}</td>
+    </tr>`;
+  }
+
+  // Totals row
+  const colTotals=cols.map(c=>{
+    let t=0;
+    for(let d=1;d<=daysInMonth;d++){
+      const dateStr=month+'-'+String(d).padStart(2,'0');
+      t+=parseFloat((rows[dateStr]||{})[c.id])||0;
+    }
+    return t;
+  });
+  const grandTotal=colTotals.reduce((a,b)=>a+b,0);
+  html+=`<tr style="background:var(--surface2);font-weight:700">
+    <td style="${tdStyle};text-align:left;position:sticky;left:0;background:var(--surface2)" colspan="2">Monthly Total</td>
+    ${colTotals.map(t=>`<td style="${tdStyle};color:var(--green)">${t||'—'}</td>`).join('')}
+    <td style="${tdStyle};color:var(--text)">${grandTotal||'—'}</td>
+  </tr>`;
+
+  html+=`</tbody></table>`;
+  container.innerHTML=html;
+}
+
+function updateTsCell(dateStr, colId, val) {
+  if(!tsData.rows) tsData.rows={};
+  if(!tsData.rows[dateStr]) tsData.rows[dateStr]={};
+  const num=parseFloat(val)||0;
+  if(num>8) showToast('⚠ More than 8 hours on one day — please double check');
+  tsData.rows[dateStr][colId]=num||undefined;
+  if(!num) delete tsData.rows[dateStr][colId];
+  // Update total column in same row
+  const row=document.querySelector(`[data-date="${dateStr}"]`);
+  renderTsMatrix(); // re-render to update totals (lightweight since no DB call)
+  saveTsDraft();
+}
+
+function removeTsCol(colId) {
+  tsData.columns=tsData.columns.filter(c=>c.id!==colId);
+  // Clean rows
+  Object.keys(tsData.rows||{}).forEach(d=>{delete tsData.rows[d][colId];});
+  populateTsColDropdown();
+  renderTsMatrix();
+  saveTsDraft();
+}
+
+async function saveTsDraft() {
+  if(!tsData||tsData.locked) return;
+  await sb.from('timesheets').upsert({
+    id:tsData.id, person_id:tsData.person_id, month:tsData.month,
+    columns:tsData.columns, rows:tsData.rows,
+    submitted:false, locked:false
+  });
+}
+
+function updateTsStatus() {
+  const badge=document.getElementById('tsStatusBadge');
+  const submitBtn=document.getElementById('tsSubmitBtn');
+  const addColRow=document.getElementById('tsAddColRow');
+  if(!badge) return;
+  if(tsData.locked||tsData.submitted) {
+    badge.innerHTML=`<span style="background:var(--green-bg);color:var(--green);border:1px solid #b8dfc9;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">✓ Submitted</span>`;
+    submitBtn.style.display='none';
+    addColRow.style.display='none';
+  } else {
+    badge.innerHTML=`<span style="background:#fff9e6;color:#b87d00;border:1px solid #f0d080;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">Draft</span>`;
+    submitBtn.style.display='';
+    addColRow.style.display='';
+  }
+}
+
+function confirmSubmitTimesheet() { openOverlay('confirmTsModal'); }
+
+async function submitUserTimesheet() {
+  closeModal('confirmTsModal');
+  await sb.from('timesheets').upsert({
+    id:tsData.id, person_id:tsData.person_id, month:tsData.month,
+    columns:tsData.columns, rows:tsData.rows,
+    submitted:true, locked:true, submitted_at:new Date().toISOString()
+  });
+  tsData.submitted=true; tsData.locked=true;
+  updateTsStatus();
+  renderTsMatrix();
+  showToast('Timesheet submitted ✓');
+}
+
+async function exportMyTimesheet() {
+  if(!tsData||!tsData.columns||!tsData.columns.length){showToast('Nothing to export');return;}
+  const wb=XLSX.utils.book_new();
+  const ws=buildTsSheet(tsData, currentUser.name);
+  XLSX.utils.book_append_sheet(wb, ws, currentUser.name.split(' ')[0]||'Timesheet');
+  XLSX.writeFile(wb, `Timesheet_${currentUser.name.replace(' ','_')}_${tsData.month}.xlsx`);
+}
+
+// HR functions
+async function loadHRTimesheets() {
+  const month=document.getElementById('hrMonthSel').value;
+  setLoading(true);
+  const {data}=await sb.from('timesheets').select('*').like('id','%_'+month);
+  setLoading(false);
+  renderHRList(data||[], month);
+}
+
+function renderHRList(sheets, month) {
+  const container=document.getElementById('tsHRList');
+  // Map by person_id
+  const sheetMap={};
+  sheets.forEach(s=>{sheetMap[s.person_id]=s;});
+
+  container.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:4px">
+    ${team.map(p=>{
+      const s=sheetMap[p.id];
+      const status=s&&s.submitted?'Submitted':s?'Draft':'Not started';
+      const statusColor=s&&s.submitted?'var(--green)':s?'var(--orange)':'var(--muted)';
+      const statusBg=s&&s.submitted?'var(--green-bg)':s?'#fff9e6':'var(--surface2)';
+      const canUnlock=s&&s.locked;
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:32px;height:32px">${initials(p.name)}</div>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:13px">${p.name}</div>
+            <div style="font-size:11px;color:var(--muted)">${p.title}</div>
+          </div>
+          <span style="background:${statusBg};color:${statusColor};border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600">${status}</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          ${canUnlock?`<button class="btn btn-sm" onclick="hrUnlockTimesheet(${p.id},'${month}')" style="font-size:11px;flex:1">🔓 Unlock</button>`:''}
+          ${s?`<button class="btn btn-sm btn-accent" onclick="hrExportOne(${p.id},'${month}')" style="font-size:11px;flex:1">📥 Export</button>`:''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function hrUnlockTimesheet(personId, month) {
+  const id=personId+'_'+month;
+  await sb.from('timesheets').update({locked:false,submitted:false}).eq('id',id);
+  showToast('Timesheet unlocked — user can now edit and resubmit');
+  loadHRTimesheets();
+}
+
+async function hrExportOne(personId, month) {
+  const id=personId+'_'+month;
+  const {data}=await sb.from('timesheets').select('*').eq('id',id).maybeSingle();
+  if(!data){showToast('No data');return;}
+  const person=team.find(p=>p.id===personId);
+  const wb=XLSX.utils.book_new();
+  const ws=buildTsSheet(data, person?person.name:'Unknown');
+  XLSX.utils.book_append_sheet(wb, ws, (person?person.name.split(' ')[0]:'Person')||'Sheet');
+  XLSX.writeFile(wb, `Timesheet_${person?person.name.replace(' ','_'):'Person'}_${month}.xlsx`);
+}
+
+async function exportAllTimesheets(individual) {
+  const month=document.getElementById('hrMonthSel').value;
+  setLoading(true);
+  const {data}=await sb.from('timesheets').select('*').like('id','%_'+month);
+  setLoading(false);
+  const sheets=data||[];
+
+  if(individual) {
+    sheets.forEach(s=>{
+      const person=team.find(p=>p.id===s.person_id);
+      const wb=XLSX.utils.book_new();
+      // Summary
+      const sumWs=buildTsSummarySheet([s],team,month);
+      XLSX.utils.book_append_sheet(wb,sumWs,'Summary');
+      const ws=buildTsSheet(s,person?person.name:'Unknown');
+      XLSX.utils.book_append_sheet(wb,ws,(person?person.name.split(' ')[0]:'Person')||'Sheet');
+      XLSX.writeFile(wb,`Timesheet_${person?person.name.replace(' ','_'):'Person'}_${month}.xlsx`);
+    });
+  } else {
+    const wb=XLSX.utils.book_new();
+    // Summary sheet first
+    const sumWs=buildTsSummarySheet(sheets,team,month);
+    XLSX.utils.book_append_sheet(wb,sumWs,'Summary');
+    // Individual sheets
+    sheets.forEach(s=>{
+      const person=team.find(p=>p.id===s.person_id);
+      const ws=buildTsSheet(s,person?person.name:'Unknown');
+      XLSX.utils.book_append_sheet(wb,ws,(person?person.name.split(' ')[0]:'Person')||'Sheet');
+    });
+    XLSX.writeFile(wb,`Timesheets_All_${month}.xlsx`);
+  }
+}
+
+function buildTsSheet(ts, personName) {
+  const [yr,mo]=ts.month.split('-').map(Number);
+  const daysInMonth=new Date(yr,mo,0).getDate();
+  const cols=ts.columns||[];
+  const rows=ts.rows||{};
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const header=['Date','Day',...cols.map(c=>c.name),'Daily Total'];
+  const aoa=[
+    [`Timesheet — ${personName}`],
+    [`Month: ${new Date(yr,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}`],
+    [],
+    header
+  ];
+
+  for(let d=1;d<=daysInMonth;d++){
+    const date=new Date(yr,mo-1,d);
+    const dow=date.getDay();
+    const dateStr=ts.month+'-'+String(d).padStart(2,'0');
+    const rowData=rows[dateStr]||{};
+    const colVals=cols.map(c=>parseFloat(rowData[c.id])||0);
+    const total=colVals.reduce((a,b)=>a+b,0);
+    aoa.push([dateStr,dayNames[dow],...colVals,total]);
+  }
+
+  // Totals row
+  const colTotals=cols.map(c=>{
+    let t=0;
+    for(let d=1;d<=daysInMonth;d++){
+      const dateStr=ts.month+'-'+String(d).padStart(2,'0');
+      t+=parseFloat((rows[dateStr]||{})[c.id])||0;
+    }
+    return t;
+  });
+  aoa.push(['','Monthly Total',...colTotals,colTotals.reduce((a,b)=>a+b,0)]);
+
+  return XLSX.utils.aoa_to_sheet(aoa);
+}
+
+function buildTsSummarySheet(sheets, teamArr, month) {
+  const [yr,mo]=month.split('-').map(Number);
+  const monthLabel=new Date(yr,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+
+  // Collect all project names
+  const allCols=new Set();
+  sheets.forEach(s=>(s.columns||[]).forEach(c=>allCols.add(c.name)));
+  const colNames=[...allCols];
+
+  const header=['Name','Title',...colNames,'Total Hours','Status'];
+  const aoa=[
+    [`Timesheet Summary — ${monthLabel}`],
+    [],
+    header
+  ];
+
+  teamArr.forEach(p=>{
+    const s=sheets.find(x=>x.person_id===p.id);
+    const colTotals=colNames.map(cn=>{
+      if(!s) return 0;
+      const col=(s.columns||[]).find(c=>c.name===cn);
+      if(!col) return 0;
+      return Object.values(s.rows||{}).reduce((t,row)=>t+(parseFloat(row[col.id])||0),0);
+    });
+    const total=colTotals.reduce((a,b)=>a+b,0);
+    const status=s&&s.submitted?'Submitted':s?'Draft':'Not started';
+    aoa.push([p.name,p.title||'',...colTotals,total,status]);
+  });
+
+  return XLSX.utils.aoa_to_sheet(aoa);
+}
+
 function showToast(msg) {
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2500);
@@ -2258,41 +3320,11 @@ function setLoading(on) {
 
 // ── SEED: push default data to Supabase if tables are empty ──────
 async function seedIfEmpty() {
-  const { data: existingTeam } = await sb.from('team').select('id').limit(1);
-  if(existingTeam && existingTeam.length > 0) return; // already seeded
-
-  // Seed team
-  const teamRows = team.map((p,i) => ({id:p.id, name:p.name, title:p.title, dept:p.dept, ci:i}));
-  await sb.from('team').insert(teamRows);
-
-  // Seed projects
-  const projRows = projects.map(p => ({
-    id: p.id, name: p.name, client: p.client||'',
-    start_date: p.start, end_date: p.end,
-    creator_id: p.creatorId, notes: p.notes||'',
-    members: p.members, deliverables: p.deliverables||[]
-  }));
-  await sb.from('projects').insert(projRows);
-
-  // Seed overrides
-  if(overrides.length) {
-    const ovRows = overrides.map(o => ({
-      id: o.id, person_id: o.personId,
-      start_date: o.start, end_date: o.end,
-      load: o.load, reason: o.reason||'', saved_at: o.savedAt||Date.now()
-    }));
-    await sb.from('overrides').insert(ovRows);
-  }
-
-  // Seed notifications
-  if(notifications.length) {
-    const notifRows = notifications.map(n => ({
-      id: n.id, to_person_id: n.toPersonId,
-      type: n.type, data: n.data,
-      read_at: n.readAt||null, created_at_ts: n.createdAt
-    }));
-    await sb.from('notifications').insert(notifRows);
-  }
+  const { data: allTeam } = await sb.from('team').select('*');
+  // Only seed if completely empty
+  if(allTeam && allTeam.length > 0) return;
+  // Seed Ibrahim only as starting point
+  await sb.from('team').insert([{id:1, name:'Ibrahim Masri', title:'Partner', dept:'ESIA', ci:0}]);
 }
 
 // ── LOAD all data from Supabase ──────────────────────────────────
