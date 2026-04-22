@@ -2481,8 +2481,8 @@ function addAllMembers() {
     const title=row.querySelector('.mr-title').value;
     if(!name){return;}
     const newId=Date.now()+Math.floor(Math.random()*1000);
-    const ci=team.length % PALETTE.length;
-    const newMember={id:newId,name,title:title||'Consultant',dept:'ESIA',c:PALETTE[ci]};
+    const ci=team.length; // insertion order index
+    const newMember={id:newId,name,title:title||'Consultant',dept:'ESIA',c:PALETTE[ci%PALETTE.length]};
     team.push(newMember);
     pins[newId]='1234';
     savePins();
@@ -3543,7 +3543,7 @@ async function seedIfEmpty() {
 // ── LOAD all data from Supabase ──────────────────────────────────
 async function loadAllData() {
   const [teamRes, projRes, ovRes, notifRes] = await Promise.all([
-    sb.from('team').select('*').order('id'),
+    sb.from('team').select('*').order('ci'),
     sb.from('projects').select('*').order('id'),
     sb.from('overrides').select('*').order('saved_at'),
     sb.from('notifications').select('*').order('created_at_ts')
@@ -3612,7 +3612,8 @@ async function saveNotification(n) {
   });
 }
 async function saveTeamMember(p) {
-  await sb.from('team').upsert({id:p.id, name:p.name, title:p.title, dept:p.dept, ci:team.indexOf(p)});
+  const ci = team.findIndex(t=>t.id===p.id);
+  await sb.from('team').upsert({id:p.id, name:p.name, title:p.title, dept:p.dept, ci: ci>=0 ? ci : 0});
 }
 async function deleteTeamMemberFromDB(id) {
   await sb.from('team').delete().eq('id', id);
@@ -3649,7 +3650,7 @@ async function reloadProjects() {
   }));
 }
 async function reloadTeam() {
-  const {data} = await sb.from('team').select('*').order('id');
+  const {data} = await sb.from('team').select('*').order('ci');
   if(data) {
     team = data.map(r => ({id:r.id,name:r.name,title:r.title,dept:r.dept,c:PALETTE[r.ci%PALETTE.length]}));
     // Ensure pins exist for all members
