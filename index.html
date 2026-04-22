@@ -984,6 +984,8 @@ const PALETTE = [
 ];
 
 let weekOffset=0, monthOffset=0;
+let tsData = null;
+const TS_WORKDAYS = [0,1,2,3,4]; // Sun=0 Mon=1 Tue=2 Wed=3 Thu=4 (Jordan workweek)
 let assigningProjectId = null;
 
 const TITLES = ['Intern','Analyst','Senior Analyst','Consultant','Senior Consultant','Manager','Partner'];
@@ -1595,12 +1597,14 @@ function loadPersistedSession() {
     const saved = localStorage.getItem('wt_session');
     if(!saved) return false;
     const { userId } = JSON.parse(saved);
-    const user = userId === 9999 ? HR_USER : team.find(p=>p.id===userId);
-    if(!user) return false;
+    const uid = typeof userId === 'string' ? (userId === '9999' ? 9999 : parseInt(userId)) : userId;
+    const user = uid === 9999 ? HR_USER : team.find(p=>p.id===uid);
+    if(!user) { clearSession(); return false; } // clear stale session
     currentUser = user;
+    document.getElementById('loginScreen').style.display = 'none';
     applyLogin();
     return true;
-  } catch(e) { return false; }
+  } catch(e) { clearSession(); return false; }
 }
 function persistSession() { try { localStorage.setItem('wt_session', JSON.stringify({userId:currentUser.id})); } catch(e){} }
 function clearSession() { try { localStorage.removeItem('wt_session'); } catch(e){} }
@@ -1959,9 +1963,12 @@ function renderMyWork() {
   
   let rightHtml=`
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)">
-      <div style="padding:16px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
-        <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600">Activity</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Your recent updates & notifications</div>
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600">Activity</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Your recent updates & notifications</div>
+        </div>
+        ${myNotifs.length ? `<button onclick="clearAllNotifs()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px;color:var(--muted)">Clear all</button>` : ''}
       </div>
       <div style="padding:14px;max-height:400px;overflow-y:auto">`;
 
@@ -1976,12 +1983,14 @@ function renderMyWork() {
       else if(n.type==='task_rejected'){icon='↩️';msg=`<strong>${n.data.delivName}</strong> needs revision`;color='var(--red)';}
       else if(n.type==='task_pending_pm'){icon='🔔';msg=`<strong>${n.data.assigneeName}</strong> submitted <strong>${n.data.delivName}</strong>`;color='var(--orange)';}
       else if(n.type==='tagged'){icon='💬';msg=`<strong>${n.data.fromName}:</strong> ${n.data.message}`;color='var(--blue)';}
-      return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+      return `<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${icon}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;line-height:1.5;color:var(--text)">${msg}</div>
           <div style="font-size:10px;color:var(--muted);margin-top:2px">${ageLabel}</div>
         </div>
+        <button onclick="deleteNotif('${n.id}')" title="Dismiss"
+          style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0 2px;flex-shrink:0;line-height:1;opacity:0.5" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'">×</button>
       </div>`;
     }).join('');
   } else {
@@ -2003,6 +2012,22 @@ function renderMyWork() {
   document.getElementById('myworkNotifs').innerHTML=rightHtml;
   const myProjects=projects.filter(p=>p.members.some(m=>m.personId===currentUser.id));
   document.getElementById('myworkSubtitle').textContent=myProjects.length?`${myProjects.length} project${myProjects.length>1?'s':''}` :'';
+}
+
+async function deleteNotif(notifId) {
+  notifications = notifications.filter(n => n.id !== notifId);
+  await sb.from('notifications').delete().eq('id', notifId);
+  renderMyWork();
+  updateInboxBadge();
+}
+
+async function clearAllNotifs() {
+  if(!currentUser) return;
+  const myIds = notifications.filter(n=>n.toPersonId===currentUser.id).map(n=>n.id);
+  notifications = notifications.filter(n=>n.toPersonId!==currentUser.id);
+  if(myIds.length) await sb.from('notifications').delete().in('id', myIds);
+  renderMyWork();
+  updateInboxBadge();
 }
 
 function toggleCompletedHistory(btn) {
@@ -3036,45 +3061,66 @@ function renderTimesheetView() {
 
 async function loadUserTimesheet() {
   if(!currentUser) return;
-  const sel=document.getElementById('tsMonthSel');
-  if(!sel) return;
-  const month=sel.value;
-  if(!month) return;
-  const personId=currentUser.id;
-  const id=String(personId)+'_'+month;
-  // Show inline spinner — never blocks the tab switch
-  const matrix=document.getElementById('tsMatrix');
-  if(matrix) matrix.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Loading timesheet…</div>';
+  const sel = document.getElementById('tsMonthSel');
+  if(!sel || !sel.value) return;
+  const month = sel.value;
+  const personId = currentUser.id;
+  const id = String(personId) + '_' + month;
+
+  // Show a small inline spinner — does NOT block anything
+  const matrix = document.getElementById('tsMatrix');
+  if(matrix) matrix.innerHTML =
+    '<div style="padding:40px;text-align:center;color:var(--muted)">' +
+    '<div style="width:26px;height:26px;border:3px solid var(--border);' +
+    'border-top-color:var(--green);border-radius:50%;' +
+    'animation:spin 0.8s linear infinite;margin:0 auto 10px"></div>' +
+    'Loading…</div>';
+
+  // Fetch — simple try/catch, no race conditions
+  let fetched = null;
   try {
-    // Race Supabase against a 6s timeout so spinner never hangs forever
-    const fetchPromise = sb.from('timesheets').select('*').eq('id',id).maybeSingle();
-    const timeoutPromise = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),6000));
-    const {data} = await Promise.race([fetchPromise, timeoutPromise]).catch(()=>({data:null}));
-    tsData = data || {id, person_id:personId, month, columns:[], rows:{}, submitted:false, locked:false};
+    const res = await sb.from('timesheets').select('*').eq('id', id).maybeSingle();
+    if(res && res.data) fetched = res.data;
   } catch(e) {
-    tsData = {id, person_id:personId, month, columns:[], rows:{}, submitted:false, locked:false};
+    console.warn('Timesheet fetch error:', e);
   }
-  // Always run these — wrapped so one crash doesn't block the others
-  try { populateTsColDropdown(); } catch(e) { console.warn('populateTsColDropdown error:', e); }
-  try { renderTsMatrix(); } catch(e) { console.warn('renderTsMatrix error:', e); if(matrix) matrix.innerHTML='<div style="padding:20px;color:var(--muted);text-align:center">Could not render timesheet. Try reloading.</div>'; }
-  try { updateTsStatus(); } catch(e) { console.warn('updateTsStatus error:', e); }
+
+  // Always build tsData — whether we got data or not
+  tsData = fetched || {
+    id, person_id: personId, month,
+    columns: [], rows: {},
+    submitted: false, locked: false
+  };
+
+  // Normalize — Supabase may return columns/rows as null
+  if(!tsData.columns) tsData.columns = [];
+  if(!tsData.rows) tsData.rows = {};
+
+  // Render — each step isolated so one failure never blocks the next
+  try { populateTsColDropdown(); } catch(e) { console.warn('Dropdown error:', e); }
+  try { renderTsMatrix(); }       catch(e) { console.warn('Matrix error:', e); }
+  try { updateTsStatus(); }       catch(e) { console.warn('Status error:', e); }
 }
 
 function populateTsColDropdown() {
-  if(!currentUser||!tsData) return;
-  const sel=document.getElementById('tsColSel');
-  const otherInp=document.getElementById('tsOtherName');
+  if(!currentUser || !tsData) return;
+  const sel = document.getElementById('tsColSel');
+  const otherInp = document.getElementById('tsOtherName');
   if(!sel) return;
-  // Use String() for all ID comparisons — prevents number vs string mismatch
-  const uid=String(currentUser.id);
-  const myProjects=projects.filter(p=>(p.members||[]).some(m=>String(m.personId)===uid));
-  const existingIds=new Set((tsData.columns||[]).map(c=>c.projectId||c.name));
-  sel.innerHTML=`<option value="">＋ Add project column…</option>`+
-    myProjects.filter(p=>!existingIds.has(String(p.id))).map(p=>`<option value="proj_${p.id}">${p.name}</option>`).join('')+
-    `<option value="leave">Annual Leave</option>`+
-    `<option value="sick">Sick Leave</option>`+
+  const uid = String(currentUser.id);
+  const myProjects = (projects||[]).filter(p => (p.members||[]).some(m => String(m.personId) === uid));
+  const existingIds = new Set((tsData.columns||[]).map(c => c.projectId || c.name));
+  const projOptions = myProjects
+    .filter(p => !existingIds.has(String(p.id)))
+    .map(p => `<option value="proj_${p.id}">${p.name||'Unnamed'}</option>`)
+    .join('');
+  sel.innerHTML =
+    `<option value="">＋ Add project column…</option>` +
+    projOptions +
+    `<option value="leave">Annual Leave</option>` +
+    `<option value="sick">Sick Leave</option>` +
     `<option value="other">Other (custom)…</option>`;
-  if(otherInp) sel.onchange=function(){ otherInp.style.display=this.value==='other'?'':'none'; };
+  if(otherInp) sel.onchange = function() { otherInp.style.display = this.value === 'other' ? '' : 'none'; };
 }
 
 function tsAddColumn() {
