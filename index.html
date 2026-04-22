@@ -355,11 +355,11 @@ select option{background:#fff}
 .nb-note-content ul{padding-left:20px;margin:4px 0}
 .nb-note-content li{margin:2px 0}
 /* Todo list — real checkboxes inside contenteditable */
-.nb-todo-list{list-style:none;padding-left:2px;margin:4px 0}
-.nb-todo-list li{display:flex;align-items:flex-start;gap:8px;padding:2px 0;line-height:1.8}
-.nb-todo-cb{width:15px;height:15px;accent-color:var(--green);cursor:pointer;flex-shrink:0;margin-top:4px;min-width:15px}
-.nb-todo-span{flex:1;outline:none;min-width:0}
-.nb-todo-span.done{text-decoration:line-through;color:var(--muted)}
+.nb-todo-list{list-style:none;padding-left:6px;margin:4px 0}
+.nb-todo-list li{padding:2px 0 2px 28px;position:relative;line-height:1.8;cursor:text;min-height:1.8em}
+.nb-todo-list li::before{content:'☐';position:absolute;left:0;top:0;font-size:15px;color:#888;cursor:pointer;width:22px;text-align:center;line-height:1.8}
+.nb-todo-list li.done{text-decoration:line-through;color:var(--muted)}
+.nb-todo-list li.done::before{content:'☑';color:var(--green)}
 .nb-note-content table{border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0}
 .nb-note-content td,.nb-note-content th{border:1px solid var(--border);padding:8px 10px;vertical-align:top;min-width:60px}
 .nb-note-content th{background:var(--surface2);font-weight:600}
@@ -2675,45 +2675,58 @@ function createNoteEl(n, sectionId) {
 
   // Save on content change
   const content=el.querySelector('.nb-note-content');
-  content.addEventListener('mousedown', e=>e.stopPropagation()); // prevent bar drag from triggering
-  content.addEventListener('input',()=>{
-    clearTimeout(nbSaveTimer);
-    nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),800);
-  });
-  // Handle Enter inside todo spans — add new todo item
-  content.addEventListener('keydown', function(e) {
-    if(e.key==='Enter') {
-      const span=e.target.closest('.nb-todo-span');
-      if(span) {
-        e.preventDefault();
-        const li=span.closest('li');
-        const ul=li?li.closest('ul.nb-todo-list'):null;
-        if(ul) {
-          const uid='td'+Date.now();
-          const newLi=document.createElement('li');
-          newLi.innerHTML=`<input type="checkbox" class="nb-todo-cb" id="${uid}" onchange="nbTodoToggle(this)"><span class="nb-todo-span" contenteditable="true"> </span>`;
-          li.after(newLi);
-          const newSpan=newLi.querySelector('.nb-todo-span');
-          if(newSpan){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(newSpan);r.collapse(false);s.removeAllRanges();s.addRange(r);}
+  content.addEventListener('mousedown', function(e) {
+    e.stopPropagation(); // prevent bar drag
+    // Toggle todo item when clicking the ::before checkbox area (left 26px of li)
+    if(e.target.tagName!=='INPUT') {
+      const li=e.target.closest&&e.target.closest('.nb-todo-list li');
+      if(li) {
+        const rect=li.getBoundingClientRect();
+        if(e.clientX-rect.left < 26) {
+          e.preventDefault();
+          li.classList.toggle('done');
           clearTimeout(nbSaveTimer);
           nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
         }
       }
     }
-    // Backspace on empty todo span removes that item
-    if(e.key==='Backspace') {
-      const span=e.target.closest('.nb-todo-span');
-      if(span&&span.textContent.trim()==='') {
-        const li=span.closest('li');
-        const ul=li?li.closest('ul.nb-todo-list'):null;
-        if(ul&&ul.children.length>1){
+  });
+  content.addEventListener('input',()=>{
+    clearTimeout(nbSaveTimer);
+    nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),800);
+  });
+  // Keyboard handling inside notes
+  content.addEventListener('keydown', function(e) {
+    // ── Todo list: Enter on empty li = exit list (like Word double-enter) ──
+    if(e.key==='Enter') {
+      const sel=window.getSelection();
+      if(!sel||!sel.rangeCount) return;
+      let node=sel.getRangeAt(0).commonAncestorContainer;
+      if(node.nodeType===3) node=node.parentNode;
+      const li=node.closest&&node.closest('.nb-todo-list li');
+      if(li) {
+        const isEmpty=(li.innerText||li.textContent||'').trim()==='';
+        if(isEmpty) {
+          // Exit the list — remove empty li and insert a <br> paragraph after ul
           e.preventDefault();
-          const prev=li.previousElementSibling;
-          li.remove();
-          if(prev){const ps=prev.querySelector('.nb-todo-span');if(ps){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(ps);r.collapse(false);s.removeAllRanges();s.addRange(r);}}
+          const ul=li.parentNode;
+          if(ul.children.length===1) {
+            // Only item — remove whole list and place cursor after
+            const br=document.createElement('br');
+            ul.replaceWith(br);
+            const r=document.createRange(),s=window.getSelection();
+            r.setStartAfter(br);r.collapse(true);s.removeAllRanges();s.addRange(r);
+          } else {
+            li.remove();
+            // Place cursor after the ul
+            const r=document.createRange(),s=window.getSelection();
+            r.setStartAfter(ul);r.collapse(true);s.removeAllRanges();s.addRange(r);
+            document.execCommand('insertHTML',false,'<br>');
+          }
           clearTimeout(nbSaveTimer);
           nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
         }
+        // Non-empty li: browser handles Enter natively (creates new li) ✅
       }
     }
   });
@@ -2882,31 +2895,37 @@ function nbInsertBullet() {
 function nbInsertTodo() {
   if(!lastFocusedNote){showToast('Click inside a note first');return;}
   lastFocusedNote.focus();
-  // Collapse to end to avoid replacing selected text
-  const sel=window.getSelection();
-  if(sel&&sel.rangeCount>0){const r=sel.getRangeAt(0);r.collapse(false);}
-  // Insert a real checkbox+span pair — works reliably in contenteditable
-  const uid='td'+Date.now();
-  const html=`<ul class="nb-todo-list"><li><input type="checkbox" class="nb-todo-cb" id="${uid}" onchange="nbTodoToggle(this)"><span class="nb-todo-span" contenteditable="true"> To-do item</span></li></ul><p><br></p>`;
-  document.execCommand('insertHTML',false,html);
-  // Focus the span text
-  const span=lastFocusedNote.querySelector('#'+uid+' ~ .nb-todo-span') || lastFocusedNote.querySelector('.nb-todo-span:last-child');
-  if(span){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(span);r.collapse(false);s.removeAllRanges();s.addRange(r);}
-}
 
-function nbTodoToggle(cb) {
-  const span=cb.nextElementSibling;
-  if(span) span.classList.toggle('done', cb.checked);
-  // Save after toggle
-  const note=cb.closest('.nb-note-content');
-  if(note) {
-    const noteEl=cb.closest('.nb-note');
-    if(noteEl&&currentNoteSection){
-      clearTimeout(nbSaveTimer);
-      nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
+  // Check if cursor is already inside a todo list — avoid double-wrapping
+  const sel=window.getSelection();
+  if(sel&&sel.rangeCount>0) {
+    let node=sel.getRangeAt(0).commonAncestorContainer;
+    if(node.nodeType===3) node=node.parentNode;
+    if(node.closest && node.closest('.nb-todo-list')) return; // already a todo
+  }
+
+  // insertUnorderedList converts selected text OR creates empty list at cursor
+  // This is identical to bullets and works perfectly
+  document.execCommand('insertUnorderedList');
+
+  // Mark the newly created/active UL as a todo list
+  const sel2=window.getSelection();
+  if(sel2&&sel2.rangeCount>0) {
+    let node=sel2.getRangeAt(0).commonAncestorContainer;
+    if(node.nodeType===3) node=node.parentNode;
+    // Walk up to find the UL
+    let ul=null;
+    let cur=node;
+    while(cur&&cur!==lastFocusedNote) {
+      if(cur.nodeName==='UL'){ul=cur;break;}
+      if(cur.nodeName==='LI'&&cur.parentNode&&cur.parentNode.nodeName==='UL'){ul=cur.parentNode;break;}
+      cur=cur.parentNode;
     }
+    if(ul) ul.classList.add('nb-todo-list');
   }
 }
+
+// nbTodoToggle removed — todo now uses li.done CSS class
 
 // Table picker with hover grid
 function nbShowTablePicker(event) {
