@@ -56,7 +56,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .tab.active { color:var(--text);border-bottom-color:var(--text); }
 .tab:hover:not(.active) { color:var(--text2); }
 
-.main { padding:26px 36px;max-width:1500px;margin:0 auto; }
+.main { padding:26px 36px; }
 .view-content { width:100%; }
 
 /* SUMMARY CARDS */
@@ -358,12 +358,12 @@ select option{background:#fff}
 .nb-note-content:empty:before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;font-style:italic}
 .nb-note-content ul{padding-left:20px;margin:4px 0}
 .nb-note-content li{margin:2px 0}
-/* Todo list — mirrors bullets but with checkbox toggle */
-.nb-todo-list{list-style:none;padding-left:4px;margin:4px 0}
-.nb-todo-list li{display:flex;align-items:flex-start;gap:0;padding:2px 0;cursor:default}
-.nb-todo-list li::before{content:'☐';font-size:15px;color:#888;flex-shrink:0;cursor:pointer;line-height:1.75;margin-right:8px;min-width:18px}
-.nb-todo-list li.done{text-decoration:line-through;color:var(--muted)}
-.nb-todo-list li.done::before{content:'☑';color:var(--green)}
+/* Todo list — real checkboxes inside contenteditable */
+.nb-todo-list{list-style:none;padding-left:2px;margin:4px 0}
+.nb-todo-list li{display:flex;align-items:flex-start;gap:8px;padding:2px 0;line-height:1.8}
+.nb-todo-cb{width:15px;height:15px;accent-color:var(--green);cursor:pointer;flex-shrink:0;margin-top:4px;min-width:15px}
+.nb-todo-span{flex:1;outline:none;min-width:0}
+.nb-todo-span.done{text-decoration:line-through;color:var(--muted)}
 .nb-note-content table{border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0}
 .nb-note-content td,.nb-note-content th{border:1px solid var(--border);padding:8px 10px;vertical-align:top;min-width:60px}
 .nb-note-content th{background:var(--surface2);font-weight:600}
@@ -534,7 +534,7 @@ select option{background:#fff}
       <div class="add-row" onclick="openAddMemberModal()">＋ Add team member</div>
     </div>
     <div id="yearlyGridWrap" style="display:none">
-      <div class="grid-wrap">
+      <div class="grid-wrap" style="overflow-x:auto">
         <div class="grid-head" id="yearHead"></div>
         <div id="yearRows"></div>
       </div>
@@ -606,7 +606,7 @@ select option{background:#fff}
 
   <div id="view-notes" class="hidden">
     <!-- Compact toolbar -->
-    <div style="padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:3px;flex-wrap:wrap;position:sticky;top:0;z-index:10">
+    <div style="padding:6px 36px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:3px;flex-wrap:wrap;position:sticky;top:0;z-index:10;margin:-26px -36px 0 -36px">
       <button title="Undo (Ctrl+Z)" onclick="nbUndo()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">↩</button>
       <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
       <button title="Bold" onmousedown="event.preventDefault();document.execCommand('bold')" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text)">B</button>
@@ -623,11 +623,16 @@ select option{background:#fff}
       <button title="Bullet list" onclick="nbInsertBullet()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">• ≡</button>
       <button title="To-do" onclick="nbInsertTodo()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">☑</button>
       <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
-      <select onchange="nbFontSize(this.value);this.value=''" title="Font size" style="padding:3px 5px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text);cursor:pointer;width:62px">
-        <option value="">px…</option>
-        <option value="11">11</option><option value="12">12</option><option value="14">14</option>
-        <option value="16">16</option><option value="18">18</option><option value="20">20</option>
-        <option value="24">24</option><option value="28">28</option><option value="32">32</option>
+      <select id="nbFontSizeSel" onchange="nbFontSize(this.value)" title="Font size" style="padding:3px 5px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text);cursor:pointer;width:52px">
+        <option value="11">11</option>
+        <option value="12">12</option>
+        <option value="14" selected>14</option>
+        <option value="16">16</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+        <option value="24">24</option>
+        <option value="28">28</option>
+        <option value="32">32</option>
       </select>
       <div style="position:relative;display:inline-block">
         <button title="Insert table" onclick="nbShowTablePicker(event)" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:12px;color:var(--text)">⊞ Table</button>
@@ -639,7 +644,7 @@ select option{background:#fff}
       <div style="flex:1"></div>
       <button class="btn btn-accent" onclick="nbAddNote()" style="font-size:12px;padding:4px 12px">＋ Add Note</button>
     </div>
-    <div style="display:flex;height:calc(100vh - 108px)">
+    <div style="display:flex;height:calc(100vh - 108px);margin:0 -36px">
       <!-- Sidebar -->
       <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:14px 10px;overflow-y:auto;background:var(--surface2)">
         <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">My Sections</div>
@@ -648,7 +653,7 @@ select option{background:#fff}
       </div>
       <!-- Free-form canvas area -->
       <div style="flex:1;overflow:auto;background:var(--bg);position:relative">
-        <div id="nbSectionHeader" style="display:none;padding:16px 24px 0">
+        <div id="nbSectionHeader" style="display:none;padding:20px 36px 0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
             <div id="nbSectionTitle" style="font-family:'Fraunces',serif;font-size:22px;font-weight:700"></div>
             <div style="display:flex;gap:6px">
@@ -660,7 +665,7 @@ select option{background:#fff}
           <hr style="border:none;border-top:1px solid var(--border);margin-bottom:0">
         </div>
         <!-- Canvas: notes are absolutely positioned here -->
-        <div id="nbCanvas" style="position:relative;min-height:700px;padding:20px"></div>
+        <div id="nbCanvas" style="position:relative;min-height:700px;padding:20px 36px"></div>
         <div id="nbEmpty" style="text-align:center;padding:100px 40px;color:var(--muted)">
           <div style="font-size:40px;margin-bottom:12px">📝</div>
           <div style="font-family:'Fraunces',serif;font-size:17px;margin-bottom:6px">Select a section</div>
@@ -686,12 +691,12 @@ select option{background:#fff}
         </div>
       </div>
       <!-- Add column row -->
-      <div id="tsAddColRow" style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
-        <select id="tsColSel" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);flex:1;max-width:300px">
-          <option value="">＋ Add project column…</option>
+      <div id="tsAddColRow" style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <select id="tsColSel" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);flex:1;max-width:280px">
+          <option value="">＋ Select project to add…</option>
         </select>
-        <input type="text" id="tsOtherName" placeholder="Custom label (if Other)" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:180px;display:none">
-        <button class="btn" onclick="tsAddColumn()" style="font-size:12px">Add Column</button>
+        <input type="text" id="tsOtherName" placeholder="Custom label" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:160px;display:none">
+        <button class="btn btn-accent" onclick="tsAddColumn()" style="font-size:12px;flex-shrink:0">＋ Add Column</button>
       </div>
       <div style="overflow-x:auto">
         <div id="tsMatrix"></div>
@@ -1154,9 +1159,10 @@ function renderWeekly() {
   document.getElementById('weekRows').innerHTML = team.map(p=>{
     const eff = getEffectiveLoad(p.id, wk);
     const isMe = currentUser && currentUser.id === p.id;
-    const projTags = eff.projects.length
-      ? eff.projects.map(x=>`<span class="proj-tag">${x.name} <span style="opacity:0.7">${x.alloc}%</span></span>`).join('')
-      : '<span style="color:var(--muted);font-size:10px">No active projects</span>';
+    const totalAlloc = eff.projects.reduce((s,x)=>s+x.alloc,0);
+    const projSummary = eff.projects.length
+      ? `${eff.projects.length} project${eff.projects.length>1?'s':''} · ${totalAlloc}% allocated`
+      : '<span style="color:var(--muted)">No active projects</span>';
 
     const cells = days.map((d,di)=>{
       const dow=d.getDay(), isWE=dow===5||dow===6;
@@ -1194,7 +1200,7 @@ function renderWeekly() {
         <div class="avatar" style="background:${p.c.bg};color:${p.c.fg}">${initials(p.name)}</div>
         <div>
           <div class="p-name">${p.name}</div>
-          <div style="margin-top:3px">${projTags}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${projSummary}</div>
           ${eff.load>0?`<div style="font-size:10px;font-weight:600;color:${loadColor(eff.load)};margin-top:2px">${eff.load}% this week${eff.isOverride?' (avg)':''}</div>`:''}
           ${overBy>0?`<div style="font-size:9px;font-weight:700;color:var(--red)">⚠ ${overBy}% over capacity</div>`:''}
         </div>
@@ -2576,7 +2582,7 @@ function createNoteEl(n, sectionId) {
     </div>
     <div class="nb-note-content" contenteditable="true" data-placeholder="Start typing…"
       style="flex:1;padding:14px 16px;outline:none;font-size:14px;line-height:1.8;
-      word-break:break-word;overflow-wrap:break-word;overflow-y:auto;min-height:80px"
+      word-break:break-word;overflow-wrap:break-word;overflow-y:auto;min-height:80px;user-select:text;-webkit-user-select:text"
       onfocus="lastFocusedNote=this">${n.content||''}</div>`;
 
   // Make draggable by title bar
@@ -2606,21 +2612,45 @@ function createNoteEl(n, sectionId) {
 
   // Save on content change
   const content=el.querySelector('.nb-note-content');
+  content.addEventListener('mousedown', e=>e.stopPropagation()); // prevent bar drag from triggering
   content.addEventListener('input',()=>{
     clearTimeout(nbSaveTimer);
     nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),800);
   });
-
-  // Toggle todo items by clicking the checkbox area (::before pseudo-element)
-  content.addEventListener('mousedown', function(e) {
-    const li=e.target.closest('.nb-todo-list li');
-    if(li){
-      const rect=li.getBoundingClientRect();
-      if(e.clientX-rect.left < 26){
+  // Handle Enter inside todo spans — add new todo item
+  content.addEventListener('keydown', function(e) {
+    if(e.key==='Enter') {
+      const span=e.target.closest('.nb-todo-span');
+      if(span) {
         e.preventDefault();
-        li.classList.toggle('done');
-        clearTimeout(nbSaveTimer);
-        nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
+        const li=span.closest('li');
+        const ul=li?li.closest('ul.nb-todo-list'):null;
+        if(ul) {
+          const uid='td'+Date.now();
+          const newLi=document.createElement('li');
+          newLi.innerHTML=`<input type="checkbox" class="nb-todo-cb" id="${uid}" onchange="nbTodoToggle(this)"><span class="nb-todo-span" contenteditable="true"> </span>`;
+          li.after(newLi);
+          const newSpan=newLi.querySelector('.nb-todo-span');
+          if(newSpan){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(newSpan);r.collapse(false);s.removeAllRanges();s.addRange(r);}
+          clearTimeout(nbSaveTimer);
+          nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
+        }
+      }
+    }
+    // Backspace on empty todo span removes that item
+    if(e.key==='Backspace') {
+      const span=e.target.closest('.nb-todo-span');
+      if(span&&span.textContent.trim()==='') {
+        const li=span.closest('li');
+        const ul=li?li.closest('ul.nb-todo-list'):null;
+        if(ul&&ul.children.length>1){
+          e.preventDefault();
+          const prev=li.previousElementSibling;
+          li.remove();
+          if(prev){const ps=prev.querySelector('.nb-todo-span');if(ps){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(ps);r.collapse(false);s.removeAllRanges();s.addRange(r);}}
+          clearTimeout(nbSaveTimer);
+          nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
+        }
       }
     }
   });
@@ -2759,8 +2789,25 @@ document.addEventListener('keydown',function(e){
 function nbFontSize(size) {
   if(!size) return;
   if(lastFocusedNote) lastFocusedNote.focus();
-  document.execCommand('fontSize',false,'7');
-  document.querySelectorAll('font[size="7"]').forEach(f=>{f.removeAttribute('size');f.style.fontSize=size+'px';});
+  const sel=window.getSelection();
+  const hasSelection=sel&&sel.rangeCount>0&&!sel.isCollapsed;
+  if(hasSelection) {
+    // Apply to selected text: wrap in span with font-size
+    document.execCommand('fontSize',false,'7');
+    // Replace browser font element with clean span
+    lastFocusedNote.querySelectorAll('font[size="7"]').forEach(f=>{
+      const span=document.createElement('span');
+      span.style.fontSize=size+'px';
+      span.innerHTML=f.innerHTML;
+      f.replaceWith(span);
+    });
+  } else {
+    // No selection — insert a zero-width span so next typed chars inherit the size
+    document.execCommand('insertHTML',false,`<span style="font-size:${size}px">​</span>`);
+  }
+  // Update selector
+  const sizeSel=document.getElementById('nbFontSizeSel');
+  if(sizeSel) sizeSel.value=size;
 }
 
 function nbInsertBullet() {
@@ -2772,18 +2819,28 @@ function nbInsertBullet() {
 function nbInsertTodo() {
   if(!lastFocusedNote){showToast('Click inside a note first');return;}
   lastFocusedNote.focus();
+  // Collapse to end to avoid replacing selected text
   const sel=window.getSelection();
   if(sel&&sel.rangeCount>0){const r=sel.getRangeAt(0);r.collapse(false);}
-  // Use same mechanism as bullets
-  document.execCommand('insertUnorderedList');
-  // Find the created/current UL and mark as todo list
-  const sel2=window.getSelection();
-  if(sel2&&sel2.focusNode){
-    let node=sel2.focusNode;
-    while(node&&node!==lastFocusedNote){
-      if(node.nodeName==='UL'){node.classList.add('nb-todo-list');break;}
-      if(node.nodeName==='LI'&&node.parentNode){node.parentNode.classList.add('nb-todo-list');break;}
-      node=node.parentNode;
+  // Insert a real checkbox+span pair — works reliably in contenteditable
+  const uid='td'+Date.now();
+  const html=`<ul class="nb-todo-list"><li><input type="checkbox" class="nb-todo-cb" id="${uid}" onchange="nbTodoToggle(this)"><span class="nb-todo-span" contenteditable="true"> To-do item</span></li></ul><p><br></p>`;
+  document.execCommand('insertHTML',false,html);
+  // Focus the span text
+  const span=lastFocusedNote.querySelector('#'+uid+' ~ .nb-todo-span') || lastFocusedNote.querySelector('.nb-todo-span:last-child');
+  if(span){const r=document.createRange(),s=window.getSelection();r.selectNodeContents(span);r.collapse(false);s.removeAllRanges();s.addRange(r);}
+}
+
+function nbTodoToggle(cb) {
+  const span=cb.nextElementSibling;
+  if(span) span.classList.toggle('done', cb.checked);
+  // Save after toggle
+  const note=cb.closest('.nb-note-content');
+  if(note) {
+    const noteEl=cb.closest('.nb-note');
+    if(noteEl&&currentNoteSection){
+      clearTimeout(nbSaveTimer);
+      nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
     }
   }
 }
@@ -2942,21 +2999,22 @@ function renderTimesheetView() {
 }
 
 async function loadUserTimesheet() {
-  if(!currentUser){return;}
+  if(!currentUser) return;
   const sel=document.getElementById('tsMonthSel');
   if(!sel) return;
   const month=sel.value;
   if(!month) return;
   const personId=currentUser.id;
   const id=String(personId)+'_'+month;
-  setLoading(true);
+  // Show inline spinner inside matrix, not full-screen overlay
+  const matrix=document.getElementById('tsMatrix');
+  if(matrix) matrix.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Loading…</div>';
   try {
     const {data,error}=await sb.from('timesheets').select('*').eq('id',id).maybeSingle();
     tsData=data||{id,person_id:personId,month,columns:[],rows:{},submitted:false,locked:false};
   } catch(e) {
     tsData={id,person_id:personId,month,columns:[],rows:{},submitted:false,locked:false};
   }
-  setLoading(false);
   populateTsColDropdown();
   renderTsMatrix();
   updateTsStatus();
@@ -2971,7 +3029,7 @@ function populateTsColDropdown() {
   sel.innerHTML=`<option value="">＋ Add project column…</option>`+
     myProjects.filter(p=>!existingIds.has(String(p.id))).map(p=>`<option value="proj_${p.id}">${p.name}</option>`).join('')+
     `<option value="leave">Annual Leave</option>`+
-    `<option value="site_visit">Site Visit</option>`+
+    `<option value="sick">Sick Leave</option>`+
     `<option value="other">Other (custom)…</option>`;
   sel.onchange=function(){
     otherInp.style.display=this.value==='other'?'':'none';
@@ -2993,8 +3051,8 @@ function tsAddColumn() {
     col={id:'col'+Date.now(),name:custom,type:'other'};
   } else if(val==='leave') {
     col={id:'col'+Date.now(),name:'Annual Leave',type:'leave'};
-  } else if(val==='site_visit') {
-    col={id:'col'+Date.now(),name:'Site Visit',type:'site_visit'};
+  } else if(val==='sick') {
+    col={id:'col'+Date.now(),name:'Sick Leave',type:'sick'};
   }
   if(!tsData.columns) tsData.columns=[];
   tsData.columns.push(col);
@@ -3015,26 +3073,25 @@ function renderTsMatrix() {
   const rows=tsData.rows||{};
   const locked=tsData.locked||tsData.submitted;
 
-  if(!cols.length) {
-    container.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:12px">
-      Add your first project column above to start logging hours.</div>`;
-    return;
-  }
-
   const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2';
   const tdStyle='padding:4px 6px;border:1px solid var(--border);text-align:center;';
 
+  // Build header — always show Day + Date columns, then project columns, then Total
   let html=`<table style="border-collapse:collapse;width:100%;font-size:12px">
     <thead><tr>
       <th style="${thStyle};text-align:left;min-width:60px">Day</th>
       <th style="${thStyle};text-align:left;min-width:110px;position:sticky;left:0;z-index:3">Date</th>
-      ${cols.map(c=>`<th style="${thStyle};min-width:110px">${c.name}${locked?'':` <button onclick="removeTsCol('${c.id}')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;margin-left:2px">×</button>`}</th>`).join('')}
+      ${cols.map(c=>`<th style="${thStyle};min-width:120px">
+        ${c.name}
+        ${locked?'':` <button onclick="removeTsCol('${c.id}')" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;margin-left:2px;vertical-align:middle">×</button>`}
+      </th>`).join('')}
+      ${!cols.length&&!locked?`<th style="${thStyle};color:var(--muted);font-style:italic;min-width:200px">← Add a project column to start logging</th>`:''}
       <th style="${thStyle};color:var(--text2);min-width:70px">Total</th>
     </tr></thead><tbody>`;
 
   for(let d=1;d<=daysInMonth;d++) {
     const date=new Date(yr,mo-1,d);
-    const dow=date.getDay(); // 0=Sun,5=Fri,6=Sat
+    const dow=date.getDay();
     const isWeekend=dow===5||dow===6;
     const dateStr=month+'-'+String(d).padStart(2,'0');
     const displayDate=String(d).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'/'+yr;
@@ -3045,12 +3102,12 @@ function renderTsMatrix() {
     const isOverday=rowTotal>8;
     const today=new Date(); today.setHours(0,0,0,0);
     const rowDate=new Date(yr,mo-1,d);
-    const isMissing=TS_WORKDAYS.includes(dow)&&rowTotal===0&&rowDate<today&&!locked;
+    const isMissing=cols.length>0&&TS_WORKDAYS.includes(dow)&&rowTotal===0&&rowDate<today&&!locked;
     const bgRow=isWeekend?'background:#f5f3ef':'';
-    const totalColor=isOverday?'color:var(--red);font-weight:700':rowTotal>0?'color:var(--green)':'';
+    const totalColor=isOverday?'color:var(--red);font-weight:700':rowTotal>0?'color:var(--green)':'color:var(--muted)';
 
     html+=`<tr style="${bgRow}">
-      <td style="${tdStyle};color:${isWeekend?'var(--muted)':'var(--text)'};">${dayLabel}</td>
+      <td style="${tdStyle};color:${isWeekend?'var(--muted)':'var(--text2)'};">${dayLabel}</td>
       <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;background:${isWeekend?'#f5f3ef':'var(--surface)'}">
         ${isMissing?'🔴 ':''}<span style="color:${isWeekend?'var(--muted)':'var(--text)'}">${displayDate}</span>
       </td>
@@ -3060,11 +3117,12 @@ function renderTsMatrix() {
           ? `<td style="${tdStyle};color:${val?'var(--text)':'var(--muted)'}">${val||'—'}</td>`
           : `<td style="${tdStyle}"><input type="number" min="0" max="24" step="0.5" value="${val}"
               style="width:70px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:5px;
-              background:${isWeekend?'#f0ede8':'var(--surface)'};font-size:12px"
+              background:${isWeekend?'#f0ede8':'var(--surface)'};font-size:12px;color:var(--text)"
               onchange="updateTsCell('${dateStr}','${c.id}',this.value)"
               ></td>`;
       }).join('')}
-      <td style="${tdStyle};font-weight:600;${totalColor}">${rowTotal||'—'}</td>
+      ${!cols.length?`<td style="${tdStyle};color:var(--muted)">—</td>`:''}
+      <td style="${tdStyle};font-weight:600;${totalColor}">${rowTotal>0?rowTotal:'—'}</td>
     </tr>`;
   }
 
@@ -3080,8 +3138,9 @@ function renderTsMatrix() {
   const grandTotal=colTotals.reduce((a,b)=>a+b,0);
   html+=`<tr style="background:var(--surface2);font-weight:700">
     <td style="${tdStyle};text-align:left;position:sticky;left:0;background:var(--surface2)" colspan="2">Monthly Total</td>
-    ${colTotals.map(t=>`<td style="${tdStyle};color:var(--green)">${t||'—'}</td>`).join('')}
-    <td style="${tdStyle};color:var(--text)">${grandTotal||'—'}</td>
+    ${colTotals.map(t=>`<td style="${tdStyle};color:var(--green);font-weight:700">${t>0?t:'—'}</td>`).join('')}
+    ${!cols.length?`<td style="${tdStyle}">—</td>`:''}
+    <td style="${tdStyle};color:var(--text);font-weight:700">${grandTotal>0?grandTotal:'—'}</td>
   </tr>`;
 
   html+=`</tbody></table>`;
@@ -3170,10 +3229,10 @@ async function exportMyTimesheet() {
 // HR functions
 async function loadHRTimesheets() {
   const month=document.getElementById('hrMonthSel').value;
-  setLoading(true);
+  const container=document.getElementById('tsHRList');
+  if(container) container.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Loading…</div>';
   const {data: tsAll}=await sb.from('timesheets').select('*').like('id','%_'+month);
   const data=tsAll;
-  setLoading(false);
   renderHRList(data||[], month);
 }
 
