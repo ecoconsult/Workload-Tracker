@@ -1037,9 +1037,18 @@ function weekStart(date, offset=0) {
 function wKey(d) {
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+// Fixed date formatter — identical output on every browser/OS worldwide
+const MONTHS_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_LONG=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS_SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAYS_LONG=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 function fmt(d,short=false) {
-  return d.toLocaleDateString('en-US',short?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'});
+  const day=d.getDate(), mon=MONTHS_SHORT[d.getMonth()], yr=d.getFullYear();
+  return short ? `${mon} ${day}` : `${mon} ${day}, ${yr}`;
 }
+function fmtLong(d) { return `${DAYS_LONG[d.getDay()]}, ${MONTHS_LONG[d.getMonth()]} ${d.getDate()}`; }
+function fmtMonthYear(d) { return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`; }
+function fmtMonthYearShort(d) { return `${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; }
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
 function loadColor(l) { return l<60?'var(--green)':l<=85?'var(--yellow)':'var(--red)'; }
@@ -1048,11 +1057,11 @@ function chipClass(l) { return l<60?'chip-green':l<=85?'chip-yellow':'chip-red';
 function chipLabel(l) { return l<60?'Available':l<=85?'Busy':'Overloaded'; }
 function getWeekDays(ws) { return Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;}); }
 function dateInRange(d, start, end) {
-  const t=new Date(d).getTime();
-  return t>=new Date(start).getTime() && t<=new Date(end+'T23:59:59').getTime();
+  const t=new Date(typeof d==='string'?d+'T12:00:00':d).getTime();
+  return t>=new Date(start+'T00:00:00').getTime() && t<=new Date(end+'T23:59:59').getTime();
 }
 function progressPct(start,end) {
-  const now=Date.now(), s=new Date(start).getTime(), e=new Date(end).getTime();
+  const now=Date.now(), s=new Date(start+'T00:00:00').getTime(), e=new Date(end+'T23:59:59').getTime();
   if(now<=s) return 0; if(now>=e) return 100;
   return Math.round((now-s)/(e-s)*100);
 }
@@ -1061,9 +1070,9 @@ function fmtPeriod(start, end) {
   const e = new Date(end+'T12:00:00');
   const sameYear = s.getFullYear()===e.getFullYear();
   const sameMonth = sameYear && s.getMonth()===e.getMonth();
-  if(sameMonth) return s.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-  const startLabel = s.toLocaleDateString('en-US',{month:'short',year:'numeric'});
-  const endLabel = e.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+  if(sameMonth) return fmtMonthYearShort(s);
+  const startLabel = fmtMonthYearShort(s);
+  const endLabel = fmtMonthYearShort(e);
   const months = Math.round((e-s)/(1000*60*60*24*30.4));
   const durLabel = months<1?'<1 mo':months===1?'1 mo':`${months} mo`;
   return `${startLabel} → ${endLabel} <span style="font-size:10px;color:var(--muted);font-weight:400">(${durLabel})</span>`;
@@ -1167,7 +1176,7 @@ function renderWeekly() {
     days.map(d=>{
       const dow=d.getDay(), isWE=dow===5||dow===6;
       return `<div class="gh-cell${isToday(d)?' today-col':isWE?' weekend-col':''}">
-        ${d.toLocaleDateString('en-US',{weekday:'short'})}<br>
+        ${DAYS_SHORT[d.getDay()]}<br>
         <strong>${fmt(d,true)}</strong>
       </div>`;
     }).join('');
@@ -1297,7 +1306,7 @@ function renderMonthly() {
   const today=new Date();
   const target=new Date(today.getFullYear(),today.getMonth()+monthOffset,1);
   document.getElementById('monthLabel').textContent =
-    target.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    fmtMonthYear(target);
   const year=target.getFullYear(), month=target.getMonth();
   const firstDay=new Date(year,month,1).getDay();
   const daysInMonth=new Date(year,month+1,0).getDate();
@@ -1435,7 +1444,7 @@ function renderProjects() {
           <div>
             <div style="font-size:12px;font-weight:600;${d.completed?'text-decoration:line-through;color:var(--muted)':''}">${d.name}</div>
             <div style="font-size:10px;color:${d.completed?'var(--green)':d.pendingApproval?'var(--orange)':dueColor};font-weight:500">
-              ${d.completed ? 'Completed ✓' : d.pendingApproval ? 'Pending PM approval' : new Date(d.date).toLocaleDateString('en-US',{day:'numeric',month:'short',year:'numeric'})+' · '+due}
+              ${d.completed ? 'Completed ✓' : d.pendingApproval ? 'Pending PM approval' : fmt(new Date(d.date+'T12:00:00'))+' · '+due}
             </div>
             ${assignee?`<div style="font-size:10px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><div class="avatar" style="background:${assignee.c.bg};color:${assignee.c.fg};width:14px;height:14px;font-size:7px;flex-shrink:0">${initials(assignee.name)}</div>${assignee.name}</div>`:''}
           </div>
@@ -1660,8 +1669,11 @@ function getLoginUsers() { return [...team, HR_USER]; }
 
 function populateLoginSelect() {
   const sel = document.getElementById('loginSelect');
+  // Deduplicate by ID in case Supabase has duplicates
+  const seen = new Set();
+  const uniqueUsers = getLoginUsers().filter(p=>{ if(seen.has(p.id)) return false; seen.add(p.id); return true; });
   sel.innerHTML = `<option value="">— Who are you? —</option>` +
-    getLoginUsers().map(p=>`<option value="${p.id}">${p.name}${isAdminUser(p)?' (Admin)':''}</option>`).join('');
+    uniqueUsers.map(p=>`<option value="${p.id}">${p.name}${isAdminUser(p)?' (Admin)':''}</option>`).join('');
 }
 
 function isAdminUser(p) { return p.id === 1; } // Admin = Ibrahim (id 1)
@@ -1984,7 +1996,7 @@ function renderMyWork() {
           ${t.pendingApproval?`<div style="font-size:10px;font-weight:600;color:var(--orange);margin-top:2px">⏳ Awaiting PM approval</div>`:''}
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:12px;font-weight:600;color:${urgentColor}">${new Date(t.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+          <div style="font-size:12px;font-weight:600;color:${urgentColor}">${fmt(new Date(t.date+'T12:00:00'),true)}</div>
           <div style="font-size:10px;color:${urgentColor};margin-top:2px">${due}</div>
         </div>
       </div>`;
@@ -2218,7 +2230,7 @@ function renderOverrideHistory(pid) {
     const isFuture = new Date(h.end+'T23:59:59').getTime() >= now;
     return `<div class="override-hist-item" style="background:${isFuture?'var(--green-bg)':''}">
       <div>
-        <div style="font-size:12px;font-weight:600">${new Date(h.start+'T12:00:00').toLocaleDateString('en-GB')} → ${new Date(h.end+'T12:00:00').toLocaleDateString('en-GB')}</div>
+        <div style="font-size:12px;font-weight:600">${fmt(new Date(h.start+'T12:00:00'))} → ${fmt(new Date(h.end+'T12:00:00'))}</div>
         <div style="font-size:11px;color:var(--muted)">${h.reason||'No reason noted'} ${isFuture?'<span style="color:var(--green);font-weight:600">● Active</span>':''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
@@ -2522,11 +2534,14 @@ function addAllMembers() {
   if(!canCreateAccounts()){showToast('Only admins can create accounts');return;}
   const rows=document.querySelectorAll('.member-add-row');
   let added=0;
-  let nextId=Math.max(...team.map(t=>t.id).filter(id=>id<9000000000000), 1) + 1;
   rows.forEach(row=>{
     const name=row.querySelector('.mr-name').value.trim();
     const title=row.querySelector('.mr-title').value;
     if(!name){return;}
+    // Guard: skip if name already exists (case-insensitive)
+    if(team.some(t=>t.name.toLowerCase()===name.toLowerCase())){
+      showToast(`"${name}" already exists — skipped`); return;
+    }
     const newId=Date.now()+added; // stagger by row index to prevent collision
     const ci=team.length; // insertion order index
     const newMember={id:newId,name,title:title||'Consultant',dept:'ESIA',c:PALETTE[ci%PALETTE.length]};
@@ -2547,7 +2562,7 @@ function addAllMembers() {
 function openDayModal(dateStr) {
   const date=new Date(dateStr+'T12:00:00');
   const wk=wKey(weekStart(date,0));
-  document.getElementById('dayModalTitle').textContent=date.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  document.getElementById('dayModalTitle').textContent=fmtLong(date);
   document.getElementById('dayModalBody').innerHTML=team.map(p=>{
     const eff=getEffectiveLoad(p.id,wk);
     return `<div class="day-person-row">
@@ -3085,7 +3100,7 @@ function getTsMonthOptions() {
   for(let i=5;i>=-2;i--) {
     const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
     const val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    const label=d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const label=fmtMonthYear(d);
     const isFuture = i < 0;
     opts.push({val, label: isFuture ? label+' (upcoming)' : label});
   }
@@ -3502,7 +3517,7 @@ function buildTsSheet(ts, personName) {
   const header=['Date','Day',...cols.map(c=>c.name),'Daily Total'];
   const aoa=[
     [`Timesheet — ${personName}`],
-    [`Month: ${new Date(yr,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}`],
+    [`Month: ${fmtMonthYear(new Date(yr,mo-1,1))}`],
     [],
     header
   ];
@@ -3533,7 +3548,7 @@ function buildTsSheet(ts, personName) {
 
 function buildTsSummarySheet(sheets, teamArr, month) {
   const [yr,mo]=month.split('-').map(Number);
-  const monthLabel=new Date(yr,mo-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const monthLabel=fmtMonthYear(new Date(yr,mo-1,1));
 
   // Collect all project names
   const allCols=new Set();
