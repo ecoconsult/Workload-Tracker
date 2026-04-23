@@ -368,6 +368,12 @@ select option{background:#fff}
 .nb-note-content:empty:before{content:attr(data-placeholder);color:var(--muted);pointer-events:none;font-style:italic}
 .nb-note-content ul{padding-left:22px;margin:4px 0}
 .nb-note-content li{margin:2px 0;line-height:1.8}
+/* Todo list — same as bullets, checkbox via CSS */
+.nb-todo-list{list-style:none;padding-left:6px;margin:4px 0}
+.nb-todo-list li{padding-left:26px;position:relative;margin:2px 0;line-height:1.8;cursor:text}
+.nb-todo-list li::before{content:'☐';position:absolute;left:0;top:0;font-size:14px;color:#888;line-height:1.8;width:22px;text-align:center;cursor:pointer;user-select:none}
+.nb-todo-list li.nb-done{text-decoration:line-through;color:var(--muted)}
+.nb-todo-list li.nb-done::before{content:'☑';color:#2d8f5e}
 .nb-note-content table{border-collapse:collapse;width:100%;table-layout:fixed;margin:8px 0}
 .nb-note-content td,.nb-note-content th{border:1px solid var(--border);padding:8px 10px;vertical-align:top;min-width:60px}
 .nb-note-content th{background:var(--surface2);font-weight:600}
@@ -2725,7 +2731,20 @@ function createNoteEl(n, sectionId) {
 
   // Save on content change
   const content=el.querySelector('.nb-note-content');
-  content.addEventListener('mousedown', e=>e.stopPropagation());
+  content.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    // Clicking left 26px of a todo li toggles done state
+    const li = e.target.closest && e.target.closest('.nb-todo-list li');
+    if(li) {
+      const rect = li.getBoundingClientRect();
+      if(e.clientX - rect.left < 26) {
+        e.preventDefault();
+        li.classList.toggle('nb-done');
+        clearTimeout(nbSaveTimer);
+        nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),400);
+      }
+    }
+  });
   content.addEventListener('input',()=>{
     clearTimeout(nbSaveTimer);
     nbSaveTimer=setTimeout(()=>saveAllNotes(sectionId),800);
@@ -2905,126 +2924,38 @@ function nbGetNote() {
   return lastFocusedNote;
 }
 
-// ── Todo: pure DOM, no execCommand, fully reliable ─────────────
+// ── Todo: exact mirror of bullets + CSS checkbox ──────────────
 function nbInsertTodo() {
-  const note=nbGetNote(); if(!note) return;
+  const note = nbGetNote(); if(!note) return;
   note.focus();
 
-  // Build a standalone todo item div — completely independent of surrounding content
-  // This avoids ALL browser list contamination issues
-  const wrap=document.createElement('div');
-  wrap.className='nb-todo-item';
-  wrap.style.cssText='display:flex;align-items:flex-start;gap:8px;margin:3px 0;padding:2px 0';
+  // Snapshot all existing ULs before the command
+  const before = new Set([...note.querySelectorAll('ul')].map(u=>u));
 
-  const cb=document.createElement('input');
-  cb.type='checkbox';
-  cb.style.cssText='margin-top:4px;width:15px;height:15px;accent-color:#2d8f5e;cursor:pointer;flex-shrink:0';
-  cb.addEventListener('change',function(){
-    const span=this.nextElementSibling;
-    if(span){span.style.textDecoration=this.checked?'line-through':'';span.style.color=this.checked?'var(--muted)':'';}
-    clearTimeout(nbSaveTimer);
-    nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
-  });
+  // Same command as bullets — handles selected text, empty cursor, everything
+  document.execCommand('insertUnorderedList');
 
-  const span=document.createElement('span');
-  span.contentEditable='true';
-  span.style.cssText='flex:1;outline:none;line-height:1.8;min-width:0';
-  span.textContent=' ';
+  // Find the UL that was just created or activated (not in before set)
+  let ul = null;
+  note.querySelectorAll('ul').forEach(u=>{ if(!before.has(u)) ul=u; });
 
-  // Enter in span → new todo item below
-  span.addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
-      e.preventDefault();
-      // Empty item + Enter = exit todo, place cursor after
-      if(!this.textContent.trim()){
-        wrap.remove();
-        clearTimeout(nbSaveTimer);
-        nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),300);
-        note.focus();
-        return;
-      }
-      const newWrap=nbMakeTodoItem(note);
-      wrap.after(newWrap);
-      const ns=newWrap.querySelector('span[contenteditable]');
-      if(ns){ns.focus();placeCursorStart(ns);}
-      clearTimeout(nbSaveTimer);
-      nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
+  // Fallback: find the UL containing the cursor
+  if(!ul) {
+    const sel=window.getSelection();
+    if(sel&&sel.rangeCount>0){
+      let node=sel.getRangeAt(0).commonAncestorContainer;
+      if(node.nodeType===3) node=node.parentNode;
+      ul=node.closest('ul')||node.querySelector('ul');
     }
-    if(e.key==='Backspace'&&!this.textContent.trim()){
-      e.preventDefault();
-      // Move focus to previous todo or note
-      const prev=wrap.previousElementSibling;
-      wrap.remove();
-      if(prev&&prev.classList.contains('nb-todo-item')){
-        const ps=prev.querySelector('span[contenteditable]');
-        if(ps){ps.focus();placeCursorEnd(ps);}
-      } else { note.focus(); }
-      clearTimeout(nbSaveTimer);
-      nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),300);
-    }
-  });
-  span.addEventListener('input',()=>{
-    clearTimeout(nbSaveTimer);
-    nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),800);
-  });
-
-  wrap.appendChild(cb); wrap.appendChild(span);
-
-  // Insert at cursor position inside the note
-  const sel=window.getSelection();
-  if(sel&&sel.rangeCount>0){
-    const range=sel.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(wrap);
-    // Place cursor in the new span
-    const r2=document.createRange();
-    r2.setStart(span,0); r2.collapse(true);
-    sel.removeAllRanges(); sel.addRange(r2);
-  } else {
-    note.appendChild(wrap);
-    span.focus();
   }
+
+  if(ul) ul.classList.add('nb-todo-list');
   clearTimeout(nbSaveTimer);
   nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
 }
 
-function nbMakeTodoItem(note) {
-  const wrap=document.createElement('div');
-  wrap.className='nb-todo-item';
-  wrap.style.cssText='display:flex;align-items:flex-start;gap:8px;margin:3px 0;padding:2px 0';
-  const cb=document.createElement('input');
-  cb.type='checkbox';
-  cb.style.cssText='margin-top:4px;width:15px;height:15px;accent-color:#2d8f5e;cursor:pointer;flex-shrink:0';
-  cb.addEventListener('change',function(){
-    const sp=this.nextElementSibling;
-    if(sp){sp.style.textDecoration=this.checked?'line-through':'';sp.style.color=this.checked?'var(--muted)':'';}
-    clearTimeout(nbSaveTimer); nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
-  });
-  const span=document.createElement('span');
-  span.contentEditable='true';
-  span.style.cssText='flex:1;outline:none;line-height:1.8;min-width:0';
-  span.textContent=' ';
-  span.addEventListener('keydown',function(e){
-    if(e.key==='Enter'){
-      e.preventDefault();
-      if(!this.textContent.trim()){wrap.remove();note.focus();clearTimeout(nbSaveTimer);nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),300);return;}
-      const nw=nbMakeTodoItem(note); wrap.after(nw);
-      const ns=nw.querySelector('span[contenteditable]');if(ns){ns.focus();placeCursorStart(ns);}
-      clearTimeout(nbSaveTimer);nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
-    }
-    if(e.key==='Backspace'&&!this.textContent.trim()){
-      e.preventDefault();const prev=wrap.previousElementSibling;wrap.remove();
-      if(prev&&prev.classList.contains('nb-todo-item')){const ps=prev.querySelector('span[contenteditable]');if(ps){ps.focus();placeCursorEnd(ps);}}else{note.focus();}
-      clearTimeout(nbSaveTimer);nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),300);
-    }
-  });
-  span.addEventListener('input',()=>{clearTimeout(nbSaveTimer);nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),800);});
-  wrap.appendChild(cb); wrap.appendChild(span);
-  return wrap;
-}
-
-function placeCursorStart(el){try{const r=document.createRange(),s=window.getSelection();r.setStart(el,0);r.collapse(true);s.removeAllRanges();s.addRange(r);}catch(e){}}
 function placeCursorEnd(el){try{const r=document.createRange(),s=window.getSelection();r.selectNodeContents(el);r.collapse(false);s.removeAllRanges();s.addRange(r);}catch(e){}}
+function placeCursorStart(el){try{const r=document.createRange(),s=window.getSelection();r.setStart(el,0);r.collapse(true);s.removeAllRanges();s.addRange(r);}catch(e){}}
 
 // Table picker with hover grid
 function nbShowTablePicker(event) {
