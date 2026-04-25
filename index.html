@@ -149,7 +149,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .cal-dow:last-child{border-right:none}
 .cal-week{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);min-height:110px}
 .cal-week:last-child{border-bottom:none}
-.cal-day{border-right:1px solid var(--border);padding:7px;cursor:pointer;transition:background 0.1s;position:relative}
+.cal-day{border-right:1px solid var(--border);padding:7px;cursor:pointer;transition:background 0.1s;position:relative;min-height:80px;max-height:120px;overflow:hidden;box-sizing:border-box;vertical-align:top}
 .cal-day:last-child{border-right:none} .cal-day:hover{background:#faf8f5} .cal-day.other-month{background:#faf8f5}
 .cal-day.other-month .cal-day-num{color:#ccc} .cal-day.today .cal-day-num{background:var(--green);color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center}
 .cal-day-num{font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
@@ -315,11 +315,16 @@ select option{background:#fff}
 }
 
 .deliv-pin {
-  display:flex;align-items:flex-start;gap:3px;margin-top:2px;
+  display:flex;align-items:center;gap:3px;margin-top:2px;
   background:#fff3cd;border:1px solid #ffc107;border-radius:4px;
   padding:3px 5px;cursor:pointer;transition:background 0.15s;
+  overflow:hidden;width:100%;box-sizing:border-box;min-width:0;
 }
 .deliv-pin:hover { background:#ffec8a; }
+.deliv-pin-text {
+  font-size:9px;color:#a07000;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-width:0;flex:1;
+}
 
 .deliv-row {
   display:flex;align-items:center;justify-content:space-between;
@@ -479,8 +484,8 @@ select option{background:#fff}
   <div class="header-actions">
     <div class="legend" id="headerLegend">
       <div class="legend-item"><div class="ldot" style="background:#b8dfc9"></div> Available</div>
-      <div class="legend-item"><div class="ldot" style="background:#f9d97a"></div> Busy</div>
-      <div class="legend-item"><div class="ldot" style="background:#f5a9a3"></div> Full</div>
+      <div class="legend-item"><div class="ldot" style="background:#f9d97a"></div> Full</div>
+      <div class="legend-item"><div class="ldot" style="background:#f5a9a3"></div> Overloaded</div>
       <div class="legend-item"><span class="spike-badge">⚡ Spike</span> Weekly override</div>
     </div>
     <button class="btn btn-accent" id="headerFindCapBtn" onclick="switchTab('finder',document.querySelectorAll('.tab')[4])">🔍 Find Capacity</button>
@@ -514,9 +519,9 @@ select option{background:#fff}
 <div class="main">
   <div class="summary-row">
     <div class="card"><div class="card-label">Team Availability</div><div class="card-value val-green" id="s-avail">—</div><div class="card-sub">avg free capacity this week</div></div>
-    <div class="card"><div class="card-label">Available</div><div class="card-value val-green" id="s-green">—</div><div class="card-sub">people below 60% load</div></div>
-    <div class="card"><div class="card-label">Busy</div><div class="card-value val-yellow" id="s-yellow">—</div><div class="card-sub">people at 60–85% load</div></div>
-    <div class="card"><div class="card-label">Overloaded</div><div class="card-value val-red" id="s-red">—</div><div class="card-sub">people above 85%</div></div>
+    <div class="card"><div class="card-label">Available</div><div class="card-value val-green" id="s-green">—</div><div class="card-sub">people below 100% load</div></div>
+    <div class="card"><div class="card-label">Full</div><div class="card-value val-yellow" id="s-yellow">—</div><div class="card-sub">people at 100% capacity</div></div>
+    <div class="card"><div class="card-label">Overloaded</div><div class="card-value val-red" id="s-red">—</div><div class="card-sub">people above 100%</div></div>
   </div>
 
   <div id="view-weekly">
@@ -808,8 +813,13 @@ select option{background:#fff}
   <div class="modal" style="width:400px">
     <button class="modal-close" onclick="closeModal('addNoteSectionModal')">×</button>
     <h2>New Section</h2>
-    <p class="modal-sub">Create a workspace to organise your notes and tasks</p>
-    <div class="field"><label>Section Title</label><input type="text" id="noteSectionTitle" placeholder="e.g. Dibbeen Project, ESIA, General…" onkeydown="if(event.key==='Enter')saveNoteSection()"></div>
+    <p class="modal-sub">Create a section or subsection to organise your notes</p>
+    <div class="field"><label>Title</label><input type="text" id="noteSectionTitle" placeholder="e.g. Dibbeen Project, ESIA, General…" onkeydown="if(event.key==='Enter')saveNoteSection()"></div>
+    <div class="field"><label>Type</label>
+      <select id="noteSectionParent" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+        <option value="">Top-level section</option>
+      </select>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('addNoteSectionModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveNoteSection()">Create</button>
@@ -1057,10 +1067,10 @@ function fmtMonthYear(d) { return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear(
 function fmtMonthYearShort(d) { return `${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; }
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
-function loadColor(l) { return l<60?'var(--green)':l<=85?'var(--yellow)':'var(--red)'; }
-function loadBg(l)    { return l<60?'#b8dfc9':l<=85?'#f9d97a':'#f5a9a3'; }
-function chipClass(l) { return l<60?'chip-green':l<=85?'chip-yellow':'chip-red'; }
-function chipLabel(l) { return l<60?'Available':l<=85?'Busy':'Overloaded'; }
+function loadColor(l) { return l<100?'var(--green)':l===100?'var(--yellow)':'var(--red)'; }
+function loadBg(l)    { return l<100?'#b8dfc9':l===100?'#f9d97a':'#f5a9a3'; }
+function chipClass(l) { return l<100?'chip-green':l===100?'chip-yellow':'chip-red'; }
+function chipLabel(l) { return l<100?'Available':l===100?'Full':'Overloaded'; }
 function getWeekDays(ws) { return Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;}); }
 function dateInRange(d, start, end) {
   const t=new Date(typeof d==='string'?d+'T12:00:00':d).getTime();
@@ -1166,9 +1176,9 @@ function updateSummary() {
   const loads = team.map(p=>getEffectiveLoad(p.id, wk).load);
   const avg = Math.round(loads.reduce((a,b)=>a+b,0)/loads.length);
   document.getElementById('s-avail').textContent  = (100-avg)+'%';
-  document.getElementById('s-green').textContent  = loads.filter(l=>l<60).length;
-  document.getElementById('s-yellow').textContent = loads.filter(l=>l>=60&&l<=85).length;
-  document.getElementById('s-red').textContent    = loads.filter(l=>l>85).length;
+  document.getElementById('s-green').textContent  = loads.filter(l=>l<100).length;
+  document.getElementById('s-yellow').textContent = loads.filter(l=>l===100).length;
+  document.getElementById('s-red').textContent    = loads.filter(l=>l>100).length;
   document.getElementById('headerDate').textContent = 'Today · '+fmt(new Date());
 }
 
@@ -1359,13 +1369,11 @@ function renderMonthly() {
             const pinBg = d.completed ? '#f0f9f4' : d.pendingApproval ? '#fff9e6' : '#fefce8';
             const pinBorder = d.completed ? '#b8dfc9' : d.pendingApproval ? '#ffc107' : isMyTask ? '#2d8f5e' : '#fde68a';
             return `<div class="deliv-pin" style="background:${pinBg};border-color:${pinBorder}"
+              title="${proj.name}: ${d.name}${assignee?' — '+assignee.name:''}"
               onclick="event.stopPropagation();${(currentUser&&canEditProject(proj))?`openEditDeliverable(${proj.id},'${d.id}')`:``}">
-              <span style="font-size:10px;flex-shrink:0">${statusIcon}</span>
-              <div style="min-width:0;flex:1">
-                <div style="font-size:9px;font-weight:700;color:#856404;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${proj.name}</div>
-                <div style="font-size:9px;color:#a07000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${d.name}</div>
-              </div>
-              ${assignee?`<div class="avatar" style="background:${assignee.c.bg};color:${assignee.c.fg};width:14px;height:14px;font-size:6px;flex-shrink:0" title="${assignee.name}">${initials(assignee.name)}</div>`:''}
+              <span style="font-size:9px;flex-shrink:0">${statusIcon}</span>
+              <span class="deliv-pin-text">${proj.name}: ${d.name}</span>
+              ${assignee?`<div class="avatar" style="background:${assignee.c.bg};color:${assignee.c.fg};width:12px;height:12px;font-size:6px;flex-shrink:0">${initials(assignee.name)}</div>`:''}
             </div>`;
           })
         ).join('') : '';
@@ -2641,6 +2649,13 @@ function saveNotes(sections) {
 function openAddNoteSection() {
   if(!currentUser){showToast('Please log in first');return;}
   document.getElementById('noteSectionTitle').value='';
+  // Populate parent selector with top-level sections only
+  const sel=document.getElementById('noteSectionParent');
+  if(sel){
+    const sections=loadNotes().filter(s=>!s.parentId);
+    sel.innerHTML='<option value="">Top-level section</option>'+
+      sections.map(s=>`<option value="${s.id}">↳ Subsection of: ${s.title}</option>`).join('');
+  }
   openOverlay('addNoteSectionModal');
   setTimeout(()=>document.getElementById('noteSectionTitle').focus(),100);
 }
@@ -2649,7 +2664,8 @@ function saveNoteSection() {
   const title=document.getElementById('noteSectionTitle').value.trim();
   if(!title){showToast('Please enter a section title');return;}
   const sections=loadNotes();
-  const newSec={id:'ns'+Date.now(),title,notes:[{id:'n'+Date.now(),content:'',x:20,y:20,w:NOTE_DEFAULT_W,createdAt:Date.now()}],stickies:[]};
+  const parentId=document.getElementById('noteSectionParent')?.value||null;
+  const newSec={id:'ns'+Date.now(),title,parentId,notes:[{id:'n'+Date.now(),content:'',x:20,y:20,w:NOTE_DEFAULT_W,createdAt:Date.now()}],stickies:[]};
   sections.push(newSec);
   saveNotes(sections);
   currentNoteSection=newSec.id;
@@ -2668,18 +2684,85 @@ function deleteNoteSection(sectionId) {
 }
 
 // ── View rendering ─────────────────────────────
+let nbSectionDragSrc = null;
+
 function renderNotesView() {
   if(!currentUser) return;
   const sections=loadNotes();
   const sb2=document.getElementById('notesSidebar');
-  if(sb2) sb2.innerHTML=sections.map(s=>`
-    <div onclick="selectNoteSection('${s.id}')"
-      style="padding:7px 9px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;margin-bottom:3px;
-      background:${currentNoteSection===s.id?'var(--green-bg)':''};
-      color:${currentNoteSection===s.id?'var(--green)':'var(--text)'};transition:background 0.1s"
-      onmouseenter="if('${s.id}'!==currentNoteSection)this.style.background='var(--surface)'"
-      onmouseleave="if('${s.id}'!==currentNoteSection)this.style.background=''">
-      📁 ${s.title}</div>`).join('');
+  if(!sb2) return;
+
+  // Separate top-level sections and subsections
+  const topLevel = sections.filter(s=>!s.parentId);
+  const children  = sections.filter(s=>s.parentId);
+
+  sb2.innerHTML = topLevel.map(s=>{
+    const subs = children.filter(c=>c.parentId===s.id);
+    const isActive = currentNoteSection===s.id;
+    const subHtml = subs.map(sub=>{
+      const subActive = currentNoteSection===sub.id;
+      return `<div class="nb-sec-item nb-sec-sub" data-id="${sub.id}"
+        onclick="selectNoteSection('${sub.id}')"
+        draggable="true"
+        style="padding:5px 9px 5px 24px;border-radius:7px;cursor:pointer;font-size:11px;font-weight:500;
+        margin-bottom:2px;display:flex;align-items:center;gap:6px;
+        background:${subActive?'var(--green-bg)':''};
+        color:${subActive?'var(--green)':'var(--text2)'};transition:background 0.1s">
+        <span style="color:var(--muted);cursor:grab;font-size:11px">⠿</span>
+        <span>↳ ${sub.title}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="nb-sec-item" data-id="${s.id}"
+      draggable="true"
+      style="margin-bottom:4px">
+      <div onclick="selectNoteSection('${s.id}')"
+        style="padding:7px 9px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;
+        display:flex;align-items:center;gap:6px;
+        background:${isActive?'var(--green-bg)':''};
+        color:${isActive?'var(--green)':'var(--text)'};transition:background 0.1s"
+        onmouseenter="if('${s.id}'!==currentNoteSection)this.style.background='var(--surface)'"
+        onmouseleave="if('${s.id}'!==currentNoteSection)this.style.background=''">
+        <span style="color:var(--muted);cursor:grab;font-size:13px">⠿</span>
+        <span>📁 ${s.title}</span>
+      </div>
+      ${subHtml}
+    </div>`;
+  }).join('');
+
+  // Drag to reorder sections
+  sb2.querySelectorAll('.nb-sec-item[data-id]').forEach(el=>{
+    el.addEventListener('dragstart',e=>{
+      nbSectionDragSrc=el;
+      setTimeout(()=>el.style.opacity='0.4',0);
+      e.dataTransfer.effectAllowed='move';
+      e.stopPropagation();
+    });
+    el.addEventListener('dragend',()=>{
+      el.style.opacity='1';
+      sb2.querySelectorAll('.nb-sec-item').forEach(x=>x.style.borderTop='');
+    });
+    el.addEventListener('dragover',e=>{
+      e.preventDefault();
+      if(nbSectionDragSrc&&nbSectionDragSrc!==el) el.style.borderTop='2px solid var(--green)';
+    });
+    el.addEventListener('dragleave',()=>el.style.borderTop='');
+    el.addEventListener('drop',e=>{
+      e.preventDefault(); e.stopPropagation();
+      el.style.borderTop='';
+      if(!nbSectionDragSrc||nbSectionDragSrc===el) return;
+      const sections=loadNotes();
+      const srcId=nbSectionDragSrc.dataset.id;
+      const tgtId=el.dataset.id;
+      const srcIdx=sections.findIndex(s=>s.id===srcId);
+      const tgtIdx=sections.findIndex(s=>s.id===tgtId);
+      if(srcIdx<0||tgtIdx<0) return;
+      const [moved]=sections.splice(srcIdx,1);
+      sections.splice(tgtIdx,0,moved);
+      saveNotes(sections);
+      renderNotesView();
+    });
+  });
 
   if(currentNoteSection && sections.find(s=>s.id===currentNoteSection)) {
     renderNoteEditor(currentNoteSection);
