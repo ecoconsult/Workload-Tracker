@@ -22,7 +22,7 @@
   --yellow: #b87d0e; --yellow-bg: #fef3db;
   --red: #c0392b; --red-bg: #fdecea;
   --blue: #2563b0; --blue-bg: #e8f0fc;
-  --orange: #c2500a; --orange-bg: #fef0e8;
+  --orange: #d45f00; --orange-bg: #fff0e0;
   --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 12px rgba(0,0,0,0.04);
   --shadow-lg: 0 4px 20px rgba(0,0,0,0.1);
 }
@@ -85,7 +85,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .chip { display:inline-flex;align-items:center;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.4px; }
 .chip-green{background:var(--green-bg);color:var(--green)} .chip-yellow{background:var(--yellow-bg);color:var(--yellow)}
 .chip-red{background:var(--red-bg);color:var(--red)} .chip-gray{background:#f0ede9;color:var(--muted)}
-.chip-orange{background:var(--orange-bg);color:var(--orange)} .chip-blue{background:var(--blue-bg);color:var(--blue)}
+.chip-orange{background:#ffd5a8;color:#b84d00;font-weight:700} .chip-blue{background:var(--blue-bg);color:var(--blue)}
 
 /* SPIKE BADGE */
 .spike-badge {
@@ -1208,9 +1208,10 @@ function renderWeekly() {
   document.getElementById('weekRows').innerHTML = team.map(p=>{
     const eff = getEffectiveLoad(p.id, wk);
     const isMe = currentUser && currentUser.id === p.id;
-    const totalAlloc = eff.projects.reduce((s,x)=>s+x.alloc,0);
+    // Count days free this week (workdays where load < 100%)
+    const daysFree = (eff.workDays||[]).filter(d=>d.load<100).length;
     const projSummary = eff.projects.length
-      ? `${eff.projects.length} project${eff.projects.length>1?'s':''} · ${totalAlloc}% allocated`
+      ? `${eff.projects.length} project${eff.projects.length>1?'s':''} · ${daysFree} day${daysFree!==1?'s':''} free`
       : '<span style="color:var(--muted)">No active projects</span>';
 
     const cells = days.map((d,di)=>{
@@ -1515,9 +1516,9 @@ function renderProjects() {
             ${isMyProject?`<span style="font-size:10px;color:var(--green);font-weight:600">✓ Your project</span>`:''}
           </div>
         </div>
-        <div class="proj-alloc-badge" style="color:${loadColor(Math.min(totalAlloc,100))};flex-shrink:0;text-align:center">
-          ${totalAlloc}%
-          <div style="font-size:10px;color:var(--muted);font-weight:400;font-family:'DM Sans',sans-serif">team alloc</div>
+        <div class="proj-alloc-badge" style="color:var(--text);flex-shrink:0;text-align:center">
+          ${activeMembers.length}/${team.length}
+          <div style="font-size:10px;color:var(--muted);font-weight:400;font-family:'DM Sans',sans-serif">members</div>
           ${totalDelivs>0?`<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px">${completedDelivs}/${totalDelivs} done</div>`:''}
         </div>
       </div>
@@ -1911,7 +1912,7 @@ function adminRemoveMember(id) {
   overrides.filter(o=>o.personId===id).forEach(o=>deleteOverrideFromDB(o.id));
   overrides = overrides.filter(o=>o.personId!==id);
   deleteTeamMemberFromDB(id);
-  populateLoginSelect(); openSettingsModal(); renderWeekly(); updateSummary();
+  populateLoginSelect(); openSettingsModal(); renderWeekly(); updateSummary(); renderProjects();
   showToast(p.name+' removed');
 }
 
@@ -2051,12 +2052,14 @@ function renderMyWork() {
   if(completedThisMonth.length) {
     tasksHtml+=`<div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.7px;margin:20px 0 10px">✓ Completed This Month</div>`;
     tasksHtml+=completedThisMonth.map(t=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--green-bg);border:1px solid #b8dfc9;border-radius:12px;margin-bottom:6px;opacity:0.85">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--green-bg);border:1px solid #b8dfc9;border-radius:12px;margin-bottom:6px">
         <span style="font-size:15px;flex-shrink:0">✅</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:500;text-decoration:line-through;color:var(--muted)">${t.name}</div>
           <div style="font-size:11px;color:var(--muted)">📁 ${t.projName}</div>
         </div>
+        <button class="btn btn-sm" onclick="openEditDeliverable('${t.projId}','${t.id}')"
+          style="font-size:10px;flex-shrink:0;color:var(--text2)">✎ Edit</button>
       </div>`).join('');
   }
   document.getElementById('myworkTasks').innerHTML=tasksHtml;
@@ -2100,17 +2103,7 @@ function renderMyWork() {
     rightHtml+=`<div style="text-align:center;padding:30px;color:var(--muted);font-size:12px">No activity yet</div>`;
   }
 
-  rightHtml+=`</div></div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-top:16px;box-shadow:var(--shadow)">
-      <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:600;margin-bottom:4px">💬 Tag a Colleague</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Send a quick notification to a team member</div>
-      <select id="tagPerson" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);margin-bottom:8px">
-        <option value="">— Select person —</option>
-        ${team.filter(t=>t.id!==currentUser.id).map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
-      </select>
-      <textarea id="tagMessage" rows="2" placeholder="e.g. Please review the Dibbeen draft by Thursday…" style="width:100%;padding:8px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);resize:none;margin-bottom:8px"></textarea>
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="sendTag()">Send</button>
-    </div>`;
+  rightHtml+=`</div></div>`;
 
   document.getElementById('myworkNotifs').innerHTML=rightHtml;
   const myProjects=projects.filter(p=>p.members.some(m=>m.personId===currentUser.id));
@@ -2597,7 +2590,7 @@ function addAllMembers() {
   if(added===0){showToast('Please enter at least one name');return;}
   populateLoginSelect();
   closeModal('addMemberModal');
-  renderWeekly(); updateSummary();
+  renderWeekly(); updateSummary(); renderProjects();
   showToast(added===1?'1 member added ✓':`${added} members added ✓`);
 }
 // addMember() replaced by addAllMembers()
@@ -3581,8 +3574,8 @@ async function loadHRTimesheets() {
   const container=document.getElementById('tsHRList');
   if(container) container.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Loading…</div>';
   const {data: tsAll}=await sb.from('timesheets').select('*');
-  // Filter in JS — avoids SQL LIKE underscore wildcard issues
-  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month));
+  // Filter in JS — submitted only, correct month
+  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month)&&s.submitted===true);
   renderHRList(data||[], month);
 }
 
@@ -3639,8 +3632,8 @@ async function exportAllTimesheets(individual) {
   const month=document.getElementById('hrMonthSel').value;
   showToast('Preparing export…');
   const {data: tsAll}=await sb.from('timesheets').select('*');
-  // Filter in JS — avoids SQL LIKE underscore wildcard issues
-  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month));
+  // Filter in JS — submitted only, correct month
+  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month)&&s.submitted===true);
   const sheets=data||[];
 
   if(individual) {
