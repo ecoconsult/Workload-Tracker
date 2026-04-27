@@ -85,7 +85,8 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .chip { display:inline-flex;align-items:center;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:0.4px; }
 .chip-green{background:var(--green-bg);color:var(--green)} .chip-yellow{background:var(--yellow-bg);color:var(--yellow)}
 .chip-red{background:var(--red-bg);color:var(--red)} .chip-gray{background:#f0ede9;color:var(--muted)}
-.chip-orange{background:#ffd5a8;color:#b84d00;font-weight:700} .chip-blue{background:var(--blue-bg);color:var(--blue)}
+.chip-orange{background:#ffd5a8;color:#b84d00;font-weight:700}
+.chip-overloaded{background:#f5c6c6;color:#7b0000;font-weight:700} .chip-blue{background:var(--blue-bg);color:var(--blue)}
 
 /* SPIKE BADGE */
 .spike-badge {
@@ -952,6 +953,15 @@ select option{background:#fff}
     <div class="field"><label>Deliverable Name</label><input type="text" id="editDelivName"></div>
     <div class="field"><label>Due Date</label><input type="date" id="editDelivDate"></div>
     <div class="field"><label>Assigned To</label><select id="editDelivAssigned"></select></div>
+    <div style="border-top:1px solid var(--border);margin:14px 0 12px;padding-top:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">Task Support</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Assign someone outside the project team for this deliverable only. Their load reflects from today until the due date.</div>
+      <div class="field" style="margin-bottom:8px"><label>Team Member</label><select id="editDelivSupport"><option value="">— None —</option></select></div>
+      <div class="field"><label>Allocation % for this task</label>
+        <input type="number" id="editDelivSupportAlloc" min="0" max="100" value="0" placeholder="e.g. 30"
+          style="width:100%;padding:8px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-danger" onclick="deleteDeliverableFromEdit()">Delete</button>
       <button class="btn" onclick="closeModal('editDelivModal')">Cancel</button>
@@ -1074,9 +1084,9 @@ function fmtMonthYear(d) { return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear(
 function fmtMonthYearShort(d) { return `${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; }
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
-function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<100?'var(--orange)':l===100?'var(--red)':'var(--red)'; }
+function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<100?'var(--orange)':l===100?'var(--red)':'#8b0000'; }
 function loadBg(l)    { return l<60?'#b8dfc9':l<85?'#f9d97a':l<100?'#fed7aa':'#f5a9a3'; }
-function chipClass(l) { return l<60?'chip-green':l<85?'chip-yellow':l<100?'chip-orange':'chip-red'; }
+function chipClass(l) { return l<60?'chip-green':l<85?'chip-yellow':l<100?'chip-orange':l===100?'chip-red':'chip-overloaded'; }
 function chipLabel(l) { return l<60?'Available':l<85?'Busy':l<100?'Very Busy':l===100?'Full Capacity':'Overloaded'; }
 function getWeekDays(ws) { return Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;}); }
 function dateInRange(d, start, end) {
@@ -1135,6 +1145,7 @@ function getEffectiveLoad(personId, weekKeyStr) {
     // Baseline for THIS specific day = sum of projects active on this exact day
     let dayBaseline = 0;
     let dayProjects = [];
+    const today0 = wKey(new Date());
     projects.forEach(p => {
       if(!dateInRange(d, p.start, p.end)) return;
       const member = p.members.find(m=>m.personId===personId);
@@ -1142,6 +1153,16 @@ function getEffectiveLoad(personId, weekKeyStr) {
         dayBaseline += member.allocation;
         dayProjects.push({name:p.name, alloc:member.allocation});
       }
+      // Task support: add if person is supportId on any active deliverable and today is within range
+      (p.deliverables||[]).forEach(del=>{
+        if(del.supportId===personId && !del.completed && del.supportAlloc>0) {
+          const dStr2=wKey(d);
+          if(dStr2>=today0 && dStr2<=del.date) {
+            dayBaseline+=del.supportAlloc;
+            dayProjects.push({name:p.name+' (task)', alloc:del.supportAlloc});
+          }
+        }
+      });
     });
 
     // Check overrides for this specific day
@@ -1208,11 +1229,14 @@ function renderWeekly() {
   document.getElementById('weekRows').innerHTML = team.map(p=>{
     const eff = getEffectiveLoad(p.id, wk);
     const isMe = currentUser && currentUser.id === p.id;
-    // Count days free this week (workdays where load < 100%)
-    const daysFree = (eff.workDays||[]).filter(d=>d.load<100).length;
+    // Hours free this week: 40h total - (avgLoad% * 40h)
+    const hoursUsed = Math.round(eff.load / 100 * 40);
+    const hoursFree = Math.max(0, 40 - hoursUsed);
+    const freeLabel = eff.load > 100 ? 'Overloaded' : `${hoursFree} hr${hoursFree!==1?'s':''} free`;
+    const hrsColor = hoursFree >= 24 ? 'var(--green)' : hoursFree >= 8 ? 'var(--yellow)' : hoursFree >= 1 ? 'var(--orange)' : 'var(--red)';
     const projSummary = eff.projects.length
-      ? `${eff.projects.length} project${eff.projects.length>1?'s':''} · ${daysFree} day${daysFree!==1?'s':''} free`
-      : '<span style="color:var(--muted)">No active projects</span>';
+      ? `${eff.projects.length} project${eff.projects.length>1?'s':''} · ${freeLabel}`
+      : `No active projects · 40 hrs free`;
 
     const cells = days.map((d,di)=>{
       const dow=d.getDay(), isWE=dow===5||dow===6;
@@ -1250,8 +1274,8 @@ function renderWeekly() {
         <div class="avatar" style="background:${p.c.bg};color:${p.c.fg}">${initials(p.name)}</div>
         <div>
           <div class="p-name">${p.name}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px">${projSummary}</div>
-          ${eff.load>0?`<div style="font-size:10px;font-weight:600;color:${loadColor(eff.load)};margin-top:2px">${eff.load}% this week${eff.isOverride?' (avg)':''}</div>`:''}
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">${eff.projects.length ? `${eff.projects.length} project${eff.projects.length>1?'s':''}` : 'No active projects'}</div>
+          <div style="font-size:10px;font-weight:600;margin-top:2px;color:${hrsColor}">${freeLabel}</div>
           ${overBy>0?`<div style="font-size:9px;font-weight:700;color:var(--red)">⚠ ${overBy}% over capacity</div>`:''}
         </div>
       </div>${cells}
@@ -1477,6 +1501,7 @@ function renderProjects() {
       const dueColor=due==='Overdue'?'var(--red)':due.includes('day')&&parseInt(due)<14?'var(--orange)':'var(--text2)';
       const canEdit = isMyProject;
       const assignee = d.assignedTo ? team.find(t=>t.id===d.assignedTo) : null;
+      const supporter = d.supportId ? team.find(t=>t.id===d.supportId) : null;
       const statusIcon = d.completed ? '✅' : d.pendingApproval ? '⏳' : '📌';
       const statusBg = d.completed ? '#f0f9f4' : d.pendingApproval ? '#fff9e6' : 'transparent';
       const statusBorder = d.completed ? '#b8dfc9' : d.pendingApproval ? '#ffc107' : 'transparent';
@@ -1491,6 +1516,7 @@ function renderProjects() {
               ${d.completed ? 'Completed ✓' : d.pendingApproval ? 'Pending PM approval' : fmt(new Date(d.date+'T12:00:00'))+' · '+due}
             </div>
             ${assignee?`<div style="font-size:10px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><div class="avatar" style="background:${assignee.c.bg};color:${assignee.c.fg};width:14px;height:14px;font-size:7px;flex-shrink:0">${initials(assignee.name)}</div>${assignee.name}</div>`:''}
+            ${supporter?`<div style="font-size:10px;color:var(--orange);margin-top:1px;display:flex;align-items:center;gap:4px"><div class="avatar" style="background:${supporter.c.bg};color:${supporter.c.fg};width:14px;height:14px;font-size:7px;flex-shrink:0">${initials(supporter.name)}</div>${supporter.name} · Task Support ${d.supportAlloc?d.supportAlloc+'%':''}</div>`:''}
           </div>
         </div>
         ${d.pendingApproval && isMyProject
@@ -1498,7 +1524,9 @@ function renderProjects() {
                <button class="btn btn-sm" style="background:var(--green);color:#fff;border-color:var(--green);font-size:10px;padding:3px 8px" onclick="event.stopPropagation();approveDeliverable(${p.id},'${d.id}',true)">✓ Approve</button>
                <button class="btn btn-sm btn-danger" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();approveDeliverable(${p.id},'${d.id}',false)">✕</button>
              </div>`
-          : canEdit&&!d.completed?`<span style="font-size:11px;color:var(--muted);font-weight:500">Edit ›</span>`:''
+          : d.completed && canEdit
+            ? `<button class="btn btn-sm" onclick="event.stopPropagation();unCompleteDeliverable(${p.id},'${d.id}')" style="font-size:10px;color:var(--muted)">↩ Undo</button>`
+            : canEdit&&!d.completed?`<span style="font-size:11px;color:var(--muted);font-weight:500">Edit ›</span>`:''
         }
       </div>`;
     }).join('');
@@ -1517,7 +1545,7 @@ function renderProjects() {
           </div>
         </div>
         <div class="proj-alloc-badge" style="color:var(--text);flex-shrink:0;text-align:center">
-          ${activeMembers.length}/${team.length}
+          ${activeMembers.length + new Set((p.deliverables||[]).filter(d=>d.supportId&&!d.completed).map(d=>d.supportId)).size}/${team.length}
           <div style="font-size:10px;color:var(--muted);font-weight:400;font-family:'DM Sans',sans-serif">members</div>
           ${totalDelivs>0?`<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px">${completedDelivs}/${totalDelivs} done</div>`:''}
         </div>
@@ -1580,7 +1608,10 @@ function openEditProject(id) {
   document.getElementById('epEnd').value = proj.end;
   document.getElementById('epNotes').value = proj.notes||'';
   const wrap = document.getElementById('epMembersWrap');
-  wrap.innerHTML = team.map(p=>{
+  // Only show members already on the project — use + Add Member to add new ones
+  const projMemberIds = new Set(proj.members.map(m=>m.personId));
+  const displayTeam = team.filter(p=>projMemberIds.has(p.id) || p.id===proj.creatorId);
+  wrap.innerHTML = displayTeam.map(p=>{
     const existing = proj.members.find(m=>m.personId===p.id);
     const val = existing ? existing.allocation : 0;
     const isCreator = p.id===proj.creatorId;
@@ -1607,8 +1638,12 @@ function saveEditProject() {
   proj.name=name; proj.client=client; proj.start=start; proj.end=end;
   proj.notes=document.getElementById('epNotes').value.trim();
   proj.members=[];
+  // Build members from current project members + PM only
+  const savedMemberIds = new Set(proj.members_snapshot||[]);
   team.forEach(p=>{
-    const v=parseInt(document.getElementById('epAlloc_'+p.id).value)||0;
+    const input=document.getElementById('epAlloc_'+p.id);
+    if(!input) return; // not shown in edit modal = not a project member
+    const v=parseInt(input.value)||0;
     if(v>0) proj.members.push({personId:p.id,allocation:v,role:p.id===proj.creatorId?'pm':'coordinator'});
   });
   if(!proj.members.find(m=>m.personId===proj.creatorId)) {
@@ -2470,9 +2505,15 @@ function saveEditDeliverable() {
   if(newDate<proj.start){showToast(`⚠ Due date cannot be before project start (${proj.start})`);return;}
   if(newDate>proj.end){showToast(`⚠ Due date cannot be after project end (${proj.end})`);return;}
   const oldAssignee=deliv.assignedTo;
+  const oldSupportId=deliv.supportId;
   deliv.name=newName; deliv.date=newDate;
   const assignedVal=document.getElementById('editDelivAssigned').value;
   deliv.assignedTo=assignedVal?parseInt(assignedVal):null;
+  // Task support
+  const supportVal=document.getElementById('editDelivSupport').value;
+  const supportAlloc=parseInt(document.getElementById('editDelivSupportAlloc').value)||0;
+  deliv.supportId=supportVal?parseInt(supportVal):null;
+  deliv.supportAlloc=deliv.supportId?supportAlloc:0;
   proj.deliverables.sort((a,b)=>new Date(a.date)-new Date(b.date));
   if(deliv.assignedTo && deliv.assignedTo!==oldAssignee) {
     addNotification(deliv.assignedTo,'task_assigned',{delivName:deliv.name,projName:proj.name,date:deliv.date,delivId:deliv.id,projId:proj.id});
@@ -2482,6 +2523,16 @@ function saveEditDeliverable() {
   renderProjects(); renderMonthly(); renderWeekly(); updateSummary();
   showToast('Deliverable updated ✓');
 }
+function unCompleteDeliverable(projId, delivId) {
+  const proj=projects.find(p=>p.id===projId); if(!proj) return;
+  const deliv=(proj.deliverables||[]).find(d=>d.id===delivId); if(!deliv) return;
+  deliv.completed=false; deliv.pendingApproval=false;
+  // Restore task support load if applicable
+  saveProject(proj);
+  renderProjects(); renderMonthly(); renderWeekly(); updateSummary();
+  showToast('Deliverable marked incomplete');
+}
+
 function deleteDeliverableFromEdit() {
   const proj=projects.find(p=>p.id===editingDeliverableProjectId);
   proj.deliverables=(proj.deliverables||[]).filter(d=>d.id!==editingDeliverableId);
@@ -2501,6 +2552,14 @@ function openEditDeliverable(projId, delivId) {
   const dateInput=document.getElementById('editDelivDate');
   dateInput.value=deliv.date; dateInput.min=proj.start; dateInput.max=proj.end;
   populateDelivAssign('editDelivAssigned',proj,deliv.assignedTo||null);
+  // Populate task support — team members NOT on the project
+  const supportSel=document.getElementById('editDelivSupport');
+  const memberIds=new Set((proj.members||[]).map(m=>m.personId));
+  supportSel.innerHTML=`<option value="">— None —</option>`+
+    team.filter(p=>!memberIds.has(p.id)).map(p=>
+      `<option value="${p.id}"${deliv.supportId===p.id?' selected':''}>${p.name}</option>`
+    ).join('');
+  document.getElementById('editDelivSupportAlloc').value=deliv.supportAlloc||0;
   openOverlay('editDelivModal');
 }
 
