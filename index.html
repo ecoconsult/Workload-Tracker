@@ -3634,7 +3634,8 @@ async function loadHRTimesheets() {
   if(container) container.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px"></div>Loading…</div>';
   const {data: tsAll}=await sb.from('timesheets').select('*');
   // Filter in JS — submitted only, correct month
-  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month)&&s.submitted===true);
+  // Show all timesheets for the month — drafts AND submitted
+  const data=(tsAll||[]).filter(s=>s.id&&s.id.endsWith('_'+month));
   renderHRList(data||[], month);
 }
 
