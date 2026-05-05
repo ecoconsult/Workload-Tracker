@@ -2666,7 +2666,7 @@ function openAddProjectModal() {
     <div style="display:flex;gap:8px;margin-top:6px">
       <select id="pjAddPersonSel" style="flex:1;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
         <option value="">＋ Add a person…</option>
-        ${team.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+        ${team.filter(p=>p.role!=='timesheet_only').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
       </select>
       <button class="btn" onclick="pjAddPerson()" style="flex-shrink:0">Add</button>
     </div>`;
@@ -4745,7 +4745,7 @@ function openLeaveModal() {
   // Populate person dropdown (self only unless manager)
   const personSel = document.getElementById('leavePersonSel');
   if(isManager()) {
-    personSel.innerHTML = team.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    personSel.innerHTML = team.filter(p=>p.role!=='timesheet_only').map(p => `<option value="${p.id}">${p.name}</option>`).join('');
     personSel.style.display = '';
     document.getElementById('leavePersonLabel').style.display = '';
   } else {
@@ -5015,7 +5015,7 @@ function hrSwitchTab(tab) {
 
 function populateHRSummaryControls() {
   const personSel = document.getElementById('hrSumPerson');
-  if(personSel) personSel.innerHTML = team.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  if(personSel) personSel.innerHTML = team.filter(p=>p.role!=='timesheet_only').map(p => `<option value="${p.id}">${p.name}</option>`).join('');
   const opts = getTsMonthOptions();
   const optHtml = opts.map(o => `<option value="${o.val}">${o.label.replace(' (upcoming)','')}</option>`).join('');
   ['hrSumFrom','hrSumTo'].forEach(id => {
