@@ -5146,8 +5146,8 @@ async function loadAllData() {
       readAt: r.read_at, createdAt: r.created_at_ts
     }));
   }
-  // Load leaves
-  await loadLeaves();
+  // Load leaves — wrapped so it never crashes the main load
+  try { await loadLeaves(); } catch(e) { console.warn('leaves skipped'); }
 }
 
 // ── SAVE helpers (called after each mutation) ────────────────────
