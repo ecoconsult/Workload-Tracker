@@ -1727,7 +1727,7 @@ function renderProjects() {
         ${isMyProject
           ? `<button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit Project</button>
              <button class="btn btn-sm" onclick="openAssignMember(${p.id})">+ Add Member</button>
-             ${!p.archived && (p.deliverables||[]).length > 0 && (p.deliverables||[]).every(d=>d.status==='approved'||d.status==='done'||d.status==='complete') ? `<button class="btn btn-sm" onclick="archiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">📦 Archive</button>` : ''}
+             ${!p.archived && (p.deliverables||[]).length > 0 && (p.deliverables||[]).every(d=>d.completed===true) ? `<button class="btn btn-sm" onclick="archiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">📦 Archive</button>` : ''}
              ${p.archived ? `<button class="btn btn-sm" onclick="unarchiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">↩ Restore</button>` : ''}
              <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id})">Remove</button>`
           : `<button class="btn btn-sm" style="opacity:0.4;cursor:pointer" onclick="showNoAccess(${p.id},${p.creatorId})">+ Add Member</button>
