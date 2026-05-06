@@ -1604,7 +1604,7 @@ function renderProjects() {
   if (projFilter === 'archive') {
     filtered = allArchived;
   } else if (projFilter === 'mine' && uid) {
-    filtered = allActive.filter(p=>(p.members||[]).some(m=>m.personId===uid) || p.creatorId===uid);
+    filtered = allActive.filter(p=>(p.members||[]).some(m=>String(m.personId)===String(uid)) || String(p.creatorId)===String(uid));
   } else {
     filtered = allActive;
   }
@@ -5225,7 +5225,8 @@ async function reloadProjects() {
   const {data} = await sb.from('projects').select('*').order('id');
   if(data) projects = data.map(r => normalizeProject({
     id:r.id, name:r.name, client:r.client||'', start:r.start_date, end:r.end_date,
-    creatorId:r.creator_id, notes:r.notes||'', members:r.members||[], deliverables:r.deliverables||[]
+    creatorId:r.creator_id, notes:r.notes||'', members:r.members||[], deliverables:r.deliverables||[],
+    archived: r.archived || false
   }));
 }
 async function reloadTeam() {
