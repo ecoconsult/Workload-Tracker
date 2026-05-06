@@ -2028,9 +2028,9 @@ async function doDirectLogin() {
     persistSession();
     applyLogin();
   } else {
-    // Consultant / Admin: check Supabase first, fall back to localStorage pins
+    // Consultant / Admin: Supabase password is authoritative, localStorage is legacy fallback
     const { data: pwData } = await sb.from('team').select('password').eq('id', id).maybeSingle();
-    const supabasePw = pwData && pwData.password ? pwData.password : null;
+    const supabasePw = pwData && pwData.password && pwData.password !== '1234' ? pwData.password : null;
     const correctPin = supabasePw || pins[id] || '1234';
     if(entered !== correctPin) { showToast('Incorrect password'); if(pwEl){pwEl.value='';pwEl.focus();} return; }
     currentUser = user;
@@ -2195,7 +2195,7 @@ function openSettingsModal() {
   openOverlay('settingsModal');
 }
 
-function saveSettings() {
+async function saveSettings() {
   const currentPin = document.getElementById('settingsCurrentPin').value;
   const newPin = document.getElementById('settingsNewPin').value;
   const confirmPin = document.getElementById('settingsConfirmPin').value;
@@ -2235,7 +2235,12 @@ function saveSettings() {
       });
       closeModal('settingsModal'); return;
     } else {
-      const correct = pins[currentUser.id]||'1234';
+      // Check Supabase first (authoritative), fall back to localStorage
+      let correct = pins[currentUser.id] || '1234';
+      try {
+        const { data: vpd } = await sb.from('team').select('password').eq('id', currentUser.id).maybeSingle();
+        if(vpd && vpd.password && vpd.password !== '1234') correct = vpd.password;
+      } catch(e) {}
       if(currentPin!==correct) { showToast('Current password is incorrect'); return; }
       pins[currentUser.id]=newPin; savePins();
       // Also save to Supabase so it works cross-device and in incognito
@@ -4519,14 +4524,17 @@ function getManagerFor(personId) {
 }
 
 async function loadLeaves() {
-  const {data} = await sb.from('leaves').select('*');
-  if(data) leaves = data.map(r=>({
-    id: r.id, personId: r.person_id,
-    startDate: r.start_date, endDate: r.end_date,
-    type: r.type || 'annual',
-    status: r.status || 'pending',
-    approvedBy: r.approved_by
-  }));
+  try {
+    const {data, error} = await sb.from('leaves').select('*');
+    if(error) { console.warn('leaves table not ready:', error.message); return; }
+    if(data) leaves = data.map(r=>({
+      id: r.id, personId: r.person_id,
+      startDate: r.start_date, endDate: r.end_date,
+      type: r.type || 'annual',
+      status: r.status || 'pending',
+      approvedBy: r.approved_by
+    }));
+  } catch(e) { console.warn('loadLeaves failed:', e.message || String(e)); }
 }
 
 function getLeavesForDay(personId, dateStr) {
@@ -5270,7 +5278,7 @@ window.addEventListener('load', async function() {
     await seedIfEmpty();
     await loadAllData();
   } catch(e) {
-    console.error('Failed to load data:', e);
+    console.error('Failed to load data:', e.message || String(e));
     showToast('⚠ Could not connect to database');
   }
   setLoading(false);
