@@ -3205,13 +3205,24 @@ function renderNoteEditor(sectionId) {
   renderStickies(s);
   const canvas = document.getElementById('nbCanvas');
   canvas.innerHTML = '';
-  s.notes.forEach(n => canvas.appendChild(createNoteEl(n, sectionId)));
-  updateCanvasHeight();
-  const first = canvas.querySelector('.nb-note-content');
-  if (first && !lastFocusedNote) {
-    first.focus(); lastFocusedNote = first;
-    try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
+
+  // Wait for canvas to have real layout dimensions before placing notes.
+  // On login/tab-switch the canvas may not be measured yet (offsetWidth = 0).
+  function doRender() {
+    if (canvas.offsetWidth < 100) {
+      // Canvas not ready yet — retry on next frame
+      requestAnimationFrame(doRender);
+      return;
+    }
+    s.notes.forEach(n => canvas.appendChild(createNoteEl(n, sectionId)));
+    updateCanvasHeight();
+    const first = canvas.querySelector('.nb-note-content');
+    if (first && !lastFocusedNote) {
+      first.focus(); lastFocusedNote = first;
+      try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
+    }
   }
+  requestAnimationFrame(doRender);
 }
 
 /* ═══════════════════════════════════════════════════════════
