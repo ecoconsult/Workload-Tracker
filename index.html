@@ -643,7 +643,6 @@ select option{background:#fff}
       <div style="display:flex;align-items:center;gap:16px">
         <div class="section-title">Projects</div>
         <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12px;font-weight:600">
-          <div id="projFilterAll" onclick="setProjFilter('all')" style="padding:5px 14px;cursor:pointer;color:var(--text2);transition:all 0.15s">All Projects</div>
           <div id="projFilterMine" onclick="setProjFilter('mine')" style="padding:5px 14px;cursor:pointer;background:var(--text);color:#fff;transition:all 0.15s">My Projects</div>
           <div id="projFilterAll" onclick="setProjFilter('all')" style="padding:5px 14px;cursor:pointer;color:var(--text2);transition:all 0.15s">All Projects</div>
           <div id="projFilterArchive" onclick="setProjFilter('archive')" style="padding:5px 14px;cursor:pointer;color:var(--text2);transition:all 0.15s">Archive</div>
@@ -2792,7 +2791,7 @@ function openAssignMember(projId) {
   assigningProjectId=projId;
   document.getElementById('assignProjLabel').textContent=`Assign to: ${proj.name}`;
   const sel=document.getElementById('assignPerson');
-  const unassigned = team.filter(p=>!proj.members.find(m=>m.personId===p.id));
+  const unassigned = team.filter(p=>p.role!=='timesheet_only' && !proj.members.find(m=>m.personId===p.id));
   sel.innerHTML=unassigned.length
     ? unassigned.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
     : `<option value="">All team members already assigned</option>`;
@@ -2887,7 +2886,7 @@ function openEditDeliverable(projId, delivId) {
   const supportSel=document.getElementById('editDelivSupport');
   const memberIds=new Set((proj.members||[]).map(m=>m.personId));
   supportSel.innerHTML=`<option value="">— None —</option>`+
-    team.filter(p=>!memberIds.has(p.id)).map(p=>
+    team.filter(p=>p.role!=='timesheet_only' && !memberIds.has(p.id)).map(p=>
       `<option value="${p.id}"${deliv.supportId===p.id?' selected':''}>${p.name}</option>`
     ).join('');
   document.getElementById('editDelivSupportAlloc').value=deliv.supportAlloc||0;
