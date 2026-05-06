@@ -3009,17 +3009,10 @@ function nbNoteWidth() {
   const c = document.getElementById('nbCanvas');
   return c ? Math.max(200, Math.floor((c.offsetWidth - 92) / 3)) : NOTE_DEFAULT_W;
 }
-// Resolve stored x/w to pixels — supports % (responsive) and absolute px (legacy)
+// Resolve stored x/w to pixels — pure pixel storage, no percentage scaling
 function nbResolvePx(n, field) {
-  const c = document.getElementById('nbCanvas');
-  const cw = c ? c.offsetWidth : 1200;
-  if (field === 'x') {
-    const raw = n.xPct != null ? Math.round(n.xPct * cw) : (n.x || NB_MARGIN_SIDE);
-    return Math.max(NB_MARGIN_SIDE, Math.min(raw, cw - 220 - NB_MARGIN_SIDE));
-  }
-  const x   = nbResolvePx(n, 'x');
-  const raw = n.wPct != null ? Math.round(n.wPct * cw) : (n.w || NOTE_DEFAULT_W);
-  return Math.max(220, Math.min(raw, cw - x - NB_MARGIN_SIDE));
+  if (field === 'x') return n.x || NB_MARGIN_SIDE;
+  return n.w || NOTE_DEFAULT_W;
 }
 function updateCanvasHeight() {
   const c = document.getElementById('nbCanvas'); if (!c) return;
@@ -3038,15 +3031,13 @@ function saveAllNotes(sectionId) {
   const sections = loadNotes();
   const s = sections.find(x => x.id === sectionId); if (!s) return;
   const canvas = document.getElementById('nbCanvas'); if (!canvas) return;
-  const cw = canvas.offsetWidth || 1200;
   s.notes = [...canvas.querySelectorAll('.nb-note')].map(el => {
-    const xPx = parseInt(el.style.left) || NB_MARGIN_SIDE;
-    const wPx = el.offsetWidth || NOTE_DEFAULT_W;
     return {
       id: el.dataset.id,
       content: (el.querySelector('.nb-note-content') || {}).innerHTML || '',
-      x: xPx, y: parseInt(el.style.top) || NB_MARGIN_TOP, w: wPx,
-      xPct: xPx / cw, wPct: wPx / cw,
+      x: parseInt(el.style.left) || NB_MARGIN_SIDE,
+      y: parseInt(el.style.top)  || NB_MARGIN_TOP,
+      w: el.offsetWidth          || NOTE_DEFAULT_W,
       createdAt: Date.now()
     };
   });
@@ -3206,23 +3197,13 @@ function renderNoteEditor(sectionId) {
   const canvas = document.getElementById('nbCanvas');
   canvas.innerHTML = '';
 
-  // Wait for canvas to have real layout dimensions before placing notes.
-  // On login/tab-switch the canvas may not be measured yet (offsetWidth = 0).
-  function doRender() {
-    if (canvas.offsetWidth < 100) {
-      // Canvas not ready yet — retry on next frame
-      requestAnimationFrame(doRender);
-      return;
-    }
-    s.notes.forEach(n => canvas.appendChild(createNoteEl(n, sectionId)));
-    updateCanvasHeight();
-    const first = canvas.querySelector('.nb-note-content');
-    if (first && !lastFocusedNote) {
-      first.focus(); lastFocusedNote = first;
-      try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
-    }
+  s.notes.forEach(n => canvas.appendChild(createNoteEl(n, sectionId)));
+  updateCanvasHeight();
+  const first = canvas.querySelector('.nb-note-content');
+  if (first && !lastFocusedNote) {
+    first.focus(); lastFocusedNote = first;
+    try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
   }
-  requestAnimationFrame(doRender);
 }
 
 /* ═══════════════════════════════════════════════════════════
