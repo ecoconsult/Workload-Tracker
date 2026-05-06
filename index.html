@@ -1286,14 +1286,8 @@ function getEffectiveLoad(personId, weekKeyStr) {
       if(!dateInRange(d, p.start, p.end)) return;
       const member = p.members.find(m=>m.personId===personId);
       if(member && member.allocation > 0) {
-        // allocationStart only restricts FUTURE weeks — past weeks always show allocation
-        const today0str = new Date().toISOString().slice(0,10);
-        const allocStart = member.allocationStart || p.start;
-        const isPast = dStr < today0str;
-        if(isPast || dStr >= allocStart) {
-          dayBaseline += member.allocation;
-          dayProjects.push({name:p.name, alloc:member.allocation});
-        }
+        dayBaseline += member.allocation;
+        dayProjects.push({name:p.name, alloc:member.allocation});
       }
       // Task support: add if person is supportId on any active deliverable and today is within range
       (p.deliverables||[]).forEach(del=>{
@@ -1750,8 +1744,7 @@ async function archiveProject(projId) {
   const proj = projects.find(p=>String(p.id)===String(projId)); if(!proj) return;
   proj.archived = true;
   // Set all member allocations to 0 so they vanish from the workload grid
-  const today = new Date().toISOString().slice(0,10);
-  (proj.members||[]).forEach(m => { m.allocation = 0; m.allocationStart = today; });
+  (proj.members||[]).forEach(m => { m.allocation = 0; });
   await sb.from('projects').update({
     archived: true,
     members: JSON.stringify(proj.members)
@@ -1825,23 +1818,12 @@ function saveEditProject() {
   if(outOfRange.length) showToast(`⚠ ${outOfRange.length} deliverable(s) fall outside this date range — update them too`, 5000);
   proj.name=name; proj.client=client; proj.start=start; proj.end=end;
   proj.notes=document.getElementById('epNotes').value.trim();
-  // Snapshot existing members BEFORE clearing so we can compare allocations
-  const prevMembers = (proj.members||[]).map(m=>({...m}));
-  const today = new Date().toISOString().slice(0,10);
   proj.members=[];
   team.forEach(p=>{
     const input=document.getElementById('epAlloc_'+p.id);
     if(!input) return;
     const v=parseInt(input.value)||0;
-    if(v>0) {
-      const prev = prevMembers.find(m=>m.personId===p.id);
-      const prevAlloc = prev ? prev.allocation : null;
-      // Only update allocationStart if allocation actually changed
-      const allocStart = (prev && prevAlloc === v)
-        ? (prev.allocationStart || proj.start)  // unchanged — keep existing start
-        : today;                                  // changed or new — start from today
-      proj.members.push({personId:p.id, allocation:v, role:p.id===proj.creatorId?'pm':'coordinator', allocationStart: allocStart});
-    }
+    if(v>0) proj.members.push({personId:p.id, allocation:v, role:p.id===proj.creatorId?'pm':'coordinator'});
   });
   if(!proj.members.find(m=>m.personId===proj.creatorId)) {
     proj.members.unshift({personId:proj.creatorId,allocation:0,role:'pm'});
@@ -2831,13 +2813,8 @@ function saveAssignment() {
   const alloc=parseInt(document.getElementById('assignAlloc').value);
   const proj=projects.find(p=>p.id===assigningProjectId);
   const existing=proj.members.find(m=>m.personId===pid);
-  const today2 = new Date().toISOString().slice(0,10);
-  if(existing) {
-    existing.allocationStart = existing.allocation === alloc ? (existing.allocationStart || proj.start) : today2;
-    existing.allocation = alloc;
-  } else {
-    proj.members.push({personId:pid, allocation:alloc, role:'coordinator', allocationStart: today2});
-  }
+  if(existing) existing.allocation=alloc;
+  else proj.members.push({personId:pid,allocation:alloc,role:'coordinator'});
   closeModal('addProjMemberModal');
   saveProject(proj);
   renderProjects(); renderWeekly(); renderMonthly(); updateSummary();
