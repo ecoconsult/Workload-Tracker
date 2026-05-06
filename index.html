@@ -5104,50 +5104,56 @@ async function seedIfEmpty() {
 
 // ── LOAD all data from Supabase ──────────────────────────────────
 async function loadAllData() {
-  const [teamRes, projRes, ovRes, notifRes] = await Promise.all([
-    sb.from('team').select('*').order('ci'),
-    sb.from('projects').select('*').order('id'),
-    sb.from('overrides').select('*').order('saved_at'),
-    sb.from('notifications').select('*').order('created_at_ts')
-  ]);
+  // Each query wrapped individually — one failure never blocks the others
+  try {
+    const teamRes = await sb.from('team').select('*').order('ci');
+    if(teamRes.data && teamRes.data.length) {
+      team = teamRes.data.map(r => ({
+        id: r.id, name: r.name, title: r.title, dept: r.dept,
+        c: PALETTE[(r.ci||0) % PALETTE.length],
+        role: r.role || 'consultant',
+        email: r.email || '',
+        managerId: r.manager_id || null
+      }));
+    }
+  } catch(e) { console.warn('team load failed:', e.message||e); }
 
-  if(teamRes.data && teamRes.data.length) {
-    team = teamRes.data.map(r => ({
-      id: r.id, name: r.name, title: r.title, dept: r.dept,
-      c: PALETTE[(r.ci||0) % PALETTE.length],
-      role: r.role || 'consultant',
-      email: r.email || '',
-      managerId: r.manager_id || null
-    }));
-  }
+  try {
+    const projRes = await sb.from('projects').select('*').order('id');
+    if(projRes.data && projRes.data.length) {
+      projects = projRes.data.map(r => normalizeProject({
+        id: r.id, name: r.name, client: r.client||'',
+        start: r.start_date, end: r.end_date,
+        creatorId: r.creator_id, notes: r.notes||'',
+        members: r.members||[], deliverables: r.deliverables||[],
+        archived: r.archived || false
+      }));
+    }
+  } catch(e) { console.warn('projects load failed:', e.message||e); }
 
-  if(projRes.data && projRes.data.length) {
-    projects = projRes.data.map(r => normalizeProject({
-      id: r.id, name: r.name, client: r.client||'',
-      start: r.start_date, end: r.end_date,
-      creatorId: r.creator_id, notes: r.notes||'',
-      members: r.members||[], deliverables: r.deliverables||[],
-      archived: r.archived || false
-    }));
-  }
+  try {
+    const ovRes = await sb.from('overrides').select('*').order('saved_at');
+    if(ovRes.data) {
+      overrides = ovRes.data.map(r => ({
+        id: r.id, personId: r.person_id,
+        start: r.start_date, end: r.end_date,
+        load: r.load, reason: r.reason||'', savedAt: r.saved_at
+      }));
+    }
+  } catch(e) { console.warn('overrides load failed:', e.message||e); }
 
-  if(ovRes.data) {
-    overrides = ovRes.data.map(r => ({
-      id: r.id, personId: r.person_id,
-      start: r.start_date, end: r.end_date,
-      load: r.load, reason: r.reason||'', savedAt: r.saved_at
-    }));
-  }
+  try {
+    const notifRes = await sb.from('notifications').select('*').order('created_at_ts');
+    if(notifRes.data) {
+      notifications = notifRes.data.map(r => ({
+        id: r.id, toPersonId: r.to_person_id,
+        type: r.type, data: r.data,
+        readAt: r.read_at, createdAt: r.created_at_ts
+      }));
+    }
+  } catch(e) { console.warn('notifications load failed:', e.message||e); }
 
-  if(notifRes.data) {
-    notifications = notifRes.data.map(r => ({
-      id: r.id, toPersonId: r.to_person_id,
-      type: r.type, data: r.data,
-      readAt: r.read_at, createdAt: r.created_at_ts
-    }));
-  }
-  // Load leaves — wrapped so it never crashes the main load
-  try { await loadLeaves(); } catch(e) { console.warn('leaves skipped'); }
+  try { await loadLeaves(); } catch(e) { console.warn('leaves load failed:', e.message||e); }
 }
 
 // ── SAVE helpers (called after each mutation) ────────────────────
@@ -5256,7 +5262,6 @@ window.addEventListener('load', async function() {
     await loadAllData();
   } catch(e) {
     console.error('Failed to load data:', e.message || String(e));
-    showToast('⚠ Could not connect to database');
   }
   setLoading(false);
 
