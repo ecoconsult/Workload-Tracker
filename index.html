@@ -643,8 +643,8 @@ select option{background:#fff}
       <div style="display:flex;align-items:center;gap:16px">
         <div class="section-title">Projects</div>
         <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12px;font-weight:600">
-          <div id="projFilterAll" onclick="setProjFilter('all')" style="padding:5px 14px;cursor:pointer;background:var(--text);color:#fff;transition:all 0.15s">All Projects</div>
-          <div id="projFilterMine" onclick="setProjFilter('mine')" style="padding:5px 14px;cursor:pointer;color:var(--text2);transition:all 0.15s">My Projects</div>
+          <div id="projFilterAll" onclick="setProjFilter('all')" style="padding:5px 14px;cursor:pointer;color:var(--text2);transition:all 0.15s">All Projects</div>
+          <div id="projFilterMine" onclick="setProjFilter('mine')" style="padding:5px 14px;cursor:pointer;background:var(--text);color:#fff;transition:all 0.15s">My Projects</div>
         </div>
       </div>
       <button class="btn btn-primary" onclick="openAddProjectModal()">+ New Project</button>
@@ -1570,7 +1570,7 @@ function renderMonthly() {
 }
 function shiftMonth(d) { monthOffset+=d; renderMonthly(); }
 
-let projFilter = 'all'; // 'all' or 'mine'
+let projFilter = 'mine'; // 'all', 'mine', or 'archive'
 let calFilter  = 'all'; // 'all' or 'mine'
 
 function setCalFilter(f) {
@@ -1587,19 +1587,28 @@ function setProjFilter(f) {
   document.getElementById('projFilterAll').style.background  = f==='all'  ? 'var(--text)' : '';
   document.getElementById('projFilterAll').style.color       = f==='all'  ? '#fff' : 'var(--text2)';
   document.getElementById('projFilterMine').style.background = f==='mine' ? 'var(--text)' : '';
+  const archBtn = document.getElementById('projFilterArchive'); if(archBtn) archBtn.style.background = f==='archive' ? 'var(--text)' : '';
   document.getElementById('projFilterMine').style.color      = f==='mine' ? '#fff' : 'var(--text2)';
+  if(archBtn) archBtn.style.color = f==='archive' ? '#fff' : 'var(--text2)';
   renderProjects();
 }
-
 function renderProjects() {
   const uid = currentUser ? currentUser.id : null;
-  const filtered = projFilter==='mine' && uid
-    ? projects.filter(p=>(p.members||[]).some(m=>m.personId===uid) || p.creatorId===uid)
-    : projects;
+  const allActive   = projects.filter(p => !p.archived);
+  const allArchived = projects.filter(p =>  p.archived);
+  let filtered;
+  if (projFilter === 'archive') {
+    filtered = allArchived;
+  } else if (projFilter === 'mine' && uid) {
+    filtered = allActive.filter(p=>(p.members||[]).some(m=>m.personId===uid) || p.creatorId===uid);
+  } else {
+    filtered = allActive;
+  }
 
   if(!filtered.length) {
+    const msgs = { mine:'No projects assigned to you yet.', all:'No active projects yet.', archive:'No archived projects.' };
     document.getElementById('projGrid').innerHTML =
-      `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:14px">${projFilter==='mine'?'No projects assigned to you yet.':'No projects yet. Add one to get started.'}</div>`;
+      `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:14px">${msgs[projFilter]||'No projects.'}</div>`;
     return;
   }
   document.getElementById('projGrid').innerHTML = filtered.map(p=>{
@@ -1714,6 +1723,8 @@ function renderProjects() {
         ${isMyProject
           ? `<button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit Project</button>
              <button class="btn btn-sm" onclick="openAssignMember(${p.id})">+ Add Member</button>
+             ${!p.archived && (p.deliverables||[]).length > 0 && (p.deliverables||[]).every(d=>d.status==='approved'||d.status==='done'||d.status==='complete') ? `<button class="btn btn-sm" onclick="archiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">📦 Archive</button>` : ''}
+             ${p.archived ? `<button class="btn btn-sm" onclick="unarchiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">↩ Restore</button>` : ''}
              <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id})">Remove</button>`
           : `<button class="btn btn-sm" style="opacity:0.4;cursor:pointer" onclick="showNoAccess(${p.id},${p.creatorId})">+ Add Member</button>
              <button class="btn btn-sm btn-danger" style="opacity:0.4" onclick="showNoAccess(${p.id},${p.creatorId})">Remove</button>`
@@ -1724,6 +1735,23 @@ function renderProjects() {
 }
 
 let deletingProjectId = null;
+async function archiveProject(projId) {
+  if(!confirm('Archive this project? It will move to the Archive tab.')) return;
+  const proj = projects.find(p=>String(p.id)===String(projId)); if(!proj) return;
+  proj.archived = true;
+  await sb.from('projects').update({archived: true}).eq('id', projId);
+  renderProjects();
+  showToast('Project archived ✓');
+}
+async function unarchiveProject(projId) {
+  const proj = projects.find(p=>String(p.id)===String(projId)); if(!proj) return;
+  proj.archived = false;
+  await sb.from('projects').update({archived: false}).eq('id', projId);
+  renderProjects();
+  showToast('Project restored ✓');
+}
+
+
 function deleteProject(id) {
   const proj = projects.find(p=>p.id===id);
   if(!canEditProject(proj)) { showNoAccess(proj.id,proj.creatorId); return; }
@@ -2782,7 +2810,8 @@ function populateDelivAssign(selectId, proj, selectedId) {
   const sel=document.getElementById(selectId);
   sel.innerHTML=`<option value="">— Unassigned —</option>`+
     proj.members.map(m=>{
-      const p=team.find(t=>t.id===m.personId); if(!p) return '';
+      const p=team.find(t=>t.id===m.personId);
+      if(!p || p.role==='timesheet_only') return '';
       return `<option value="${p.id}"${p.id===selectedId?' selected':''}>${p.name}</option>`;
     }).join('');
 }
@@ -4147,7 +4176,7 @@ function renderHRList(sheets, month) {
         </div>
         <div style="display:flex;gap:6px">
           ${canUnlock?`<button class="btn btn-sm" onclick="hrUnlockTimesheet(${p.id},'${month}')" style="font-size:11px;flex:1">🔓 Unlock</button>`:''}
-          ${s?`<button class="btn btn-sm btn-accent" onclick="hrExportOne(${p.id},'${month}')" style="font-size:11px;flex:1">📥 Export</button>`:''}
+          ${s && s.submitted?`<button class="btn btn-sm btn-accent" onclick="hrExportOne(${p.id},'${month}')" style="font-size:11px;flex:1">📥 Export</button>`:s && !s.submitted ? `<span style="font-size:11px;color:var(--muted);font-style:italic;padding:4px">Awaiting submission</span>` : ''}
         </div>
       </div>`;
     }).join('')}
@@ -5078,7 +5107,8 @@ async function loadAllData() {
       id: r.id, name: r.name, client: r.client||'',
       start: r.start_date, end: r.end_date,
       creatorId: r.creator_id, notes: r.notes||'',
-      members: r.members||[], deliverables: r.deliverables||[]
+      members: r.members||[], deliverables: r.deliverables||[],
+      archived: r.archived || false
     }));
   }
 
