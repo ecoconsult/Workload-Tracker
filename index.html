@@ -3994,9 +3994,13 @@ function mergeApprovedLeavesIntoTsData(personId, month) {
         (c.type==='leave'||c.type==='sick'||c.type==='business') && c.id !== col.id
       );
       const alreadyCovered = otherLeaveCols.some(c => tsData.rows[dateStr][c.id]);
-      // Use the leave's actual hours (supports partial day leave)
-      const hrs = leavesOfType.find(l => l.startDate <= dateStr && l.endDate >= dateStr)?.hours || 8;
-      if(!alreadyCovered) tsData.rows[dateStr][col.id] = hrs;
+      // Use the leave's actual hours — only set if not already saved correctly
+      const matchLeave = leavesOfType.find(l => l.startDate <= dateStr && l.endDate >= dateStr);
+      const hrs = matchLeave ? (matchLeave.hours || 8) : 8;
+      // Only write if not already set (preserve injected value from Supabase)
+      if(!alreadyCovered && !tsData.rows[dateStr][col.id]) {
+        tsData.rows[dateStr][col.id] = hrs;
+      }
     }
   });
   return true;
@@ -4714,7 +4718,6 @@ async function submitLeave() {
   const leaveHours = (startDate === endDate && hoursInput && parseFloat(hoursInput) > 0)
     ? Math.min(8, parseFloat(hoursInput))
     : 8;
-  console.log('LEAVE DEBUG - startDate:', startDate, 'endDate:', endDate, 'hoursInput:', JSON.stringify(hoursInput), 'leaveHours:', leaveHours);
   if(!startDate || !endDate) { showToast('Please select start and end dates'); return; }
   if(endDate < startDate) { showToast('End date must be after start date'); return; }
 
