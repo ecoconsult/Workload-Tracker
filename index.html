@@ -763,7 +763,7 @@ select option{background:#fff}
           <hr style="border:none;border-top:1px solid var(--border);margin-bottom:0">
         </div>
         <!-- Canvas: notes are absolutely positioned here -->
-        <div id="nbCanvas" style="position:relative;min-height:700px;padding:20px 0 20px 0;overflow:visible"></div>
+        <div id="nbCanvas" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;padding:20px 36px 40px 36px;min-height:200px;overflow:visible;box-sizing:border-box;width:100%"></div>
         <!-- Canvas: notes are absolutely positioned here -->
       </div>
     </div>
@@ -3183,19 +3183,15 @@ function saveAllNotes(sectionId) {
   const sections = loadNotes();
   const s = sections.find(x => x.id === sectionId); if (!s) return;
   const canvas = document.getElementById('nbCanvas'); if (!canvas) return;
-  const cw = canvas.offsetWidth || 1300;
   s.notes = [...canvas.querySelectorAll('.nb-note')].map(el => {
-    // Read CSS value — may be % or px
-    const leftStyle = el.style.left || '';
-    const widthStyle = el.style.width || '';
-    const xPct = leftStyle.endsWith('%') ? parseFloat(leftStyle) / 100 : (parseInt(leftStyle) || NB_MARGIN_SIDE) / cw;
-    const wPct = widthStyle.endsWith('%') ? parseFloat(widthStyle) / 100 : (el.offsetWidth || NOTE_DEFAULT_W) / cw;
+    const dragged = el.style.position === 'absolute';
     return {
       id: el.dataset.id,
       content: (el.querySelector('.nb-note-content') || {}).innerHTML || '',
-      x: Math.round(xPct * cw), y: parseInt(el.style.top) || NB_MARGIN_TOP, w: Math.round(wPct * cw),
-      xPct: parseFloat(xPct.toFixed(5)),
-      wPct: parseFloat(wPct.toFixed(5)),
+      dragged,
+      x: dragged ? (parseInt(el.style.left) || 0) : 0,
+      y: dragged ? (parseInt(el.style.top)  || 0) : 0,
+      w: dragged ? (el.offsetWidth || 420)         : 420,
       createdAt: Date.now()
     };
   });
@@ -3364,6 +3360,7 @@ function renderNoteEditor(sectionId) {
   const canvas = document.getElementById('nbCanvas');
   canvas.innerHTML = '';
 
+  // Notes are flex items — no timing needed, just render them
   function placeNotes() {
     s.notes.forEach(n => canvas.appendChild(createNoteEl(n, sectionId)));
     updateCanvasHeight();
@@ -3372,16 +3369,9 @@ function renderNoteEditor(sectionId) {
       first.focus(); lastFocusedNote = first;
       try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
     }
-    // Save percentages only if notes don't have them yet (first render on this device)
-    // After that, positions are locked — tab switches never overwrite saved positions
-    const needsPositionSave = s.notes.some(n => n.xPct == null);
-    if (needsPositionSave) {
-      setTimeout(() => saveAllNotes(sectionId), 200);
-    }
+
   }
-  // Notes use CSS percentages so no canvas measurement needed
-  // Still use rAF to ensure DOM is ready
-  requestAnimationFrame(() => placeNotes(0));
+  placeNotes();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3391,10 +3381,19 @@ function createNoteEl(n, sectionId) {
   const el = document.createElement('div');
   el.className  = 'nb-note';
   el.dataset.id = n.id;
-  el.style.cssText = `position:absolute;left:${nbResolveCss(n,'x')};top:${n.y || NB_MARGIN_TOP}px;width:${nbResolveCss(n,'w')};
-    min-width:220px;min-height:120px;background:var(--surface);border:1px solid var(--border);
-    border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;
-    resize:horizontal;overflow:hidden;box-sizing:border-box`;
+  // Flex item unless user explicitly dragged it to a valid position
+  const isValidDrag = n.dragged && n.x > 0 && n.y > 0;
+  if (isValidDrag) {
+    el.style.cssText = `position:absolute;left:${n.x}px;top:${n.y}px;width:${n.w||420}px;
+      min-width:220px;min-height:120px;background:var(--surface);border:1px solid var(--border);
+      border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;
+      resize:horizontal;overflow:hidden;box-sizing:border-box;z-index:10`;
+  } else {
+    el.style.cssText = `position:relative;flex:0 0 calc(33.333% - 11px);
+      min-width:220px;min-height:120px;background:var(--surface);border:1px solid var(--border);
+      border-radius:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;
+      resize:horizontal;overflow:hidden;box-sizing:border-box`;
+  }
   el.innerHTML = `
     <div class="nb-note-bar" style="display:flex;align-items:center;padding:6px 10px;background:var(--surface2);
       border-bottom:1px solid var(--border);gap:6px;cursor:grab;user-select:none;flex-shrink:0;border-radius:11px 11px 0 0">
@@ -3412,21 +3411,31 @@ function createNoteEl(n, sectionId) {
   el.querySelector('.nb-note-bar').addEventListener('mousedown', function(e) {
     if (e.target.tagName === 'BUTTON') return;
     e.preventDefault();
+    const canvas = document.getElementById('nbCanvas');
+    // Switch to absolute positioning on first drag
+    if (el.style.position !== 'absolute') {
+      const rect = el.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      el.style.position = 'absolute';
+      el.style.left = (rect.left - canvasRect.left) + 'px';
+      el.style.top  = (rect.top  - canvasRect.top)  + 'px';
+      el.style.width = rect.width + 'px';
+      el.style.flex = 'none';
+    }
     const sx = e.clientX, sy = e.clientY;
     const sl = parseInt(el.style.left) || 0, st = parseInt(el.style.top) || 0;
-    let maxZ = 100; document.querySelectorAll('.nb-note').forEach(x => { const z = parseInt(x.style.zIndex) || 1; if (z > maxZ) maxZ = z; });
+    let maxZ = 100; document.querySelectorAll('.nb-note').forEach(x => { const z = parseInt(x.style.zIndex)||1; if(z>maxZ)maxZ=z; });
     el.style.zIndex = maxZ + 1; el.style.boxShadow = '0 8px 30px rgba(0,0,0,0.15)';
-    const onMove = e => {
-      const cv = document.getElementById('nbCanvas'); if (!cv) return;
-      el.style.left = Math.max(NB_MARGIN_SIDE, Math.min(cv.offsetWidth - el.offsetWidth - NB_MARGIN_SIDE, sl + e.clientX - sx)) + 'px';
-      el.style.top  = Math.max(NB_MARGIN_TOP, st + e.clientY - sy) + 'px';
+    const onMove = ev => {
+      el.style.left = Math.max(0, sl + ev.clientX - sx) + 'px';
+      el.style.top  = Math.max(0, st + ev.clientY - sy) + 'px';
       updateCanvasHeight();
     };
     const onUp = () => {
       el.style.boxShadow = 'var(--shadow)';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup',   onUp);
-      nbResolveOverlaps(el); saveAllNotes(sectionId);
+      saveAllNotes(sectionId);
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup',   onUp);
@@ -3499,33 +3508,10 @@ function nbAddNote() {
   nbPushUndo();
   const canvas = document.getElementById('nbCanvas');
   const existing = canvas.querySelectorAll('.nb-note');
-  const M = NB_MARGIN_SIDE;
-  // Use fixed percentages for 3-column layout: margin=2.5%, width=31.5%, gap=1.25%
-  const xPcts = [0.025, 0.3625, 0.70]; // left edges of 3 columns
-  const wPct  = 0.315;                  // each note = 31.5% wide
-  let xPct = 0.025, y = NB_MARGIN_TOP;
-  if (existing.length) {
-    const lastLeft = existing[existing.length-1].style.left;
-    const lastTop  = parseInt(existing[existing.length-1].style.top) || NB_MARGIN_TOP;
-    const lastXPct = lastLeft.endsWith('%') ? parseFloat(lastLeft)/100 : 0.025;
-    // Find which column this note is in and advance to next
-    const col = xPcts.indexOf(xPcts.reduce((a,b) => Math.abs(b-lastXPct)<Math.abs(a-lastXPct)?b:a));
-    if (col < 2) {
-      xPct = xPcts[col + 1];
-      y = lastTop;
-    } else {
-      xPct = xPcts[0];
-      let maxB = 0;
-      existing.forEach(n => { const b=(parseInt(n.style.top)||0)+n.offsetHeight; if(b>maxB)maxB=b; });
-      y = maxB + NB_NOTE_GAP;
-    }
-  }
-  const cw = canvas.offsetWidth || 1300;
   const sections = loadNotes();
   const s = sections.find(sec => sec.id === currentNoteSection); if (!s) return;
-  const newNote = { id: 'n' + Date.now(), content: '',
-    x: Math.round(xPct * cw), y, w: Math.round(wPct * cw),
-    xPct, wPct, createdAt: Date.now() };
+  // New notes are flex items — no position needed
+  const newNote = { id: 'n' + Date.now(), content: '', dragged: false, w: 420, createdAt: Date.now() };
   if (!s.notes) s.notes = [];
   s.notes.push(newNote); saveNotes(sections);
   const elNew = createNoteEl(newNote, currentNoteSection);
