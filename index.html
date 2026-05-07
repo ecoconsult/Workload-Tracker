@@ -4610,7 +4610,7 @@ function getManagerFor(personId) {
 
 async function loadLeaves() {
   try {
-    const res = await sb.from('leaves').select('id,person_id,start_date,end_date,type,status,approved_by');
+    const res = await sb.from('leaves').select('id,person_id,start_date,end_date,type,status,approved_by,hours');
     if(!res || res.error) return; // silently skip if table not ready
     if(res.data) leaves = res.data.map(r=>({
       id: r.id, personId: r.person_id,
