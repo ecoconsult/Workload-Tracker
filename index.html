@@ -3974,7 +3974,7 @@ function mergeApprovedLeavesIntoTsData(personId, month) {
     for(let day = 1; day <= daysInMonth; day++) {
       const dateStr = month + '-' + String(day).padStart(2, '0');
       const dow = new Date(dateStr + 'T12:00:00').getDay();
-      if(dow === 0 || dow === 6) continue;
+      if(dow === 5 || dow === 6) continue; // Fri+Sat = Jordan weekend
       const covered = leavesOfType.some(l => l.startDate <= dateStr && l.endDate >= dateStr);
       if(!covered) continue;
       if(!tsData.rows[dateStr]) tsData.rows[dateStr] = {};
@@ -4768,7 +4768,7 @@ async function injectLeaveIntoTimesheets(personId, startDate, endDate, type, lea
       const dateStr = month + '-' + String(day).padStart(2,'0');
       if(dateStr < startDate || dateStr > endDate) continue;
       const dow = new Date(dateStr + 'T12:00:00').getDay();
-      if(dow === 0 || dow === 6) continue; // skip weekends
+      if(dow === 5 || dow === 6) continue; // skip Fri+Sat (Jordan weekend)
       if(!ts.rows[dateStr]) ts.rows[dateStr] = {};
       ts.rows[dateStr][leaveColId] = 8;
     }
