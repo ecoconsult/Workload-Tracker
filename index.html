@@ -3908,8 +3908,8 @@ async function loadUserTimesheet() {
   if(!tsData.columns) tsData.columns = [];
   if(!tsData.rows) tsData.rows = {};
 
-  // Overlay approved leaves — ensures leave always appears even if injection
-  // hasn't run yet (e.g. first time opening this month's timesheet after leave approved)
+  // Reload leaves fresh then merge — ensures we always have latest leave data
+  await loadLeaves();
   mergeApprovedLeavesIntoTsData(personId, month);
 
   // Render — each step isolated so one failure never blocks the next
