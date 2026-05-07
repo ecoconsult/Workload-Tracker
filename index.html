@@ -3146,9 +3146,15 @@ function nbNoteWidth() {
   // (cw - 2*margin - 2*gap) / 3
   return Math.floor((cw - 72 - 20) / 3);
 }
-// Resolve stored x/w — pure pixel values, exactly as the user placed them
+// Resolve stored x/w to pixels using canvas-relative percentages
 function nbResolvePx(n, field) {
-  if (field === 'x') return n.x || NB_MARGIN_SIDE;
+  const canvas = document.getElementById('nbCanvas');
+  const cw = (canvas && canvas.offsetWidth > 200) ? canvas.offsetWidth : 1300;
+  if (field === 'x') {
+    if (n.xPct != null) return Math.max(NB_MARGIN_SIDE, Math.round(n.xPct * cw));
+    return n.x || NB_MARGIN_SIDE;
+  }
+  if (n.wPct != null) return Math.max(200, Math.round(n.wPct * cw));
   return n.w || NOTE_DEFAULT_W;
 }
 function updateCanvasHeight() {
@@ -3168,14 +3174,19 @@ function saveAllNotes(sectionId) {
   const sections = loadNotes();
   const s = sections.find(x => x.id === sectionId); if (!s) return;
   const canvas = document.getElementById('nbCanvas'); if (!canvas) return;
-  s.notes = [...canvas.querySelectorAll('.nb-note')].map(el => ({
-    id: el.dataset.id,
-    content: (el.querySelector('.nb-note-content') || {}).innerHTML || '',
-    x: parseInt(el.style.left) || NB_MARGIN_SIDE,
-    y: parseInt(el.style.top)  || NB_MARGIN_TOP,
-    w: el.offsetWidth          || NOTE_DEFAULT_W,
-    createdAt: Date.now()
-  }));
+  const cw = canvas.offsetWidth || 1300;
+  s.notes = [...canvas.querySelectorAll('.nb-note')].map(el => {
+    const xPx = parseInt(el.style.left) || NB_MARGIN_SIDE;
+    const wPx = el.offsetWidth || NOTE_DEFAULT_W;
+    return {
+      id: el.dataset.id,
+      content: (el.querySelector('.nb-note-content') || {}).innerHTML || '',
+      x: xPx, y: parseInt(el.style.top) || NB_MARGIN_TOP, w: wPx,
+      xPct: parseFloat((xPx / cw).toFixed(5)),
+      wPct: parseFloat((wPx / cw).toFixed(5)),
+      createdAt: Date.now()
+    };
+  });
   saveNotes(sections);
 }
 
@@ -3326,8 +3337,12 @@ function renderNoteEditor(sectionId) {
   const sections = loadNotes();
   const s = sections.find(x => x.id === sectionId); if (!s) return;
   if (!s.notes || !s.notes.length) {
+    const _dw = nbNoteWidth();
+    const _cw = (document.getElementById('nbCanvas') || {}).offsetWidth || 1300;
     s.notes = [{ id: 'n' + Date.now(), content: '',
-      x: NB_MARGIN_SIDE, y: NB_MARGIN_TOP, w: nbNoteWidth(),
+      x: NB_MARGIN_SIDE, y: NB_MARGIN_TOP, w: _dw,
+      xPct: parseFloat((NB_MARGIN_SIDE / _cw).toFixed(5)),
+      wPct: parseFloat((_dw / _cw).toFixed(5)),
       createdAt: Date.now() }];
   }
   document.getElementById('nbSectionHeader').style.display = 'block';
@@ -3352,12 +3367,12 @@ function renderNoteEditor(sectionId) {
       first.focus(); lastFocusedNote = first;
       try { const r = document.createRange(), sel = window.getSelection(); r.selectNodeContents(first); r.collapse(false); sel.removeAllRanges(); sel.addRange(r); } catch(e) {}
     }
-    // After 200ms, read actual rendered positions and lock them into Supabase.
-    // This only saves if the notes don't already have saved positions (first render).
-    setTimeout(() => {
-      const allHavePositions = s.notes.every(n => n.x && n.w);
-      if (!allHavePositions) saveAllNotes(sectionId);
-    }, 200);
+    // Save percentages only if notes don't have them yet (first render on this device)
+    // After that, positions are locked — tab switches never overwrite saved positions
+    const needsPositionSave = s.notes.some(n => n.xPct == null);
+    if (needsPositionSave) {
+      setTimeout(() => saveAllNotes(sectionId), 200);
+    }
   }
   // Small timeout ensures the tab is fully visible and canvas measured
   setTimeout(() => requestAnimationFrame(placeNotes), 50);
@@ -3478,13 +3493,14 @@ function nbAddNote() {
   nbPushUndo();
   const canvas = document.getElementById('nbCanvas');
   const existing = canvas.querySelectorAll('.nb-note');
-  const nw = NOTE_DEFAULT_W, M = NB_MARGIN_SIDE;
+  const cw = canvas.offsetWidth || 1300;
+  const nw = Math.floor((cw - 72 - 20) / 3); // exact 1/3
+  const M = NB_MARGIN_SIDE;
   let x = M, y = NB_MARGIN_TOP;
   if (existing.length) {
     const last = existing[existing.length - 1];
     const lx = parseInt(last.style.left) || M;
     const lw = last.offsetWidth || nw;
-    const cw = canvas.offsetWidth || 1400;
     if (lx + lw + NB_NOTE_GAP + nw + M <= cw) {
       x = lx + lw + NB_NOTE_GAP;
       y = parseInt(last.style.top) || NB_MARGIN_TOP;
@@ -3496,7 +3512,10 @@ function nbAddNote() {
   }
   const sections = loadNotes();
   const s = sections.find(sec => sec.id === currentNoteSection); if (!s) return;
-  const newNote = { id: 'n' + Date.now(), content: '', x, y, w: nw, createdAt: Date.now() };
+  const newNote = { id: 'n' + Date.now(), content: '', x, y, w: nw,
+    xPct: parseFloat((x / cw).toFixed(5)),
+    wPct: parseFloat((nw / cw).toFixed(5)),
+    createdAt: Date.now() };
   if (!s.notes) s.notes = [];
   s.notes.push(newNote); saveNotes(sections);
   const elNew = createNoteEl(newNote, currentNoteSection);
