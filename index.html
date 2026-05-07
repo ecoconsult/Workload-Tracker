@@ -2030,9 +2030,8 @@ async function doDirectLogin() {
   } else {
     // Consultant / Admin: Supabase password is authoritative, localStorage is legacy fallback
     const { data: pwData } = await sb.from('team').select('password').eq('id', id).maybeSingle();
-    // Supabase is always authoritative — use whatever is stored there
-    const supabasePw = pwData && pwData.password ? pwData.password : null;
-    const correctPin = supabasePw || pins[id] || '1234';
+    // Supabase is the only source of truth for passwords
+    const correctPin = (pwData && pwData.password) ? pwData.password : '1234';
     if(entered !== correctPin) { showToast('Incorrect password'); if(pwEl){pwEl.value='';pwEl.focus();} return; }
     currentUser = user;
     document.getElementById('loginScreen').style.display='none';
@@ -2244,15 +2243,14 @@ async function saveSettings() {
       });
       closeModal('settingsModal'); return;
     } else {
-      // Supabase is always authoritative for password verification
-      let correct = pins[currentUser.id] || '1234';
+      // Supabase is the only source of truth
+      let correct = '1234';
       try {
         const { data: vpd } = await sb.from('team').select('password').eq('id', currentUser.id).maybeSingle();
         if(vpd && vpd.password) correct = vpd.password;
       } catch(e) {}
       if(currentPin!==correct) { showToast('Current password is incorrect'); return; }
-      pins[currentUser.id]=newPin; savePins();
-      // Save to Supabase — awaited so it completes before closing modal
+      // Save to Supabase — authoritative
       const { error: pwErr } = await sb.from('team').update({password: newPin}).eq('id', currentUser.id);
       if(pwErr) { showToast('⚠ Password save failed: ' + pwErr.message); return; }
       showToast('Password updated ✓');
@@ -3081,38 +3079,57 @@ const NB_NOTE_GAP    = 10;
 /* ═══════════════════════════════════════════════════════════
    STORAGE
 ═══════════════════════════════════════════════════════════ */
-function notesKey()  { return currentUser ? 'wt_notes_' + currentUser.id : null; }
+function notesKey() { return currentUser ? 'wt_notes_' + currentUser.id : null; }
+
+// loadNotes: reads from localStorage cache (instant, synchronous)
+// Supabase is the source of truth — localStorage is just a fast local cache
 function loadNotes() {
-  // Load from localStorage as primary (Supabase sync happens async separately)
   const k = notesKey(); if (!k) return [];
   try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch(e) { return []; }
 }
+
+// saveNotes: writes to localStorage immediately AND Supabase
 function saveNotes(s) {
-  // Save to localStorage immediately
-  const k = notesKey(); if (k) localStorage.setItem(k, JSON.stringify(s));
-  // Also sync to Supabase in background
+  const k = notesKey();
+  if(k) localStorage.setItem(k, JSON.stringify(s));
   if(currentUser) {
     sb.from('user_notes').upsert({
       user_id: String(currentUser.id),
-      notes_data: JSON.stringify(s)
-    }).then(({error}) => { if(error) console.warn('notes sync:', error.message); });
+      notes_data: JSON.stringify(s),
+      updated_at: new Date().toISOString()
+    }).catch(e => console.warn('notes save error:', e.message));
   }
 }
+
+// loadNotesFromSupabase: called on login — loads authoritative data from Supabase
+// and updates localStorage cache so loadNotes() returns the right data
 async function loadNotesFromSupabase() {
   if(!currentUser) return;
   try {
-    const {data, error} = await sb.from('user_notes').select('notes_data').eq('user_id', String(currentUser.id)).maybeSingle();
-    if(error || !data) return;
-    const supabaseNotes = JSON.parse(data.notes_data || '[]');
-    if(!supabaseNotes.length) return;
-    // Merge: Supabase wins if it has more sections, otherwise keep local
-    const localNotes = loadNotes();
-    if(supabaseNotes.length >= localNotes.length) {
-      const k = notesKey();
+    const {data, error} = await sb.from('user_notes')
+      .select('notes_data')
+      .eq('user_id', String(currentUser.id))
+      .maybeSingle();
+    if(error) { console.warn('notes load error:', error.message); return; }
+    const k = notesKey();
+    if(data && data.notes_data) {
+      // Supabase has data — update local cache and re-render
       if(k) localStorage.setItem(k, data.notes_data);
-      renderNotesView();
+    } else if(k) {
+      // Nothing in Supabase yet — push local data up (first-time migration)
+      const local = localStorage.getItem(k);
+      if(local && local !== '[]') {
+        await sb.from('user_notes').upsert({
+          user_id: String(currentUser.id),
+          notes_data: local,
+          updated_at: new Date().toISOString()
+        });
+      }
     }
-  } catch(e) { /* silently skip */ }
+    // Re-render notes if currently on notes tab
+    const nv = document.getElementById('view-notes');
+    if(nv && !nv.classList.contains('hidden')) renderNotesView();
+  } catch(e) { console.warn('loadNotesFromSupabase error:', e.message); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -5416,7 +5433,6 @@ window.addEventListener('load', async function() {
   }
   setLoading(false);
 
-  loadPins();
   populateLoginSelect();
   loadPersistedSession();
   subscribeRealtime();
