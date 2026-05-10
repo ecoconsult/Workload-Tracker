@@ -763,7 +763,7 @@ select option{background:#fff}
           <hr style="border:none;border-top:1px solid var(--border);margin-bottom:0">
         </div>
         <!-- Canvas: notes are absolutely positioned here -->
-        <div id="nbCanvas" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;padding:20px 36px 40px 36px;min-height:200px;overflow:visible;box-sizing:border-box;width:100%"></div>
+        <div id="nbCanvas" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;padding:36px 36px 40px 36px;min-height:200px;overflow:hidden;box-sizing:border-box;width:100%"></div>
         <!-- Canvas: notes are absolutely positioned here -->
       </div>
     </div>
@@ -3486,15 +3486,29 @@ function createNoteEl(n, sectionId) {
   content.addEventListener('focus',   nbSaveLastRange);
 
   new ResizeObserver(() => {
-    const cv = document.getElementById('nbCanvas'); if (!cv) return;
-    const maxW = cv.offsetWidth - (parseInt(el.style.left) || 0) - NB_MARGIN_SIDE;
-    if (maxW > 80 && el.offsetWidth > maxW) el.style.width = maxW + 'px';
+    // When user resizes, convert to absolute at current position
+    if (el.style.position !== 'absolute' && el.offsetWidth > 0) {
+      const canvas = document.getElementById('nbCanvas'); if (!canvas) return;
+      const rect = el.getBoundingClientRect();
+      const cr   = canvas.getBoundingClientRect();
+      const newW = el.offsetWidth;
+      el.style.position = 'absolute';
+      el.style.left  = (rect.left - cr.left) + 'px';
+      el.style.top   = (rect.top  - cr.top)  + 'px';
+      el.style.width = newW + 'px';
+      el.style.flex  = 'none';
+      el.style.maxWidth = 'none';
+    }
     clearTimeout(nbSaveTimer); nbSaveTimer = setTimeout(() => saveAllNotes(sectionId), 500);
   }).observe(el);
 
   el.addEventListener('focusin',  () => {
-    let z = 10; document.querySelectorAll('.nb-note').forEach(x => { const nz = parseInt(x.style.zIndex) || 10; if (nz > z) z = nz; });
-    el.style.zIndex = String(z + 1); el.style.borderColor = 'var(--green)'; el.style.boxShadow = '0 0 0 2px rgba(45,143,94,0.12),var(--shadow)';
+    // Only elevate z-index for absolutely positioned (dragged) notes
+    if (el.style.position === 'absolute') {
+      let z = 10; document.querySelectorAll('.nb-note').forEach(x => { const nz = parseInt(x.style.zIndex) || 10; if (nz > z) z = nz; });
+      el.style.zIndex = String(z + 1);
+    }
+    el.style.borderColor = 'var(--green)'; el.style.boxShadow = '0 0 0 2px rgba(45,143,94,0.12),var(--shadow)';
   });
   el.addEventListener('focusout', () => { el.style.borderColor = 'var(--border)'; el.style.boxShadow = 'var(--shadow)'; });
   return el;
