@@ -4668,7 +4668,7 @@ async function submitLeave() {
       });
       // Email notification
       if(manager.email) {
-        const typeLabel = type === 'sick' ? 'Sick Leave' : type === 'business' ? 'Business Leave' : 'Annual Leave';
+        const typeLabel = type === 'sick' ? 'Sick Leave' : type === 'business' ? 'Business Leave' : type === 'wfh' ? 'Work From Home' : 'Annual Leave';
         const fmtD = d => d.split('-').reverse().join('-'); // YYYY-MM-DD → DD-MM-YYYY
         sendApprovalEmail(
           manager.email,
