@@ -3770,18 +3770,65 @@ function renderStickies(s) {
   const el=document.getElementById('nbStickies'); if(!el) return;
   const COLORS=['#FFF9C4','#C8F7C5','#C5E8F7','#FFC5C5','#E8DAFF','#FFE0B2'];
   el.innerHTML=(s.stickies||[]).map(st=>`
-    <div class="nb-sticky" style="background:${st.color};border:1px solid rgba(0,0,0,0.1);border-radius:10px;padding:10px 14px;min-width:150px;max-width:200px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,0.08);flex-shrink:0">
+    <div class="nb-sticky" style="background:${st.color};border:1px solid rgba(0,0,0,0.1);border-radius:10px;padding:10px 14px;min-width:150px;max-width:220px;position:relative;box-shadow:2px 3px 8px rgba(0,0,0,0.08);flex-shrink:0">
       <button onclick="removeSticky('${s.id}','${st.id}')" style="position:absolute;top:4px;right:6px;background:none;border:none;cursor:pointer;font-size:13px;color:rgba(0,0,0,0.3)">×</button>
-      <div contenteditable="true" style="font-size:14px;line-height:1.6;outline:none;min-height:40px;padding-right:12px;color:#333" oninput="stickyDebouncedSave('${s.id}','${st.id}',this)" onblur="saveStickyText('${s.id}','${st.id}',this.innerHTML)">${st.text||''}</div>
+      <div class="nb-note-content nb-sticky-content" contenteditable="true" data-placeholder="Write…"
+        data-section="${s.id}" data-sticky="${st.id}"
+        style="font-size:14px;line-height:1.8;outline:none;min-height:40px;padding-right:12px;color:#333;word-break:break-word;overflow-wrap:break-word;user-select:text;-webkit-user-select:text">${st.text||''}</div>
       <div class="nb-sticky-colors">${COLORS.map(c=>`<span onclick="setStickyColor('${s.id}','${st.id}','${c}')" title="Change colour" style="width:14px;height:14px;border-radius:50%;background:${c};border:1.5px solid rgba(0,0,0,${c===st.color?'0.45':'0.12'});cursor:pointer;flex-shrink:0"></span>`).join('')}</div>
     </div>`).join('')+
     `<button onclick="addSticky('${s.id}')" style="align-self:center;background:none;border:1px dashed var(--border);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0" onmouseenter="this.style.borderColor='var(--green)'" onmouseleave="this.style.borderColor='var(--border)'">📌 Add sticky</button>`;
+  // Attach the exact same editor behaviors the note cards get
+  el.querySelectorAll('.nb-sticky-content').forEach(content=>{
+    const save=()=>saveStickyText(content.dataset.section, content.dataset.sticky, content.innerHTML);
+    const debSave=()=>{ clearTimeout(stickySaveTimer); stickySaveTimer=setTimeout(save,600); };
+
+    /* Todo toggle ── same as notes */
+    content.addEventListener('mousedown', function(e) {
+      e.stopPropagation();
+      const li = e.target.closest && e.target.closest('.nb-todo-list li');
+      if (li && e.clientX - li.getBoundingClientRect().left < 26) {
+        e.preventDefault(); li.classList.toggle('nb-done'); debSave();
+      }
+    });
+
+    /* Keyboard ── same as notes: Tab indent/outdent, "1." + space → numbered list */
+    content.addEventListener('keydown', function(e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+        debSave();
+        return;
+      }
+      if (e.key === ' ') {
+        const sel=window.getSelection();
+        if (sel&&sel.rangeCount) {
+          const node=sel.getRangeAt(0).startContainer;
+          if (node.nodeType===3&&!node.parentElement.closest('li')) {
+            const before=node.textContent.slice(0,sel.getRangeAt(0).startOffset);
+            if (/^\d+\.$/.test(before.trim())) {
+              e.preventDefault();
+              node.textContent=node.textContent.slice(sel.getRangeAt(0).startOffset);
+              document.execCommand('insertOrderedList');
+              debSave();
+              return;
+            }
+          }
+        }
+      }
+    });
+
+    content.addEventListener('input',   debSave);
+    content.addEventListener('blur',    save);
+    content.addEventListener('focus',   ()=>{ lastFocusedNote=content; nbSyncFontSel(); nbSaveLastRange(); });
+    content.addEventListener('keyup',   ()=>{ nbSyncFontSel(); nbSaveLastRange(); });
+    content.addEventListener('mouseup', ()=>{ nbSyncFontSel(); nbSaveLastRange(); });
+  });
 }
-function addSticky(sectionId){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;if(!s.stickies)s.stickies=[];s.stickies.push({id:'st'+Date.now(),text:'',color:['#FFF9C4','#C8F7C5','#C5E8F7','#FFC5C5'][s.stickies.length%4]});saveNotes(sections);renderStickies(s);}
+function addSticky(sectionId){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;if(!s.stickies)s.stickies=[];s.stickies.push({id:'st'+Date.now(),text:'',color:'#FFF9C4'});saveNotes(sections);renderStickies(s);}
 function removeSticky(sectionId,stickyId){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;s.stickies=(s.stickies||[]).filter(x=>x.id!==stickyId);saveNotes(sections);renderStickies(s);}
 function saveStickyText(sectionId,stickyId,html){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;const st=(s.stickies||[]).find(x=>x.id===stickyId);if(!st)return;st.text=html;saveNotes(sections);}
 let stickySaveTimer=null;
-function stickyDebouncedSave(sectionId,stickyId,el){clearTimeout(stickySaveTimer);stickySaveTimer=setTimeout(()=>saveStickyText(sectionId,stickyId,el.innerHTML),600);}
 function setStickyColor(sectionId,stickyId,color){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;const st=(s.stickies||[]).find(x=>x.id===stickyId);if(!st)return;st.color=color;saveNotes(sections);renderStickies(s);}
 
 /* ── Stubs ────────────────────────────────────────────────────── */
