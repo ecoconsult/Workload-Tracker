@@ -575,7 +575,7 @@ select option{background:#fff}
   <div class="summary-row">
     <div class="card"><div class="card-label">Team Availability</div><div class="card-value val-green" id="s-avail">—</div><div class="card-sub">avg free capacity this week</div></div>
     <div class="card"><div class="card-label">Available</div><div class="card-value val-green" id="s-green">—</div><div class="card-sub">people below 60% load</div></div>
-    <div class="card"><div class="card-label">Busy</div><div class="card-value val-yellow" id="s-yellow">—</div><div class="card-sub">people at 60–84% load</div></div>
+    <div class="card"><div class="card-label">Busy</div><div class="card-value val-yellow" id="s-yellow">—</div><div class="card-sub">people at 60–99% load</div></div>
     <div class="card"><div class="card-label">Overloaded</div><div class="card-value val-red" id="s-red">—</div><div class="card-sub">people at 100%+</div></div>
   </div>
 
@@ -1231,10 +1231,10 @@ function fmtMonthYear(d) { return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear(
 function fmtMonthYearShort(d) { return `${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; }
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
-function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<100?'var(--orange)':l===100?'var(--red)':'#8b0000'; }
-function loadBg(l)    { return l<60?'#b8dfc9':l<85?'#f9d97a':l<100?'#fed7aa':'#f5a9a3'; }
-function chipClass(l) { return l<60?'chip-green':l<85?'chip-yellow':l<100?'chip-orange':l===100?'chip-red':'chip-overloaded'; }
-function chipLabel(l) { return l<60?'Available':l<85?'Busy':l<100?'Very Busy':l===100?'Full Capacity':'Overloaded'; }
+function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<95?'var(--orange)':l<100?'var(--red)':'#8b0000'; }
+function loadBg(l)    { return l<60?'#b8dfc9':l<85?'#f9d97a':l<95?'#fed7aa':l<100?'#f5a9a3':'#e79a9a'; }
+function chipClass(l) { return l<60?'chip-green':l<85?'chip-yellow':l<95?'chip-orange':l<100?'chip-red':'chip-overloaded'; }
+function chipLabel(l) { return l<60?'Available':l<85?'Busy':l<95?'Very Busy':l<100?'Full Capacity':'Overloaded'; }
 function getWeekDays(ws) { return Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(d.getDate()+i);return d;}); }
 function dateInRange(d, start, end) {
   const t=new Date(typeof d==='string'?d+'T12:00:00':d).getTime();
@@ -2436,7 +2436,7 @@ function renderMyWork() {
     // Only show leaves where this manager is the direct manager, or Ibrahim sees all
     const pendingLeaves = leaves.filter(l => {
       if (l.status !== 'pending') return false;
-      if (isAdmin()) return true; // Ibrahim sees everything
+      // Everyone (including Ibrahim) only sees requests from their direct reports
       const mgr = getManagerFor(l.personId);
       return mgr && mgr.id === currentUser.id;
     });
@@ -4807,7 +4807,12 @@ async function injectLeaveIntoTimesheets(personId, startDate, endDate, type, lea
 
 async function loadAndRenderLeaveRequests() {
   await loadLeaves();
-  const pending = leaves.filter(l => l.status === 'pending');
+  // Only show requests from the current user's direct reports
+  const pending = leaves.filter(l => {
+    if (l.status !== 'pending') return false;
+    const mgr = getManagerFor(l.personId);
+    return mgr && mgr.id === currentUser.id;
+  });
   const container = document.getElementById('leavePendingList');
   if(!container) return;
   if(!pending.length) {
