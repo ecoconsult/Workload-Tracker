@@ -29,6 +29,8 @@
 * { margin:0; padding:0; box-sizing:border-box; }
 html { scrollbar-gutter: stable; }
 body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-y:scroll; }
+/* Warm beige tint over the whole app (emulates the eye-saver tone the app was designed under) */
+body::after { content:''; position:fixed; inset:0; pointer-events:none; z-index:999999; background:#FAF3E8; mix-blend-mode:multiply; }
 
 /* HEADER */
 .header {
