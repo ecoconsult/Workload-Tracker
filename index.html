@@ -9773,9 +9773,23 @@ async function seedIfEmpty() {
 
 // ── LOAD all data from Supabase ──────────────────────────────────
 async function loadAllData() {
-  // Each query wrapped individually — one failure never blocks the others
+  /* These tables do not depend on each other, so they are fetched together.
+     Run one after another they were seven round trips deep, which is what
+     made the app sit there before anything appeared. */
+  const settled = await Promise.allSettled([
+    sb.from('team').select('*').order('ci'),
+    sb.from('projects').select('*').order('id'),
+    sb.from('overrides').select('*').order('saved_at'),
+    sb.from('notifications').select('*').order('created_at_ts'),
+    sb.from('leaves').select('*'),
+    sb.from('leave_balances').select('*'),
+    sb.from('public_holidays').select('*').order('holiday_date')
+  ]);
+  const got = i => settled[i].status === 'fulfilled' ? settled[i].value : { data:null, error:settled[i].reason };
+
+  // Each result handled individually — one failure never blocks the others
   try {
-    const teamRes = await sb.from('team').select('*').order('ci');
+    const teamRes = got(0);
     if(teamRes.data && teamRes.data.length) {
       // If the department column has not been added in Supabase yet, every
       // person falls back to one department and the separation silently fails.
@@ -9793,7 +9807,7 @@ async function loadAllData() {
   } catch(e) { console.warn('team load failed:', e.message||e); }
 
   try {
-    const projRes = await sb.from('projects').select('*').order('id');
+    const projRes = got(1);
     if(projRes.data && projRes.data.length) {
       allProjects = projRes.data.map(r => normalizeProject({
         id: r.id, name: r.name, client: r.client||'',
@@ -9812,7 +9826,7 @@ async function loadAllData() {
   } catch(e) { console.warn('projects load failed:', e.message||e); }
 
   try {
-    const ovRes = await sb.from('overrides').select('*').order('saved_at');
+    const ovRes = got(2);
     if(ovRes.data) {
       overrides = ovRes.data.map(r => ({
         id: r.id, personId: r.person_id,
@@ -9823,7 +9837,7 @@ async function loadAllData() {
   } catch(e) { console.warn('overrides load failed:', e.message||e); }
 
   try {
-    const notifRes = await sb.from('notifications').select('*').order('created_at_ts');
+    const notifRes = got(3);
     if(notifRes.data) {
       notifications = notifRes.data.map(r => ({
         id: r.id, toPersonId: r.to_person_id,
@@ -9833,7 +9847,43 @@ async function loadAllData() {
     }
   } catch(e) { console.warn('notifications load failed:', e.message||e); }
 
-  try { await loadLeaves(); } catch(e) { console.warn('leaves load failed:', e.message||e); }
+  // Leave, balances and holidays came down in the same batch
+  try {
+    const res = got(4);
+    if(res.data) leaves = res.data.map(r=>({
+      id: r.id, personId: r.person_id,
+      startDate: r.start_date, endDate: r.end_date,
+      type: r.type || 'annual',
+      status: (r.status === 'rejected') ? 'rejected' : 'approved',
+      approvedBy: r.approved_by,
+      hours: r.hours || 8,
+      startTime: r.start_time || DEFAULT_START_T,
+      endTime:   r.end_time   || DEFAULT_END_T,
+      fullDay:   r.full_day === undefined || r.full_day === null ? true : r.full_day
+    }));
+  } catch(e) { console.warn('leaves load failed:', e.message||e); }
+
+  try {
+    const res = got(5);
+    if(res.error) { balancesTableMissing = true; }
+    else {
+      balancesTableMissing = false;
+      leaveBalances = (res.data || []).map(r => ({
+        personId: r.person_id, year: r.year,
+        annual: Number(r.annual || 0), sick: Number(r.sick || 0),
+        compensation: Number(r.compensation || 0)
+      }));
+    }
+  } catch(e) { balancesTableMissing = true; }
+
+  try {
+    const res = got(6);
+    if(res.error) { holidaysTableMissing = true; }
+    else {
+      holidaysTableMissing = false;
+      publicHolidays = (res.data || []).map(r => ({ id:r.id, date:r.holiday_date, name:r.name }));
+    }
+  } catch(e) { holidaysTableMissing = true; }
 }
 
 // ── SAVE helpers (called after each mutation) ────────────────────
@@ -9974,8 +10024,7 @@ window.addEventListener('load', async function() {
   }
   setLoading(false);
 
-  await loadLeaveBalances();
-  await loadPublicHolidays();
+  // balances and holidays arrived with the rest of the data
   populateLoginDeptSelect();
   populateLoginSelect();
   loadPersistedSession();
