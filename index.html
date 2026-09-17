@@ -1889,6 +1889,18 @@ function jordanNow() {
   return new Date(`${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`);
 }
 function isToday(d) { const t=jordanNow(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
+/* Stored timestamps (audit log, createdAt, etc.) are correct UTC instants —
+   the bug was ever displaying them with raw string-slicing instead of
+   converting to Jordan time, which just shows the UTC clock relabelled. */
+function fmtJordanDateTime(iso) {
+  if(!iso) return '';
+  try {
+    const d = new Date(iso);
+    const datePart = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Amman' }); // DD/MM/YYYY
+    const timePart = d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Amman', hour:'2-digit', minute:'2-digit', hour12:false });
+    return datePart + ' ' + timePart;
+  } catch(e) { return ''; }
+}
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
 function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<95?'var(--orange)':l<100?'var(--red)':'#8b0000'; }
 function loadBg(l)    { return l<60?'#b8dfc9':l<85?'#f9d97a':l<95?'#fed7aa':l<100?'#f5a9a3':'#e79a9a'; }
@@ -4613,7 +4625,7 @@ function renderAuditLog() {
   }
   const label = { balance:'Leave balance', budget:'Budget', manager:'Manager', person:'Person', timesheet:'Timesheet' };
   host.innerHTML = rows.slice(0,60).map(r => {
-    const when = r.changed_at ? fmtDateEU(r.changed_at.slice(0,10)) + ' ' + r.changed_at.slice(11,16) : '';
+    const when = fmtJordanDateTime(r.changed_at);
     const subject = r.entity === 'balance'
       ? (personById(r.entity_id)?.name || 'Someone')
       : ((allProjects.find(p => String(p.id) === String(r.entity_id)) || {}).name || r.entity_id);
@@ -4813,7 +4825,14 @@ function subPOTimeline(s) {
    same privacy rule already used for budgets: PM and Admin only. ── */
 function renderProjectBilling(p) {
   if(!canSeeFinance(p)) return '';
-  if(financeTablesMissing) return '';
+  if(financeTablesMissing) {
+    // Never fail silently here — an empty return looks identical to the
+    // billing data having been deleted, which it hasn't been.
+    return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;font-size:11.5px;color:var(--orange)">
+      ⚠ Couldn't load billing data just now — nothing has been deleted, this is a connection hiccup.
+      <a href="javascript:location.reload()" style="color:var(--blue)">Refresh to try again</a>.
+    </div>`;
+  }
   const snap = projectFinanceSnapshot(p.id);
   const cs = contracts.filter(c => String(c.projectId) === String(p.id));
   const sp = subPOs.filter(s => String(s.projectId) === String(p.id));
@@ -5441,7 +5460,7 @@ function renderFinanceAudit() {
   }
   const label = { contract:'Contract/VO', milestone:'Payment Stage', subcontractor_po:'Subcontractor PO' };
   host.innerHTML = rows.map(r => {
-    const when = r.changed_at ? fmtDateEU(r.changed_at.slice(0,10)) + ' ' + r.changed_at.slice(11,16) : '';
+    const when = fmtJordanDateTime(r.changed_at);
     return `<div style="padding:8px 0;border-top:1px solid var(--border);font-size:11.5px">
       <div><strong>${r.note?escapeAttr(r.note):'—'}</strong></div>
       <div style="color:var(--muted);margin-top:2px">${label[r.entity]||r.entity}${r.field?' · '+r.field:''} · ${r.before_value??'—'} → <strong style="color:var(--text)">${r.after_value??'—'}</strong></div>
@@ -10921,8 +10940,24 @@ async function loadAllData() {
     }
   } catch(e) { holidaysTableMissing = true; }
 
+  // A free Supabase project can still be waking up from being idle on the
+  // very first request after a while — that shows up as this one query
+  // failing even though the data itself is completely untouched. One retry
+  // after a short pause covers that before the Billing section on every
+  // project goes silently blank, which is indistinguishable from data loss
+  // to look at even though nothing was actually deleted.
+  const retryOnce = async (fn) => {
+    try {
+      const first = await fn();
+      if(!first.error) return first;
+      await new Promise(r => setTimeout(r, 1200));
+      return await fn();
+    } catch(e) { return { data:null, error:e }; }
+  };
+
   try {
-    const res = got(7);
+    let res = got(7);
+    if(res.error) res = await retryOnce(() => sb.from('contracts').select('*').order('id'));
     if(res.error) { financeTablesMissing = true; }
     else {
       financeTablesMissing = false;
@@ -10936,7 +10971,8 @@ async function loadAllData() {
   } catch(e) { financeTablesMissing = true; }
 
   try {
-    const res = got(8);
+    let res = got(8);
+    if(res.error) res = await retryOnce(() => sb.from('milestones').select('*').order('id'));
     if(!res.error) {
       milestones = (res.data || []).map(r => ({
         id:r.id, contractId:r.contract_id, projectId:r.project_id,
@@ -10952,7 +10988,8 @@ async function loadAllData() {
   } catch(e) {}
 
   try {
-    const res = got(9);
+    let res = got(9);
+    if(res.error) res = await retryOnce(() => sb.from('subcontractor_pos').select('*').order('id'));
     if(!res.error) {
       subPOs = (res.data || []).map(r => ({
         id:r.id, projectId:r.project_id, subcontractorName:r.subcontractor_name||'',
@@ -11143,7 +11180,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v73 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v74 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
