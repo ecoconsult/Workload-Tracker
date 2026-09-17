@@ -484,6 +484,13 @@ select option{background:#fff}
 .nb-note-content th{background:var(--surface2);font-weight:600}
 .nb-note:hover .nb-note-bar{opacity:1!important}
 .nb-note:focus-within .nb-note-bar{opacity:1!important}
+.fin-main-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; align-items:start; }
+.fin-dash-grid { display:grid; grid-template-columns:2.2fr 1fr; gap:20px; align-items:start; }
+.fin-kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:24px; }
+@media(max-width:900px) {
+  .fin-main-grid { grid-template-columns:1fr; }
+  .fin-dash-grid { grid-template-columns:1fr; }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
@@ -581,11 +588,11 @@ select option{background:#fff}
       <div class="field"><label>End Date</label><input type="date" id="epEnd"></div>
     </div>
     <div class="field" id="epBudgetWrap" style="display:none">
-      <label>Budget (JOD)</label>
+      <label>Proposal Budget (JOD)</label>
       <input type="text" inputmode="decimal" id="epBudget" placeholder="optional"
         oninput="this.value=this.value.replace(/[^0-9.]/g,'')">
       <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5">
-        🔒 Visible to you as manager and to the Admin department. Changing it notifies Admin so the figures stay in step.
+        🔒 Visible to you as lead and to the Admin department. Changing it notifies Admin so the figures stay in step.
       </div>
     </div>
     <div class="field"><label>Notes</label><textarea id="epNotes" rows="2"></textarea></div>
@@ -931,6 +938,7 @@ select option{background:#fff}
       <button id="opsTabProjects" onclick="opsSwitchTab('projects')" class="ops-tab" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">📁 Projects &amp; Proposals</button>
       <button id="opsTabTimesheets" onclick="opsSwitchTab('timesheets')" class="ops-tab" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">🕐 Timesheets</button>
       <button id="opsTabLoe" onclick="opsSwitchTab('loe')" class="ops-tab" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">📊 LOE Report</button>
+      <button id="opsTabFinance" onclick="opsSwitchTab('finance')" class="ops-tab" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">💰 Finance</button>
       <button id="opsTabNotes" onclick="opsSwitchTab('notes')" class="ops-tab" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">📝 My Notes</button>
     </div>
 
@@ -974,17 +982,16 @@ select option{background:#fff}
       </div>
       <div id="opsProjStats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        <strong>Name</strong> and <strong>budget</strong> are editable here; everything else comes from the owner.
+        <strong>Name</strong> is editable here; everything else comes from the owner.
         Names should start with the number assigned by Lana Daoud, e.g. <strong>25-14 Dibbeen Jerash</strong>.
-        Budgets are visible only to you and the item's own manager.
       </div>
       <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
         <div style="flex:3 1 700px;min-width:0;overflow-x:auto;border:1px solid var(--border);border-radius:10px">
-          <table id="opsProjTable" class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:1110px"></table>
+          <table id="opsProjTable" class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:960px"></table>
         </div>
         <div style="flex:1 1 260px;max-width:300px;min-width:240px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px">
           <div style="font-size:13px;font-weight:700;margin-bottom:2px">Recent changes</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Who changed a balance or a budget, and when</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Who changed a leave balance or a project, and when</div>
           <div id="opsAuditList" style="max-height:520px;overflow-y:auto"></div>
         </div>
       </div>
@@ -992,7 +999,15 @@ select option{background:#fff}
 
     <!-- Timesheets (reuses the HR view) -->
     <div id="opsPanelTimesheets" style="display:none">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin:28px 0 20px">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:28px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+          <div style="font-size:13px;font-weight:700">Awaiting manager approval</div>
+          <div style="font-size:11px;color:var(--muted)">Every submitted timesheet still pending, regardless of who it's assigned to — a safety net if a manager can't get to it</div>
+        </div>
+        <div id="opsPendingApprovals"></div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
           <div style="font-size:13px;font-weight:700">Outstanding timesheets</div>
           <select id="opsMissingMonth" onchange="renderMissingTimesheets()" style="width:auto;padding:5px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
@@ -1023,27 +1038,53 @@ select option{background:#fff}
 
     <!-- Level of effort, sliced any way -->
     <div id="opsPanelLoe" style="display:none">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;row-gap:8px">
-        <select id="loeDept"    onchange="onLoeFilterChange()" style="width:170px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <select id="loePerson"  onchange="renderLoeReport()"   style="width:160px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <select id="loeProject" onchange="renderLoeReport()"   style="width:200px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <select id="loeType"    onchange="renderLoeReport()"   style="width:168px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
-          <option value="">Projects &amp; proposals</option>
-          <option value="project">Projects only</option>
-          <option value="proposal">Proposals only</option>
-        </select>
-        <label style="font-size:12px;color:var(--text2)">From</label>
-        <select id="loeFrom" onchange="renderLoeReport()" style="width:150px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <label style="font-size:12px;color:var(--text2)">to</label>
-        <select id="loeTo" onchange="renderLoeReport()" style="width:150px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <select id="loeGroup" onchange="renderLoeReport()" style="width:176px;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
-          <option value="project">Group by project</option>
-          <option value="person">Group by person</option>
-          <option value="department">Group by department</option>
-          <option value="month">Group by month</option>
-        </select>
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;row-gap:14px;margin-bottom:14px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Department</label>
+          <select id="loeDept" onchange="onLoeFilterChange()" style="width:160px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Person</label>
+          <select id="loePerson" onchange="onLoeFilterChange()" style="width:150px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Project</label>
+          <select id="loeProject" onchange="onLoeFilterChange()" style="width:190px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Type</label>
+          <select id="loeType" onchange="onLoeFilterChange()" style="width:158px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+            <option value="">Projects &amp; proposals</option>
+            <option value="project">Projects only</option>
+            <option value="proposal">Proposals only</option>
+          </select>
+        </div>
+
+        <div style="width:1px;align-self:stretch;background:var(--border)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Period</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <select id="loeFrom" onchange="renderLoeReport()" style="width:125px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+            <span style="color:var(--muted);font-size:12px">–</span>
+            <select id="loeTo" onchange="renderLoeReport()" style="width:125px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+          </div>
+        </div>
+
+        <div style="width:1px;align-self:stretch;background:var(--border)"></div>
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Group by</label>
+          <select id="loeGroup" onchange="renderLoeReport()" style="width:150px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+            <option value="project">Project</option>
+            <option value="person">Person</option>
+            <option value="department">Department</option>
+            <option value="month">Month</option>
+          </select>
+        </div>
+
         <div style="flex:1"></div>
-        <button class="btn btn-sm" onclick="clearLoeFilters()" style="font-size:11px">Clear</button>
+        <button class="btn btn-sm" onclick="clearLoeFilters()" style="font-size:11px">Clear filters</button>
         <button class="btn btn-accent" onclick="exportLoeReport()" style="font-size:12px">📥 Export</button>
       </div>
       <div id="loeStats" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:stretch"></div>
@@ -1060,6 +1101,54 @@ select option{background:#fff}
 
     <!-- Private notes (reuses the notes view) -->
     <div id="opsPanelNotes" style="display:none"></div>
+
+    <!-- Finance -->
+    <div id="opsPanelFinance" style="display:none">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap">
+        <select id="financeDeptFilter" onchange="renderOpsFinance()" style="width:auto;min-width:auto;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+      </div>
+
+      <div class="fin-kpi-row" id="financeKpis"></div>
+
+      <div class="fin-main-grid">
+        <div class="card">
+          <div class="card-label" style="margin-bottom:12px">Receivables — Owed to Us</div>
+          <div id="financeAgingBar" style="margin-bottom:14px"></div>
+          <div id="financeQueueAR"></div>
+        </div>
+        <div class="card">
+          <div class="card-label" style="margin-bottom:12px">Payables — Owed to Subcontractors</div>
+          <div id="financeQueueAP"></div>
+        </div>
+      </div>
+
+      <div class="fin-dash-grid">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:2px">
+            <div class="card-label" style="margin-bottom:0">All Projects</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input type="text" id="financeProjSearch" oninput="renderFinanceProjectsTable()" placeholder="Search projects…" style="padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);width:150px">
+              <select id="financeProjStatusFilter" onchange="renderFinanceProjectsTable()" style="padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+                <option value="active">Ongoing</option>
+                <option value="archived">Completed</option>
+                <option value="">All</option>
+              </select>
+            </div>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">Click a row to add, edit, or check off its billing</div>
+          <div style="overflow-x:auto">
+            <table id="financeProjectsTable" class="adm-table" style="width:100%;border-collapse:collapse;font-size:12.5px"></table>
+          </div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="card-label" style="margin-bottom:0">Recent Activity</div>
+            <span onclick="clearFinanceActivity()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">Clear</span>
+          </div>
+          <div id="financeAuditList" style="max-height:560px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ══════════ LEAVES (HR) ══════════ -->
@@ -1316,9 +1405,6 @@ select option{background:#fff}
       <div class="field" id="opsNewStartWrap"><label>Start Date</label><input type="date" id="opsNewStart"></div>
       <div class="field"><label id="opsNewEndLabel">End / Deliverable Date</label><input type="date" id="opsNewEnd"></div>
     </div>
-    <div class="field"><label>Budget (JOD)</label>
-      <input type="text" inputmode="decimal" id="opsNewBudget" placeholder="optional"
-        oninput="this.value=this.value.replace(/[^0-9.]/g,'')"></div>
     <div class="field"><label>Team members <span style="font-weight:400;color:var(--muted)">(optional — a manager is not required)</span></label>
       <div id="opsNewMembers" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
     </div>
@@ -1385,7 +1471,7 @@ select option{background:#fff}
   <div class="modal" style="width:400px">
     <button class="modal-close" onclick="closeModal('confirmTsModal')">×</button>
     <h2>Submit Timesheet?</h2>
-    <p class="modal-sub">Once submitted, your timesheet will be locked and sent to HR. You will not be able to edit it unless HR unlocks it.</p>
+    <p class="modal-sub">Once submitted, your timesheet will be locked and sent to your manager for approval. You won't be able to edit it again unless it's returned to you.</p>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('confirmTsModal')">Cancel</button>
       <button class="btn btn-primary" onclick="submitUserTimesheet()">Yes, Submit</button>
@@ -1445,38 +1531,6 @@ select option{background:#fff}
 </div>
 
 <!-- ADD PROJECT MODAL -->
-<div class="overlay" id="addProjModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeModal('addProjModal')">×</button>
-    <h2 id="pjModalTitle">Add Project</h2>
-    <p class="modal-sub" id="pjModalSub">Projects set the baseline workload automatically across their entire duration</p>
-    <div class="two-col">
-      <div class="field"><label id="pjNameLabel">Project Name</label><input type="text" id="pjName" placeholder="e.g. Dibbeen Jerash"></div>
-      <div class="field"><label>Client</label><input type="text" id="pjClient" placeholder="e.g. Sama Dibbeen"></div>
-    </div>
-    <div class="two-col">
-      <div class="field" id="pjStartWrap"><label>Start Date</label><input type="date" id="pjStart"></div>
-      <div class="field"><label id="pjEndLabel">End / Deliverable Date</label><input type="date" id="pjEnd"></div>
-    </div>
-    <div class="field" id="pjBudgetWrap" style="display:none">
-      <label>Proposal Budget (JOD)</label>
-      <input type="text" inputmode="decimal" id="pjBudget" placeholder="e.g. 45000"
-        oninput="this.value=this.value.replace(/[^0-9.]/g,'')">
-      <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5">
-        🔒 Private — visible only to you as proposal lead and to the Admin department. It is not shown to the wider team.
-      </div>
-    </div>
-    <div class="field"><label>Notes</label><textarea id="pjNotes" rows="2" placeholder="Scope, key milestones, special considerations..."></textarea></div>
-    <div class="info-box" id="pjProjectHint" style="margin-top:4px;margin-bottom:16px">💡 After saving, open the project card to add deliverables and deadlines.</div>
-    <div class="info-box" id="pjProposalHint" style="display:none;margin-top:4px;margin-bottom:16px">💡 A proposal only needs its submission date. If it is won you can move it into Projects with one click.</div>
-    <div id="pjMembersWrap"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('addProjModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveNewProject()">Save Project</button>
-    </div>
-  </div>
-</div>
-
 <!-- ADD MEMBER TO PROJECT MODAL -->
 <div class="overlay" id="addProjMemberModal">
   <div class="modal" style="width:420px">
@@ -1572,13 +1626,75 @@ select option{background:#fff}
   </div>
 </div>
 
-<!-- WEEK SUMMARY MODAL -->
-<div class="overlay" id="weekSummaryModal">
+<!-- ADD/EDIT CONTRACT / VO MODAL -->
+<div class="overlay" id="contractModal">
+  <div class="modal" style="width:440px">
+    <button class="modal-close" onclick="closeContractModal()">×</button>
+    <h2 id="contractModalTitle">Add Contract / VO</h2>
+    <p class="modal-sub" id="contractProjLabel"></p>
+    <div class="field"><label>Name</label><input type="text" id="contractName" placeholder="e.g. Main Contract, Wastewater VO"></div>
+    <div class="field"><label>Value (JOD)</label><input type="number" id="contractValue" placeholder="e.g. 100000"></div>
+    <div class="field"><label>Contract file (optional)</label><input type="file" id="contractFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="contractDeleteBtn" style="display:none" onclick="deleteContractItem()">Delete</button>
+      <button class="btn" onclick="closeContractModal()">Cancel</button>
+      <button class="btn btn-primary" id="contractSaveBtn" onclick="saveContractItem()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT PAYMENT STAGE MODAL -->
+<div class="overlay" id="milestoneModal">
+  <div class="modal" style="width:400px">
+    <button class="modal-close" onclick="closeMilestoneModal()">×</button>
+    <h2 id="milestoneModalTitle">Add Payment Stage</h2>
+    <p class="modal-sub" id="milestoneContractLabel"></p>
+    <div class="field"><label>Description</label><input type="text" id="milestoneDesc" placeholder="e.g. Upon signature, Upon final deliverable"></div>
+    <div class="field"><label>Percentage of contract value</label>
+      <input type="number" id="milestonePct" placeholder="e.g. 50" min="0" max="100" step="0.01" oninput="updateMilestonePctPreview()">
+    </div>
+    <div id="milestonePctPreview" style="font-size:12px;color:var(--muted);margin:-8px 0 14px;min-height:14px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="milestoneDeleteBtn" style="display:none" onclick="deleteMilestoneItem()">Delete</button>
+      <button class="btn" onclick="closeMilestoneModal()">Cancel</button>
+      <button class="btn btn-primary" id="milestoneSaveBtn" onclick="saveMilestoneItem()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT SUBCONTRACTOR PO MODAL -->
+<div class="overlay" id="subPOModal">
+  <div class="modal" style="width:440px">
+    <button class="modal-close" onclick="closeSubPOModal()">×</button>
+    <h2 id="subPOModalTitle">Add Subcontractor PO</h2>
+    <p class="modal-sub" id="subPOProjLabel"></p>
+    <div class="field"><label>Subcontractor Name</label>
+      <input type="text" id="subPOName" list="subcontractorNames" placeholder="e.g. Al-Rawi Hydrology Services">
+      <datalist id="subcontractorNames"></datalist>
+    </div>
+    <div class="field"><label>Amount (JOD)</label><input type="number" id="subPOAmount" placeholder="e.g. 8000"></div>
+    <div class="field" id="subPODelivWrap"><label>Linked Deliverable (optional)</label><select id="subPODeliv"></select></div>
+    <div class="field"><label>PO file (optional)</label><input type="file" id="subPOFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="subPODeleteBtn" style="display:none" onclick="deleteSubPOItem()">Delete</button>
+      <button class="btn" onclick="closeSubPOModal()">Cancel</button>
+      <button class="btn btn-primary" id="subPOSaveBtn" onclick="saveSubPOItem()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ISSUE INVOICE MODAL -->
+<div class="overlay" id="issueInvoiceModal">
   <div class="modal" style="width:420px">
-    <button class="modal-close" onclick="closeModal('weekSummaryModal')">×</button>
-    <h2 id="weekSummaryTitle">Week of …</h2>
-    <div id="weekSummaryBody"></div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal('weekSummaryModal')">Close</button></div>
+    <button class="modal-close" onclick="closeModal('issueInvoiceModal')">×</button>
+    <h2>Issue Invoice</h2>
+    <p class="modal-sub" id="issueInvoiceLabel"></p>
+    <div class="field"><label>Invoice file</label><input type="file" id="issueInvoiceFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">The PM will see this attached on the project and can download it to send straight to the client.</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('issueInvoiceModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveIssueInvoice()">Issue Invoice</button>
+    </div>
   </div>
 </div>
 
@@ -1619,6 +1735,9 @@ select option{background:#fff}
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" id="opsNotifyPeople" style="width:15px;height:15px;cursor:pointer">
           <span>New accounts and department changes</span></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="opsNotifyFinance" checked style="width:15px;height:15px;cursor:pointer">
+          <span>Finance — deliverables ready to invoice or pay</span></label>
       </div>
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px;margin-top:4px">Change Password</div>
@@ -1744,7 +1863,23 @@ function fmt(d,short=false) {
 function fmtLong(d) { return `${DAYS_LONG[d.getDay()]}, ${MONTHS_LONG[d.getMonth()]} ${d.getDate()}`; }
 function fmtMonthYear(d) { return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`; }
 function fmtMonthYearShort(d) { return `${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`; }
-function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
+/* Jordan runs on Arabia Standard Time (UTC+3) and has not observed
+   seasonal clock changes since 2022 — but rather than hardcoding that
+   offset, this uses the IANA zone directly so it keeps adjusting itself
+   automatically if that policy ever changes again, no matter what
+   timezone the device it's opened on is set to. */
+function jordanTodayStr() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Amman' }); // YYYY-MM-DD
+}
+function jordanNow() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Amman', year:'numeric', month:'2-digit', day:'2-digit',
+    hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false
+  }).formatToParts(new Date());
+  const g = t => parts.find(p => p.type === t).value;
+  return new Date(`${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}`);
+}
+function isToday(d) { const t=jordanNow(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function initials(n) { return n.split(' ').map(x=>x[0]).join('').toUpperCase(); }
 function loadColor(l) { return l<60?'var(--green)':l<85?'var(--yellow)':l<95?'var(--orange)':l<100?'var(--red)':'#8b0000'; }
 function loadBg(l)    { return l<60?'#b8dfc9':l<85?'#f9d97a':l<95?'#fed7aa':l<100?'#f5a9a3':'#e79a9a'; }
@@ -1773,8 +1908,7 @@ function fmtPeriod(start, end) {
   return `${startLabel} → ${endLabel} <span style="font-size:10px;color:var(--muted);font-weight:400">(${durLabel})</span>`;
 }
 function daysUntil(dateStr) {
-  const diff = new Date(dateStr+'T23:59:59').getTime()-Date.now();
-  const d = Math.ceil(diff/86400000);
+  const d = Math.round((new Date(dateStr+'T00:00:00Z') - new Date(jordanTodayStr()+'T00:00:00Z')) / 86400000);
   if(d<0) return 'Overdue';
   if(d===0) return 'Due today';
   if(d===1) return '1 day left';
@@ -1807,7 +1941,7 @@ function getEffectiveLoad(personId, weekKeyStr) {
     // Baseline for THIS specific day = sum of projects active on this exact day
     let dayBaseline = 0;
     let dayProjects = [];
-    const today0 = wKey(new Date());
+    const today0 = wKey(jordanNow());
     projects.forEach(p => {
       if(!dateInRange(d, p.start, p.end)) return;
       const member = p.members.find(m=>m.personId===personId);
@@ -1877,18 +2011,18 @@ function getEffectiveLoad(personId, weekKeyStr) {
 }
 
 function updateSummary() {
-  const wk = wKey(weekStart(new Date(), weekOffset));
+  const wk = wKey(weekStart(jordanNow(), weekOffset));
   const loads = team.filter(p=>p.role!=='timesheet_only').map(p=>getEffectiveLoad(p.id, wk).load);
   const avg = Math.round(loads.reduce((a,b)=>a+b,0)/loads.length);
   document.getElementById('s-avail').textContent  = (100-avg)+'%';
   document.getElementById('s-green').textContent  = loads.filter(l=>l<60).length;
   document.getElementById('s-yellow').textContent = loads.filter(l=>l>=60&&l<100).length;
   document.getElementById('s-red').textContent    = loads.filter(l=>l>=100).length;
-  document.getElementById('headerDate').textContent = 'Today · '+fmt(new Date());
+  document.getElementById('headerDate').textContent = 'Today · '+fmt(jordanNow());
 }
 
 function renderWeekly() {
-  const ws = weekStart(new Date(), weekOffset);
+  const ws = weekStart(jordanNow(), weekOffset);
   const days = getWeekDays(ws);
   document.getElementById('weekLabel').textContent = fmt(days[0],true)+' – '+fmt(days[4],true);
 
@@ -1964,7 +2098,7 @@ function renderWeekly() {
   }).join('');
 }
 
-let yearlyViewYear = new Date().getFullYear();
+let yearlyViewYear = jordanNow().getFullYear();
 let workloadView = 'weekly';
 
 function setWorkloadView(view) {
@@ -1995,11 +2129,11 @@ function getMonthAvgLoad(personId, year, month) {
 }
 
 function renderYearly() {
-  yearlyViewYear = yearlyViewYear || new Date().getFullYear();
+  yearlyViewYear = yearlyViewYear || jordanNow().getFullYear();
   document.getElementById('yearLabel').textContent = yearlyViewYear;
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const curMonth = new Date().getMonth();
-  const curYear = new Date().getFullYear();
+  const curMonth = jordanNow().getMonth();
+  const curYear = jordanNow().getFullYear();
 
   document.getElementById('yearHead').className = 'year-head';
   document.getElementById('yearHead').innerHTML =
@@ -2319,7 +2453,7 @@ function renderProjects() {
       ${warningBanner}
       <div class="proj-card-top">
         <div style="flex:1;min-width:0">
-          <div class="proj-name">${p.name}</div>
+          <div class="proj-name">${p.name}${(canSeeFinance(p)&&projectFinanceSnapshot(p.id).hasPending)?' <span title="Finance action pending" style="font-size:11px">💰</span>':''}</div>
           <div class="proj-client" style="margin-bottom:6px">${p.client}</div>
           <div style="display:flex;align-items:center;gap:6px">
             ${pmPerson
@@ -2354,6 +2488,7 @@ function renderProjects() {
       ${p.notes?`<div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:var(--surface2);border-radius:6px">${p.notes}</div>`:''}
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Team</div>
       <div class="proj-team">${memberPills}</div>
+      ${renderProjectBilling(p)}
       <div class="proj-actions">
         ${isMyProject
           ? `<button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit Project</button>
@@ -2412,6 +2547,9 @@ async function adminDeleteProject(projId) {
 
   await deleteProjectFromDB(p.id);
   allProjects = allProjects.filter(x => String(x.id) !== String(p.id));
+  contracts = contracts.filter(c => String(c.projectId) !== String(p.id));
+  milestones = milestones.filter(m => String(m.projectId) !== String(p.id));
+  subPOs = subPOs.filter(s => String(s.projectId) !== String(p.id));
   applyDeptScope();
   await writeAudit(kind, p.id, 'deleted', p.name, null, detail || 'no members or deliverables');
   loeLoaded = false;
@@ -2426,32 +2564,24 @@ async function markProjectComplete(projId) {
   const mayComplete = isOpsAdmin() || isAdmin() || String(proj.creatorId) === String(currentUser.id);
   if(!mayComplete) { showToast('Only the manager of this work or the Admin can complete it'); return; }
   const open = (proj.deliverables||[]).filter(d => !d.completed).length;
-  const warn = open
-    ? `\n\n${open} deliverable${open===1?' is':'s are'} still open. They stay as they are.`
-    : '';
-  if(!confirm(`Mark "${proj.name}" as complete?${warn}\n\nIt moves to the Completed tab. Logged hours are unaffected.`)) return;
+  const pendingStages = (typeof milestones !== 'undefined')
+    ? milestones.filter(m => String(m.projectId)===String(proj.id) && m.status==='pending').length : 0;
+  const warn = (open ? `\n\n${open} deliverable${open===1?' is':'s are'} still open. They stay as they are.` : '')
+    + (pendingStages ? `\n\n${pendingStages} payment stage${pendingStages===1?' is':'s are'} still unchecked. If that work has actually been delivered, check it off first so Finance knows to invoice it.` : '');
+  if(!confirm(`Mark "${proj.name}" as complete?${warn}\n\nIt moves to the Completed tab and drops off the workload grid. Logged hours are unaffected.`)) return;
   proj.archived = true;
   proj.completedAt = new Date().toISOString();
+  // Otherwise this project keeps weighing on everyone's workload grid for
+  // as long as today still falls within its original start/end range.
+  (proj.members||[]).forEach(m => { m.allocation = 0; });
   await saveProject(proj);
   applyDeptScope();
   refreshWorkLists();
+  renderWeekly(); updateSummary();
   if(typeof renderOpsProjects === 'function') renderOpsProjects();
-  showToast('Marked complete ✓');
+  showToast('Marked complete ✓' + (pendingStages ? ` · ${pendingStages} payment stage${pendingStages===1?'':'s'} still unchecked` : ''));
 }
 
-async function archiveProject(projId) {
-  if(!confirm('Archive this project? It will move to the Archive tab and remove all workload allocations.')) return;
-  const proj = projects.find(p=>String(p.id)===String(projId)); if(!proj) return;
-  proj.archived = true;
-  // Set all member allocations to 0 so they vanish from the workload grid
-  (proj.members||[]).forEach(m => { m.allocation = 0; });
-  await sb.from('projects').update({
-    archived: true,
-    members: JSON.stringify(proj.members)
-  }).eq('id', projId);
-  refreshWorkLists(); renderWeekly(); updateSummary();
-  showToast('Project archived ✓');
-}
 async function unarchiveProject(projId) {
   const proj = projects.find(p=>String(p.id)===String(projId)); if(!proj) return;
   proj.archived = false;
@@ -2500,10 +2630,11 @@ function openEditProject(id) {
   document.getElementById('epStart').value = proj.start;
   document.getElementById('epEnd').value = proj.end;
   document.getElementById('epNotes').value = proj.notes||'';
-  // The manager of the work can set its budget; everyone else never sees it
+  // Budget is a proposal concept now — actual projects track money through
+  // the Contracts/VOs system instead, so a project never shows this field.
   const bw = document.getElementById('epBudgetWrap');
   if(bw) {
-    const maySee = canSeeBudget(proj);
+    const maySee = proj.isProposal && canSeeBudget(proj);
     bw.style.display = maySee ? '' : 'none';
     if(maySee) document.getElementById('epBudget').value = (proj.budget ?? '');
   }
@@ -2538,11 +2669,12 @@ function saveEditProject() {
   proj.name=name; proj.client=client; proj.start=start; proj.end=end;
   proj.notes=document.getElementById('epNotes').value.trim();
 
-  // Budget: only read it if this person was allowed to see the field, so it
-  // can never be wiped by someone whose form never showed it.
+  // Budget is proposal-only now — only read it if this is a proposal and
+  // this person was allowed to see the field, so a stale value left over
+  // from editing a different proposal can never leak onto a project.
   let budgetChange = null;
   const budgetEl = document.getElementById('epBudget');
-  if(budgetEl && canSeeBudget(proj)) {
+  if(budgetEl && proj.isProposal && canSeeBudget(proj)) {
     const raw = budgetEl.value.trim();
     const next = raw === '' ? null : Number(raw);
     if(raw !== '' && !isFinite(next)) { showToast(`"${raw}" is not a valid budget`); return; }
@@ -2965,30 +3097,6 @@ function normalizeProject(p) {
   return p;
 }
 
-function exportData() {
-  document.getElementById('userMenu').style.display='none';
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    team: team.map(p=>({id:p.id,name:p.name,title:p.title,dept:p.dept,ci:team.indexOf(p)})),
-    projects, overrides, notifications
-  };
-  const json = JSON.stringify(payload, null, 2);
-  navigator.clipboard.writeText(json).then(()=>{
-    showToast('✅ Data copied to clipboard — paste it to Claude!');
-  }).catch(()=>{
-    const ta = document.createElement('textarea');
-    ta.value = json;
-    ta.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:80vw;height:60vh;z-index:9999;padding:12px;font-size:11px;font-family:monospace;border:2px solid var(--green);border-radius:8px;background:#fff';
-    document.body.appendChild(ta); ta.select();
-    const close = document.createElement('button');
-    close.textContent='✕ Close';
-    close.style.cssText='position:fixed;top:calc(50% - 30vh - 36px);left:50%;transform:translateX(-50%);z-index:9999;padding:8px 20px;background:var(--green);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600';
-    close.onclick=()=>{ document.body.removeChild(ta); document.body.removeChild(close); };
-    document.body.appendChild(close);
-    showToast('Select all and copy the text, then paste it to Claude');
-  });
-}
-
 function doLogout() {
   document.getElementById('userMenu').style.display='none';
   clearSession(); currentUser=null; loginSelectedId=null;
@@ -3029,6 +3137,7 @@ function openSettingsModal() {
       document.getElementById('opsEmail2').value = cfg.emails[1] || '';
       document.getElementById('opsNotifyTimesheets').checked = cfg.timesheets;
       document.getElementById('opsNotifyPeople').checked     = cfg.people;
+      document.getElementById('opsNotifyFinance').checked    = cfg.finance;
     }
   }
   // Single-seat accounts have a fixed name — password change only
@@ -3249,7 +3358,7 @@ let opsCurrentTab = 'people';
 
 function renderOpsAdmin() {
   // Department filters
-  ['opsDeptFilter','opsProjDeptFilter'].forEach(id=>{
+  ['opsDeptFilter','opsProjDeptFilter','financeDeptFilter'].forEach(id=>{
     const sel = document.getElementById(id);
     if(!sel) return;
     const keep = sel.value;
@@ -3262,12 +3371,12 @@ function renderOpsAdmin() {
 
 function opsSwitchTab(tab) {
   opsCurrentTab = tab;
-  const map = { people:'opsPanelPeople', projects:'opsPanelProjects', timesheets:'opsPanelTimesheets', loe:'opsPanelLoe', notes:'opsPanelNotes' };
+  const map = { people:'opsPanelPeople', projects:'opsPanelProjects', timesheets:'opsPanelTimesheets', loe:'opsPanelLoe', finance:'opsPanelFinance', notes:'opsPanelNotes' };
   Object.entries(map).forEach(([k,id])=>{
     const el = document.getElementById(id);
     if(el) el.style.display = (k===tab) ? '' : 'none';
   });
-  ['People','Projects','Timesheets','Loe','Notes'].forEach(n=>{
+  ['People','Projects','Timesheets','Loe','Finance','Notes'].forEach(n=>{
     const btn = document.getElementById('opsTab'+n);
     if(!btn) return;
     const on = n.toLowerCase() === tab;
@@ -3282,6 +3391,7 @@ function opsSwitchTab(tab) {
   }
   if(tab==='timesheets') mountOpsTimesheets();
   if(tab==='loe')        mountLoeReport();
+  if(tab==='finance')    renderOpsFinance();
   if(tab==='notes')      mountOpsNotes();
 }
 
@@ -3473,6 +3583,43 @@ function opsRemovePerson(id) {
   showToast(`${p.name} removed`);
 }
 
+/* Anyone whose account Admin edits should hear about it directly — a
+   changed department, manager, title or email is easy to miss as just
+   an in-app notification. */
+async function notifyPersonOfProfileChange(person, before, after) {
+  if(!currentUser || String(currentUser.id) === String(person.id)) return;
+  const lines = [];
+  if(before.name !== after.name) lines.push(`Name: ${before.name||'—'} → ${after.name||'—'}`);
+  if(before.title !== after.title) lines.push(`Title: ${before.title||'—'} → ${after.title||'—'}`);
+  if(before.department !== after.department) lines.push(`Department: ${deptName(before.department)} → ${deptName(after.department)}`);
+  if(String(before.managerId||'') !== String(after.managerId||'')) {
+    const beforeMgr = before.managerId ? (personById(before.managerId)?.name || 'Unknown') : 'None';
+    const afterMgr  = after.managerId  ? (personById(after.managerId)?.name  || 'Unknown') : 'None';
+    lines.push(`Manager: ${beforeMgr} → ${afterMgr}`);
+  }
+  if(before.email !== after.email) lines.push(`Email: ${before.email||'—'} → ${after.email||'—'}`);
+  if(before.role !== after.role) lines.push(`Access level: ${before.role||'member'} → ${after.role||'member'}`);
+  if(!lines.length) return;
+  const message = `${currentUser.name} updated your account:\n\n${lines.join('\n')}`;
+  try { addNotification(person.id, 'profile_changed', { message }); } catch(e) {}
+  // Email whichever address is current, so a changed address still gets told
+  const toEmail = after.email || before.email;
+  if(toEmail) {
+    try { await sendApprovalEmail(toEmail, after.name, currentUser.name, 'Your account was updated', message); } catch(e) {}
+  }
+}
+/* New accounts get a welcome email with their temporary password, rather
+   than being silently created with no way to know they exist. */
+async function notifyNewAccount(person) {
+  if(!person.email) return;
+  const url = appUrl('weekly');
+  try {
+    await sendApprovalEmail(person.email, person.name, currentUser ? currentUser.name : 'Admin',
+      'Your Workload Tracker account is ready',
+      `An account was created for you on the Team Workload Tracker.\n\nLog in with your name and the temporary password 1234 — you'll be asked to set a new one straight away.\n\nOpen it here: ${url}`, url);
+  } catch(e) {}
+}
+
 function readOpsRow(p) {
   const g = id => document.getElementById(id);
   const name = g('ops_name_'+p.id), title = g('ops_title_'+p.id), dept = g('ops_dept_'+p.id);
@@ -3514,10 +3661,17 @@ async function repairProjectDepartments() {
 }
 
 async function saveOpsPeople() {
-  // 1. Existing people
+  // 1. Existing people — snapshot before mutating, so we know what to tell them
   const touched = [];
+  const changed = [];
   allTeam.filter(p=>!isSingleSeat(p)).forEach(p=>{
-    if(document.getElementById('ops_name_'+p.id)) touched.push(readOpsRow(p));
+    if(document.getElementById('ops_name_'+p.id)) {
+      const before = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role };
+      readOpsRow(p);
+      const after = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role };
+      if(JSON.stringify(before) !== JSON.stringify(after)) changed.push({ person:p, before, after });
+      touched.push(p);
+    }
   });
 
   // 2. New people
@@ -3544,6 +3698,11 @@ async function saveOpsPeople() {
   for(const p of created) {
     await sb.from('team').update({ password:'1234', must_change_password:true }).eq('id', p.id);
   }
+
+  // 4. Tell people what changed — a silent edit to someone's role, department
+  //    or manager is easy to miss otherwise.
+  for(const c of changed) notifyPersonOfProfileChange(c.person, c.before, c.after);
+  for(const p of created) notifyNewAccount(p);
 
   opsNewRows = [];
   applyDeptScope();
@@ -3596,7 +3755,7 @@ function openOpsNewItem(isProposal) {
   refreshOpsNewMembers();
   if(deptSel) deptSel.onchange = () => { refreshOpsNewPMOptions(); refreshOpsNewMembers(); };
 
-  ['opsNewName','opsNewClient','opsNewStart','opsNewEnd','opsNewBudget','opsNewNotes']
+  ['opsNewName','opsNewClient','opsNewStart','opsNewEnd','opsNewNotes']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
 
   openOverlay('opsNewItemModal');
@@ -3640,12 +3799,11 @@ async function saveOpsNewItem() {
   const pmRaw  = (document.getElementById('opsNewPM')||{}).value || '';
   const start  = (document.getElementById('opsNewStart')||{}).value;
   const end    = (document.getElementById('opsNewEnd')||{}).value;
-  const budget = (document.getElementById('opsNewBudget')||{}).value.trim();
   const notes  = (document.getElementById('opsNewNotes')||{}).value.trim();
 
   if(!name) { showToast(opsNewIsProposal ? 'Give the proposal a name' : 'Give the project a name'); return; }
   if(!end)  { showToast(opsNewIsProposal ? 'Set a submission date' : 'Set an end date'); return; }
-  const startDate = opsNewIsProposal ? (start || ymd(new Date())) : start;
+  const startDate = opsNewIsProposal ? (start || ymd(jordanNow())) : start;
   if(!startDate) { showToast('Set a start date'); return; }
   if(new Date(end) < new Date(startDate)) { showToast('The end date cannot be before the start date'); return; }
 
@@ -3660,7 +3818,7 @@ async function saveOpsNewItem() {
       .map(el => ({ personId: parseInt(el.value), allocation: 0, role:'coordinator' })),
     department: dept,
     isProposal: opsNewIsProposal,
-    budget: budget ? Number(budget) : null,
+    budget: null,
     archived: false
   };
 
@@ -3670,6 +3828,10 @@ async function saveOpsNewItem() {
   }
   allProjects.push(proj);
   await saveProject(proj);
+  if(proj.creatorId) {
+    const pm = personById(proj.creatorId);
+    if(pm) notifyAssignment(proj, pm);
+  }
   applyDeptScope();
   closeModal('opsNewItemModal');
   renderOpsProjects();
@@ -3801,13 +3963,13 @@ function renderOpsProjStats() {
   const soon = openProps.filter(p => {
     if(p.proposalSubmitted) return false;
     if(!p.end) return false;
-    const d = Math.ceil((new Date(p.end+'T12:00:00') - new Date()) / 86400000);
+    const d = Math.ceil((new Date(p.end+'T12:00:00') - jordanNow()) / 86400000);
     return d >= 0 && d <= 14;
   });
-  const overdue = openProps.filter(p => !p.proposalSubmitted && p.end && new Date(p.end+'T12:00:00') < new Date());
+  const overdue = openProps.filter(p => !p.proposalSubmitted && p.end && new Date(p.end+'T12:00:00') < jordanNow());
 
   // Projects running past their end date — separate from the proposal counts
-  const lateProjects = projects_.filter(p => !p.archived && p.end && new Date(p.end+'T12:00:00') < new Date());
+  const lateProjects = projects_.filter(p => !p.archived && p.end && new Date(p.end+'T12:00:00') < jordanNow());
 
   const card = (label, value, colour, tip) => `<div title="${tip||''}" style="flex:1;min-width:118px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 12px">
       <div style="font-size:18px;font-weight:700;color:${colour||'var(--text)'}">${value}</div>
@@ -3815,7 +3977,6 @@ function renderOpsProjStats() {
     </div>`;
 
   const pipeline = openProps.reduce((s,p)=>s + Number(p.budget||0), 0);
-  const projectValue = projects_.filter(p=>!p.archived).reduce((s,p)=>s + Number(p.budget||0), 0);
 
   host.innerHTML =
       card('Active projects', projects_.filter(p=>!p.archived).length, null,
@@ -3823,8 +3984,6 @@ function renderOpsProjStats() {
     + card('Projects past end date', lateProjects.length,
            lateProjects.length ? 'var(--red)' : 'var(--text)',
            'Active projects whose end date has passed')
-    + card('Project value', projectValue ? fmtMoney(projectValue) : '—', null,
-           'Total budget across active projects')
     + card('Open proposals', openProps.length, '#6b3fa0',
            'Proposals not yet won, lost or archived')
     + card('Proposals due ≤ 14 days', soon.length,
@@ -3867,39 +4026,30 @@ function renderOpsProjects() {
 
   const head = `<colgroup>
       <col><col style="width:74px"><col style="width:84px"><col style="width:108px">
-      <col style="width:112px"><col style="width:58px"><col style="width:88px"><col style="width:134px">
-      <col style="width:156px"><col style="width:150px">
+      <col style="width:112px"><col style="width:58px"><col style="width:88px"><col style="width:88px">
+      <col style="width:150px">
     </colgroup>
     <thead><tr>
       ${th('Name')}${th('Type','center')}${th('Status','center')}${th('Client')}${th('Manager')}
-      ${th('Dept','center')}${th('Budget (JOD)','right')}${th('Due')}${th('Period')}${th('','center')}
+      ${th('Dept','center')}${th('Start')}${th('End')}${th('','center')}
     </tr></thead>`;
 
   const td = 'padding:8px 9px;color:var(--text2);white-space:nowrap';
   const body = rows.map(p=>{
     const pm = personById(p.creatorId);
-    const period = (p.start && p.end) ? `${fmtDateEU(p.start)} → ${fmtDateEU(p.end)}` : '—';
-    let dueCell = '—';
+    const startCell = p.start ? fmtDateEU(p.start) : '—';
+    let endCell = '—';
     if(p.end) {
-      const d = Math.ceil((new Date(p.end+'T12:00:00') - new Date()) / 86400000);
+      const d = Math.ceil((new Date(p.end+'T12:00:00') - jordanNow()) / 86400000);
       const sub = !!p.proposalSubmitted;
       const col = p.archived ? 'var(--muted)' : sub ? 'var(--green)' : d < 0 ? 'var(--red)' : d <= 14 ? 'var(--orange)' : 'var(--text2)';
-      const note = p.archived ? '' : sub ? ' · submitted' : d < 0 ? ' · overdue' : d === 0 ? ' · today' : ` · ${d}d`;
-      dueCell = `<span style="color:${col}">${fmtDateEU(p.end)}${note}</span>`;
+      endCell = `<span style="color:${col}">${fmtDateEU(p.end)}</span>`;
     }
 
     const nameCell = opsProjEditMode
       ? `<input type="text" id="opsproj_${p.id}" value="${escapeAttr(p.name||'')}"
            style="width:100%;padding:5px 8px;font-size:13px;font-weight:500;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">`
       : `<span style="font-weight:500;color:var(--text)">${p.name||'—'}</span>`;
-
-    const budgetCell = opsProjEditMode
-      ? `<input type="text" inputmode="decimal" id="opsbudget_${p.id}" value="${p.budget ?? ''}"
-           placeholder="—" title="Budget in JOD"
-           oninput="this.value=this.value.replace(/[^0-9.]/g,'')"
-           style="width:100%;text-align:right;padding:5px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">`
-      : (p.budget ? `<span style="color:var(--text);font-variant-numeric:tabular-nums">${Number(p.budget).toLocaleString('en-US')}</span>`
-                  : '<span style="color:var(--muted)">—</span>');
 
     return `<tr style="border-bottom:1px solid var(--border)">
       <td style="padding:${opsProjEditMode?'5px':'8px'} 12px;white-space:nowrap">${nameCell}</td>
@@ -3910,9 +4060,8 @@ function renderOpsProjects() {
       <td style="${td};overflow:hidden;text-overflow:ellipsis">${p.client||'—'}</td>
       <td style="${td}">${pm ? pm.name : '<span style="color:var(--orange);font-weight:600">— unassigned —</span>'}</td>
       <td style="${td};text-align:center">${deptShort(p.department||DEFAULT_DEPT)}</td>
-      <td style="padding:${opsProjEditMode?'5px':'8px'} 12px;text-align:right;white-space:nowrap">${budgetCell}</td>
-      <td style="${td}">${dueCell}</td>
-      <td style="${td}">${period}</td>
+      <td style="${td}">${startCell}</td>
+      <td style="${td}">${endCell}</td>
       <td style="padding:6px 8px;text-align:right;white-space:nowrap">
         ${p.archived
           ? `<button class="btn btn-sm" style="font-size:11px" onclick="unarchiveProject(${p.id})">↩ Reopen</button>`
@@ -3943,31 +4092,20 @@ function toggleOpsProjEdit() {
 }
 
 async function saveOpsProjectNames() {
-  let names = 0, budgets = 0;
+  let names = 0;
 
   for(const p of allProjects) {
     const nameEl   = document.getElementById('opsproj_'+p.id);
-    const budgetEl = document.getElementById('opsbudget_'+p.id);
-    if(!nameEl && !budgetEl) continue;      // not on screen under the current filters
+    if(!nameEl) continue;      // not on screen under the current filters
 
     let dirty = false;
 
     if(nameEl) {
       const val = nameEl.value.trim();
-      if(val && val !== p.name) { p.name = val; names++; dirty = true; }
-    }
-
-    if(budgetEl) {
-      const raw = budgetEl.value.trim();
-      // Blank clears the budget; anything else must be a number
-      const next = raw === '' ? null : Number(raw);
-      if(raw !== '' && !isFinite(next)) {
-        showToast(`"${raw}" is not a valid budget`); return;   // stays in edit mode
-      }
-      const before = (p.budget === undefined || p.budget === null) ? null : Number(p.budget);
-      if(next !== before) {
-        p.budget = next; budgets++; dirty = true;
-        writeAudit('budget', p.id, p.isProposal ? 'proposal' : 'project', before, next, 'Edited on the Admin page');
+      if(val && val !== p.name) {
+        const before = p.name;
+        p.name = val; names++; dirty = true;
+        notifyPMOfAdminChange(p, `${currentUser.name} renamed "${before}" to "${val}".`);
       }
     }
 
@@ -3978,10 +4116,7 @@ async function saveOpsProjectNames() {
   opsProjEditMode = false;
   renderOpsProjects();
 
-  const bits = [];
-  if(names)   bits.push(`${names} name${names===1?'':'s'}`);
-  if(budgets) bits.push(`${budgets} budget${budgets===1?'':'s'}`);
-  showToast(bits.length ? `Updated ${bits.join(' and ')} ✓` : 'No changes');
+  showToast(names ? `Updated ${names} name${names===1?'':'s'} ✓` : 'No changes');
 }
 
 /* ── Timesheets ─────────────────────────────────────────────── */
@@ -4118,6 +4253,11 @@ async function loadLoeData() {
   } catch(e) { console.warn('LOE load failed', e); }
 }
 
+/* Every dropdown here only ever offers options that some combination of
+   the OTHERS could actually return — so there's no way to end up with a
+   selection that silently shows zero rows. Each one excludes its own
+   filter when scoping the rows it draws options from, so the value
+   you've already picked never disappears out from under you. */
 function fillLoeFilters() {
   const set = (id, html, keep) => {
     const el = document.getElementById(id); if(!el) return;
@@ -4130,17 +4270,35 @@ function fillLoeFilters() {
     ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join(''));
 
   const dept = (document.getElementById('loeDept')||{}).value || '';
-  const people = allTeam.filter(p => !isSingleSeat(p) && (!dept || personDept(p) === dept))
+  const type = (document.getElementById('loeType')||{}).value || '';
+  const person = (document.getElementById('loePerson')||{}).value || '';
+  const project = (document.getElementById('loeProject')||{}).value || '';
+
+  const matches = (r, exclude) => {
+    if(exclude !== 'dept'    && dept    && r.department !== dept) return false;
+    if(exclude !== 'type'    && type    && (type === 'proposal' ? !r.isProposal : r.isProposal)) return false;
+    if(exclude !== 'person'  && person  && String(r.personId) !== String(person)) return false;
+    if(exclude !== 'project' && project && r.projectName !== project && String(r.projectId) !== project) return false;
+    return true;
+  };
+
+  // Person options: everyone matching Dept + Type + Project (own filter excluded)
+  const peopleIds = new Set(loeRows.filter(r => matches(r, 'person')).map(r => String(r.personId)));
+  const people = allTeam.filter(p => !isSingleSeat(p) && peopleIds.has(String(p.id)))
                         .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   set('loePerson', `<option value="">All people</option>` +
     people.map(p=>`<option value="${p.id}">${p.name}</option>`).join(''));
 
-  const projNames = [...new Set(loeRows.map(r => r.projectName))].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  // Project options: everything matching Dept + Type + Person (own filter excluded)
+  const scopedForProjects = loeRows.filter(r => matches(r, 'project'));
+  const projNames = [...new Set(scopedForProjects.map(r => r.projectName))].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
   set('loeProject', `<option value="">All projects</option>` +
     projNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join(''));
 
-  // One list of every month that has hours, used for both ends of the range.
-  const months = [...new Set(loeRows.map(r => r.month))].filter(Boolean).sort();
+  // Months on offer reflect every other filter currently active, so the
+  // range never spans months this selection has nothing in.
+  const scopedForMonths = loeRows.filter(r => matches(r, null));
+  const months = [...new Set(scopedForMonths.map(r => r.month))].filter(Boolean).sort();
   const opts = months.map(m=>`<option value="${m}">${tsMonthLabel(m)}</option>`).join('');
   set('loeFrom', `<option value="">Earliest</option>` + opts);
   set('loeTo',   `<option value="">Latest</option>` + opts);
@@ -4455,6 +4613,886 @@ function renderAuditLog() {
       <div style="color:var(--muted);white-space:nowrap">${when}</div>
     </div>`;
   }).join('');
+}
+
+/* ══════════════════════════════════════════════════════════════
+   FINANCE — CONTRACTS, VOs, SUBCONTRACTOR POs
+   Two money flows, tracked separately and never merged:
+     - Contracts & VOs hold client milestones. A deliverable being
+       ticked never moves these — only the PM explicitly marking a
+       milestone "reached" does, because internal completion and
+       client submission are not the same moment.
+     - Subcontractor POs track what we owe out. These CAN be linked
+       to a deliverable, and ticking that deliverable flips the
+       linked PO to ready-to-pay automatically. Unlinked ones are
+       confirmed manually. Either way, Finance is notified instantly.
+   Every table here degrades silently if the migration hasn't been
+   run yet, same as the audit log above.
+   ══════════════════════════════════════════════════════════════ */
+
+let contracts = [];        // {id, projectId, name, value, currency, fileUrl, fileName, createdBy, createdAt}
+let milestones = [];       // {id, contractId, projectId, description, amount, status, createdAt, reachedAt, invoicedAt, sentAt, paidAt, reachedBy}
+let subPOs = [];           // {id, projectId, subcontractorName, amount, currency, deliverableId, fileUrl, fileName, status, createdBy, createdAt, confirmedAt, paidAt}
+let financeTablesMissing = false;
+
+const FINANCE_BUCKET = 'project-files';
+
+function canSeeFinance(proj) {
+  if(!currentUser || !proj) return false;
+  if(isOpsAdmin() || isAdmin()) return true;
+  return String(proj.creatorId) === String(currentUser.id);
+}
+
+/* Broader than canEditProject on purpose: Finance (Admin/Ops, id 9998)
+   never created a project, but still has to be able to add, edit and
+   act on its billing — canEditProject alone would lock them out. */
+function canManageFinance(proj) {
+  if(!currentUser || !proj) return false;
+  if(isOpsAdmin() || isAdmin()) return true;
+  return String(proj.creatorId) === String(currentUser.id);
+}
+function isFinanceRole() { return isOpsAdmin() || isAdmin(); }
+
+function projById(id) {
+  return allProjects.find(p => String(p.id) === String(id)) || null;
+}
+
+/* ── Save helpers — mirror saveProject's upsert-per-mutation pattern ── */
+async function saveContract(c) {
+  try {
+    await sb.from('contracts').upsert({
+      id: c.id, project_id: c.projectId, name: c.name,
+      value: c.value, currency: c.currency || 'JOD',
+      file_url: c.fileUrl || null, file_name: c.fileName || null,
+      created_by: c.createdBy, created_at: c.createdAt
+    });
+  } catch(e) { console.warn('saveContract failed:', e.message||e); }
+}
+async function saveMilestoneRow(m) {
+  try {
+    await sb.from('milestones').upsert({
+      id: m.id, contract_id: m.contractId, project_id: m.projectId,
+      description: m.description, amount: m.amount, percentage: m.percentage, status: m.status,
+      created_at: m.createdAt || null,
+      reached_at: m.reachedAt || null, invoiced_at: m.invoicedAt || null,
+      sent_at: m.sentAt || null, paid_at: m.paidAt || null,
+      reached_by: m.reachedBy || null,
+      deliverable_id: m.deliverableId || null, auto_trigger: !!m.autoTrigger,
+      invoice_file_url: m.invoiceFileUrl || null, invoice_file_name: m.invoiceFileName || null
+    });
+  } catch(e) { console.warn('saveMilestoneRow failed:', e.message||e); }
+}
+async function saveSubPO(s) {
+  try {
+    await sb.from('subcontractor_pos').upsert({
+      id: s.id, project_id: s.projectId, subcontractor_name: s.subcontractorName,
+      amount: s.amount, currency: s.currency || 'JOD', deliverable_id: s.deliverableId || null,
+      file_url: s.fileUrl || null, file_name: s.fileName || null, status: s.status,
+      created_by: s.createdBy, created_at: s.createdAt,
+      confirmed_at: s.confirmedAt || null, paid_at: s.paidAt || null
+    });
+  } catch(e) { console.warn('saveSubPO failed:', e.message||e); }
+}
+
+/* ── File upload — contract/PO documents, so nobody has to ask for them ── */
+async function uploadFinanceFile(inputEl, pathPrefix) {
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return null;
+  if(file.size > 10 * 1024 * 1024) { showToast('⚠ File is larger than 10MB'); return null; }
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const path = `${pathPrefix}/${Date.now()}_${safeName}`;
+  try {
+    const { error } = await sb.storage.from(FINANCE_BUCKET).upload(path, file, { upsert:false });
+    if(error) { showToast('⚠ Upload failed — file saved without it: ' + (error.message||'')); return null; }
+    const { data } = sb.storage.from(FINANCE_BUCKET).getPublicUrl(path);
+    return { url: data.publicUrl, name: file.name };
+  } catch(e) { showToast('⚠ Upload failed — file saved without it'); return null; }
+}
+
+/* ── Notify Finance — same instant bell + email already used for timesheets ── */
+async function notifyFinance(kind, message, projId) {
+  try { addNotification(9998, kind, { message, projectId: projId }); } catch(e) {}
+  const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('finance') : [];
+  const url = appUrl('admin');
+  for(const addr of to) {
+    try {
+      // Pass the link only as action_url (the template already renders it as
+      // a button) — appending it into the body too just doubles it up.
+      await sendApprovalEmail(addr, 'Finance', currentUser ? currentUser.name : 'System',
+        'Finance — ' + ((projById(projId)||{}).name || 'Update'), message, url);
+    } catch(e) {}
+  }
+}
+/* Whenever Admin touches something on a PM's project — adds a contract,
+   a PO, edits a stage, renames the project — the PM should hear about it
+   the same way they'd hear about anything else that changed under them.
+   Skipped when the PM is the one making the change themselves. */
+async function notifyPMOfAdminChange(proj, message) {
+  if(!proj || !proj.creatorId || !currentUser) return;
+  if(String(currentUser.id) === String(proj.creatorId)) return;
+  addNotification(proj.creatorId, 'admin_project_change', { message, projectId: proj.id });
+  const pm = personById(proj.creatorId);
+  if(pm && pm.email) {
+    try {
+      await sendApprovalEmail(pm.email, pm.name, currentUser.name,
+        `Update on ${proj.name}`, message, appUrl('projects'));
+    } catch(e) {}
+  }
+}
+
+/* ── Per-project money snapshot — contracted, invoiced, outstanding, owed out ── */
+/* Real AR terms, not approximations:
+   - readyToInvoice: checked off by the PM, Finance hasn't billed it yet
+   - outstanding:    actually billed (invoiced or sent) but not yet paid
+   - collected:      paid
+   A stage sitting at "reached" has not been billed — it must never be
+   counted as outstanding, or Outstanding trivially equals Contracted
+   any time nothing has been invoiced yet, which is exactly the bug. */
+function projectFinanceSnapshot(projId) {
+  const cs = contracts.filter(c => String(c.projectId) === String(projId));
+  const cIds = cs.map(c => c.id);
+  const ms = milestones.filter(m => cIds.includes(m.contractId));
+  const sp = subPOs.filter(s => String(s.projectId) === String(projId));
+  const contracted = cs.reduce((s,c) => s + Number(c.value||0), 0);
+  const readyToInvoice = ms.filter(m => m.status==='reached').reduce((s,m) => s + Number(m.amount||0), 0);
+  const outstanding = ms.filter(m => ['invoiced','sent'].includes(m.status)).reduce((s,m) => s + Number(m.amount||0), 0);
+  const collected = ms.filter(m => m.status==='paid').reduce((s,m) => s + Number(m.amount||0), 0);
+  const owedToSubs = sp.filter(s => s.status !== 'paid').reduce((s,x) => s + Number(x.amount||0), 0);
+  const hasPending = ms.some(m => m.status === 'reached') || sp.some(s => s.status === 'ready_to_pay');
+  return { contracted, readyToInvoice, outstanding, collected, owedToSubs, hasPending };
+}
+
+const FINANCE_STATUS_LABEL = {
+  pending: 'Not yet reached', reached: 'Reached — ready to invoice',
+  invoiced: 'Sent to PM', sent: 'Sent to client', paid: 'Paid',
+  issued: 'Issued', ready_to_pay: 'Ready to pay'
+};
+const FINANCE_STATUS_COLOR = {
+  pending: 'var(--muted)', reached: 'var(--orange)', invoiced: 'var(--blue)',
+  sent: 'var(--blue)', paid: 'var(--green)', issued: 'var(--muted)', ready_to_pay: 'var(--orange)'
+};
+
+function financeMiniCard(label, value, colour) {
+  return `<div style="flex:1;min-width:90px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px">
+    <div style="font-size:13px;font-weight:700;color:${colour||'var(--text)'}">${value}</div>
+    <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px">${label}</div>
+  </div>`;
+}
+function fmtShortDate(iso) {
+  if(!iso) return '';
+  try { return fmtDateEU(String(iso).slice(0,10)); } catch(e) { return ''; }
+}
+function milestoneTimeline(m) {
+  const steps = [
+    ['Reached', m.reachedAt], ['Invoiced', m.invoicedAt], ['Sent', m.sentAt], ['Paid', m.paidAt]
+  ].filter(([,d]) => d);
+  if(!steps.length) return '';
+  return steps.map(([label,d]) => `${label} ${fmtShortDate(d)}`).join(' → ');
+}
+function subPOTimeline(s) {
+  const steps = [['Confirmed', s.confirmedAt], ['Paid', s.paidAt]].filter(([,d]) => d);
+  if(!steps.length) return '';
+  return steps.map(([label,d]) => `${label} ${fmtShortDate(d)}`).join(' → ');
+}
+
+/* ── Billing section, inserted into each project card. Amounts follow the
+   same privacy rule already used for budgets: PM and Admin only. ── */
+function renderProjectBilling(p) {
+  if(!canSeeFinance(p)) return '';
+  if(financeTablesMissing) return '';
+  const snap = projectFinanceSnapshot(p.id);
+  const cs = contracts.filter(c => String(c.projectId) === String(p.id));
+  const sp = subPOs.filter(s => String(s.projectId) === String(p.id));
+  const manage = currentUser && canManageFinance(p);
+  const financeAdmin = isFinanceRole();
+  const now = Date.now();
+
+  const contractRows = cs.map(c => {
+    const ms = milestones.filter(m => m.contractId === c.id);
+    const pctAssigned = ms.reduce((s,m) => s + Number(m.percentage||0), 0);
+    const msRows = ms.map(m => {
+      const stalled = m.status === 'pending' && m.createdAt && Math.floor((now - new Date(m.createdAt)) / 86400000) > 45;
+      const stalledDays = stalled ? Math.floor((now - new Date(m.createdAt)) / 86400000) : null;
+      const timeline = milestoneTimeline(m);
+      const checked = m.status !== 'pending';
+      return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:8px;min-width:0">
+          <input type="checkbox" ${checked?'checked':''} ${(!manage||checked)?'disabled':''} style="width:15px;height:15px;margin-top:2px;cursor:${manage&&!checked?'pointer':'default'};flex-shrink:0;accent-color:var(--green)" onchange="markMilestoneReached('${m.id}')">
+          <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(m.description)} · ${m.percentage}% = ${fmtMoney(m.amount)}
+            ${stalled?`<div style="font-size:9px;color:var(--orange);margin-top:2px">⏱ ${stalledDays}d, not yet reached</div>`:''}
+            ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
+            ${m.invoiceFileUrl?`<a href="${m.invoiceFileUrl}" target="_blank" style="font-size:9px;color:var(--blue);display:inline-block;margin-top:2px">📄 Download invoice</a>`:''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[m.status]}">${FINANCE_STATUS_LABEL[m.status]}</div>
+          <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
+            ${financeAdmin && m.status==='reached' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--blue);color:#fff;border-color:var(--blue)" onclick="openIssueInvoice('${m.id}')">Issue invoice</button>` : ''}
+            ${manage && m.status==='invoiced' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markMilestoneSent('${m.id}')">Mark sent to client</button>` : ''}
+            ${financeAdmin && m.status==='sent' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markMilestonePaid('${m.id}')">Mark paid</button>` : ''}
+            ${manage ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditMilestone('${m.id}')" title="Edit">✎</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="font-size:12px;font-weight:600;min-width:0">${escapeAttr(c.name)}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font-size:12px;font-weight:600">${fmtMoney(c.value)}</span>
+          ${c.fileUrl?`<a href="${c.fileUrl}" target="_blank" style="font-size:10px;color:var(--blue)">📄 View</a>`:''}
+          ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditContract('${c.id}')" title="Edit">✎</button>`:''}
+        </div>
+      </div>
+      ${ms.length?`<div style="font-size:9px;color:var(--muted);margin-top:4px">${pctAssigned}% of contract value assigned to payment stages${pctAssigned<100?` · ${(100-pctAssigned).toFixed(pctAssigned%1?2:0)}% unassigned`:pctAssigned>100?' — over 100%, worth a check':''}</div>`:''}
+      ${msRows}
+      ${manage?`<button class="btn btn-sm" style="font-size:10px;margin-top:6px" onclick="openAddMilestone('${c.id}',${p.id})">+ Add Payment Stage</button>`:''}
+    </div>`;
+  }).join('');
+
+  const subPORows = sp.map(s => {
+    const deliv = s.deliverableId ? (p.deliverables||[]).find(d => d.id === s.deliverableId) : null;
+    const timeline = subPOTimeline(s);
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="min-width:0">
+        <div style="font-size:12px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
+        <div style="font-size:10px;color:var(--muted)">${deliv?'Linked: '+escapeAttr(deliv.name):'Manual entry'}${s.fileUrl?` · <a href="${s.fileUrl}" target="_blank" style="color:var(--blue)">📄 PO</a>`:''}</div>
+        ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:12px;font-weight:600">${fmtMoney(s.amount)}</div>
+        <div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[s.status]}">${FINANCE_STATUS_LABEL[s.status]}</div>
+        <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
+          ${manage && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
+          ${financeAdmin && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
+          ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPO('${s.id}')" title="Edit">✎</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Billing</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${financeMiniCard('Contracted', snap.contracted?fmtMoney(snap.contracted):'—')}
+      ${financeMiniCard('Ready to Invoice', snap.readyToInvoice?fmtMoney(snap.readyToInvoice):'—', snap.readyToInvoice?'var(--orange)':null)}
+      ${financeMiniCard('Outstanding', snap.outstanding?fmtMoney(snap.outstanding):'—', snap.outstanding?'var(--blue)':null)}
+      ${financeMiniCard('Owed to Subs', snap.owedToSubs?fmtMoney(snap.owedToSubs):'—', snap.owedToSubs?'var(--orange)':null)}
+    </div>
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Contracts &amp; VOs</div>
+    ${contractRows || `<div style="font-size:11px;color:var(--muted);padding:4px 0">None added yet</div>`}
+    ${manage?`<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:2px;margin-bottom:10px" onclick="openAddContract(${p.id})">+ Add Contract / VO</button>`:''}
+    <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Subcontractor POs</div>
+    ${subPORows || `<div style="font-size:11px;color:var(--muted);padding:4px 0">None added yet</div>`}
+    ${manage?`<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:2px" onclick="openAddSubPO(${p.id})">+ Add Subcontractor PO</button>`:''}
+  </div>`;
+}
+
+/* ── Add / edit flows ── */
+let addingContractToProjectId = null, editingContractId = null;
+function openAddContract(projId) {
+  const proj = projById(projId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(projId, proj?proj.creatorId:null); return; }
+  editingContractId = null;
+  addingContractToProjectId = projId;
+  document.getElementById('contractModalTitle').textContent = 'Add Contract / VO';
+  document.getElementById('contractSaveBtn').textContent = 'Add';
+  document.getElementById('contractDeleteBtn').style.display = 'none';
+  document.getElementById('contractProjLabel').textContent = `Project: ${proj.name}`;
+  document.getElementById('contractName').value = '';
+  document.getElementById('contractValue').value = '';
+  document.getElementById('contractFile').value = '';
+  openOverlay('contractModal');
+}
+function openEditContract(contractId) {
+  const c = contracts.find(x => x.id === contractId); if(!c) return;
+  const proj = projById(c.projectId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(c.projectId, proj?proj.creatorId:null); return; }
+  editingContractId = contractId;
+  addingContractToProjectId = c.projectId;
+  document.getElementById('contractModalTitle').textContent = 'Edit Contract / VO';
+  document.getElementById('contractSaveBtn').textContent = 'Save Changes';
+  document.getElementById('contractDeleteBtn').style.display = '';
+  document.getElementById('contractProjLabel').textContent = `Project: ${proj.name}${c.fileUrl?' · a file is already attached — choosing a new one replaces it':''}`;
+  document.getElementById('contractName').value = c.name;
+  document.getElementById('contractValue').value = c.value ?? '';
+  document.getElementById('contractFile').value = '';
+  openOverlay('contractModal');
+}
+function closeContractModal() { editingContractId = null; closeModal('contractModal'); }
+async function saveContractItem() {
+  const name = document.getElementById('contractName').value.trim();
+  const value = parseFloat(document.getElementById('contractValue').value);
+  if(!name) { showToast('⚠ Please enter a name'); return; }
+  if(!value || value <= 0) { showToast('⚠ Please enter a value'); return; }
+  const proj = projById(addingContractToProjectId);
+  const fileInput = document.getElementById('contractFile');
+  let fileUrl = '', fileName = '';
+  if(fileInput.files && fileInput.files[0]) {
+    const up = await uploadFinanceFile(fileInput, `contracts/${addingContractToProjectId}`);
+    if(up) { fileUrl = up.url; fileName = up.name; }
+  }
+  if(editingContractId) {
+    const c = contracts.find(x => x.id === editingContractId); if(!c) return;
+    const before = `${c.name} · ${fmtMoney(c.value)}`;
+    const valueChanged = Number(c.value) !== Number(value);
+    c.name = name; c.value = value;
+    if(fileUrl) { c.fileUrl = fileUrl; c.fileName = fileName; }
+    await saveContract(c);
+    // Stages not yet invoiced are still a percentage of this contract, so
+    // their JOD amount moves with it. Anything already invoiced is a real
+    // document that was sent out — that figure stays exactly as issued.
+    let recalced = 0;
+    if(valueChanged) {
+      const affected = milestones.filter(m => m.contractId === c.id && ['pending','reached'].includes(m.status) && m.percentage);
+      for(const m of affected) {
+        m.amount = Math.round((c.value * m.percentage / 100) * 100) / 100;
+        await saveMilestoneRow(m);
+        recalced++;
+      }
+    }
+    await writeAudit('contract', c.id, 'updated', before, `${name} · ${fmtMoney(value)}`, proj?proj.name:'');
+    await notifyPMOfAdminChange(proj, `${currentUser.name} updated the contract "${c.name}" on "${proj.name}" — now ${fmtMoney(value)}.`);
+    showToast('Contract / VO updated ✓' + (recalced ? ` · ${recalced} stage${recalced===1?'':'s'} recalculated` : ''));
+  } else {
+    const c = { id:'c'+Date.now(), projectId:addingContractToProjectId, name, value, currency:'JOD',
+                fileUrl, fileName, createdBy: currentUser.id, createdAt: new Date().toISOString() };
+    contracts.push(c);
+    await saveContract(c);
+    await writeAudit('contract', c.id, 'created', null, `${name} · ${fmtMoney(value)}`, proj?proj.name:'');
+    await notifyPMOfAdminChange(proj, `${currentUser.name} added a contract to "${proj.name}": ${name} · ${fmtMoney(value)}.`);
+    showToast('Contract / VO added ✓');
+  }
+  closeContractModal();
+  renderProjects(); renderOpsFinance();
+}
+async function deleteContractItem() {
+  if(!editingContractId) return;
+  const c = contracts.find(x => x.id === editingContractId); if(!c) return;
+  const proj = projById(c.projectId);
+  const msCount = milestones.filter(m => m.contractId === c.id).length;
+  if(!confirm(`Delete "${c.name}"?${msCount?` Its ${msCount} milestone${msCount===1?'':'s'} go with it.`:''} This cannot be undone.`)) return;
+  contracts = contracts.filter(x => x.id !== c.id);
+  milestones = milestones.filter(m => m.contractId !== c.id);
+  try { await sb.from('contracts').delete().eq('id', c.id); } catch(e) {}
+  await writeAudit('contract', c.id, 'deleted', c.name, null, proj?proj.name:'');
+  await notifyPMOfAdminChange(proj, `${currentUser.name} removed the contract "${c.name}" from "${proj.name}".`);
+  closeContractModal();
+  renderProjects(); renderOpsFinance();
+  showToast('Deleted');
+}
+
+let addingMilestoneToContractId = null, addingMilestoneProjectId = null, editingMilestoneId = null;
+function updateMilestonePctPreview() {
+  const pct = parseFloat(document.getElementById('milestonePct').value);
+  const c = contracts.find(x => x.id === addingMilestoneToContractId);
+  const preview = document.getElementById('milestonePctPreview');
+  if(!preview) return;
+  preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(c.value * pct / 100)}` : '';
+}
+function openAddMilestone(contractId, projId) {
+  const proj = projById(projId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(projId, proj?proj.creatorId:null); return; }
+  const c = contracts.find(x => x.id === contractId);
+  editingMilestoneId = null;
+  addingMilestoneToContractId = contractId; addingMilestoneProjectId = projId;
+  document.getElementById('milestoneModalTitle').textContent = 'Add Payment Stage';
+  document.getElementById('milestoneContractLabel').textContent = c ? `${c.name} · ${fmtMoney(c.value)}` : '';
+  document.getElementById('milestoneSaveBtn').textContent = 'Add';
+  document.getElementById('milestoneDeleteBtn').style.display = 'none';
+  document.getElementById('milestoneDesc').value = '';
+  document.getElementById('milestonePct').value = '';
+  document.getElementById('milestonePctPreview').textContent = '';
+  openOverlay('milestoneModal');
+}
+function openEditMilestone(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(m.projectId, proj?proj.creatorId:null); return; }
+  const c = contracts.find(x => x.id === m.contractId);
+  editingMilestoneId = milestoneId;
+  addingMilestoneToContractId = m.contractId; addingMilestoneProjectId = m.projectId;
+  document.getElementById('milestoneModalTitle').textContent = 'Edit Payment Stage';
+  document.getElementById('milestoneContractLabel').textContent = c ? `${c.name} · ${fmtMoney(c.value)}` : '';
+  document.getElementById('milestoneSaveBtn').textContent = 'Save Changes';
+  document.getElementById('milestoneDeleteBtn').style.display = '';
+  document.getElementById('milestoneDesc').value = m.description;
+  document.getElementById('milestonePct').value = m.percentage ?? '';
+  updateMilestonePctPreview();
+  openOverlay('milestoneModal');
+}
+function closeMilestoneModal() { editingMilestoneId = null; closeModal('milestoneModal'); }
+async function saveMilestoneItem() {
+  const description = document.getElementById('milestoneDesc').value.trim();
+  const percentage = parseFloat(document.getElementById('milestonePct').value);
+  if(!description) { showToast('⚠ Please describe the stage'); return; }
+  if(!percentage || percentage <= 0 || percentage > 100) { showToast('⚠ Please enter a percentage between 0 and 100'); return; }
+  const c = contracts.find(x => x.id === addingMilestoneToContractId);
+  const amount = c ? Math.round((c.value * percentage / 100) * 100) / 100 : null;
+  const proj = projById(addingMilestoneProjectId);
+  if(editingMilestoneId) {
+    const m = milestones.find(x => x.id === editingMilestoneId); if(!m) return;
+    const before = `${m.description} · ${m.percentage}%`;
+    m.description = description; m.percentage = percentage; m.amount = amount;
+    await saveMilestoneRow(m);
+    await writeAudit('milestone', m.id, 'updated', before, `${description} · ${percentage}%`, proj?proj.name:'');
+    await notifyPMOfAdminChange(proj, `${currentUser.name} updated a payment stage on "${proj.name}": ${description} · ${percentage}% = ${fmtMoney(amount)}.`);
+    showToast('Payment stage updated ✓');
+  } else {
+    const m = { id:'m'+Date.now(), contractId:addingMilestoneToContractId, projectId:addingMilestoneProjectId,
+                description, percentage, amount, status:'pending', createdAt:new Date().toISOString(),
+                reachedAt:null, invoicedAt:null, sentAt:null, paidAt:null, reachedBy:null,
+                deliverableId:null, autoTrigger:false, invoiceFileUrl:'', invoiceFileName:'' };
+    milestones.push(m);
+    await saveMilestoneRow(m);
+    await notifyPMOfAdminChange(proj, `${currentUser.name} added a payment stage to "${proj.name}": ${description} · ${percentage}% = ${fmtMoney(amount)}.`);
+    showToast('Payment stage added ✓');
+  }
+  closeMilestoneModal();
+  renderProjects(); renderOpsFinance();
+}
+async function deleteMilestoneItem() {
+  if(!editingMilestoneId) return;
+  const m = milestones.find(x => x.id === editingMilestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!confirm(`Delete the payment stage "${m.description}"? This cannot be undone.`)) return;
+  milestones = milestones.filter(x => x.id !== m.id);
+  try { await sb.from('milestones').delete().eq('id', m.id); } catch(e) {}
+  await writeAudit('milestone', m.id, 'deleted', m.description, null, proj?proj.name:'');
+  await notifyPMOfAdminChange(proj, `${currentUser.name} removed the payment stage "${m.description}" from "${proj.name}".`);
+  closeMilestoneModal();
+  renderProjects(); renderOpsFinance();
+  showToast('Deleted');
+}
+async function markMilestoneReached(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  m.status = 'reached'; m.reachedAt = new Date().toISOString(); m.reachedBy = currentUser.id;
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'pending', 'reached', proj.name);
+  await notifyFinance('milestone_ready', `"${m.description}" on "${proj.name}" is ready to invoice — ${fmtMoney(m.amount)}.`, proj.id);
+  await notifyPMOfAdminChange(proj, `${currentUser.name} marked "${m.description}" reached on "${proj.name}".`);
+  renderProjects(); renderOpsFinance();
+  showToast('Marked reached — Finance notified ✓');
+}
+async function markMilestoneSent(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  m.status = 'sent'; m.sentAt = new Date().toISOString();
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'invoiced', 'sent', proj.name);
+  await notifyPMOfAdminChange(proj, `${currentUser.name} marked "${m.description}" as sent to the client on "${proj.name}".`);
+  renderProjects(); renderOpsFinance();
+  showToast('Marked sent to client ✓');
+}
+
+let addingSubPOToProjectId = null, editingSubPOId = null;
+function populateSubPOModal(projId, sub) {
+  const proj = projById(projId);
+  document.getElementById('subPOProjLabel').textContent = `Project: ${proj.name}`;
+  document.getElementById('subPOName').value = sub ? sub.subcontractorName : '';
+  document.getElementById('subPOAmount').value = sub ? (sub.amount ?? '') : '';
+  document.getElementById('subPOFile').value = '';
+  // Admin/Finance doesn't have visibility into which deliverable this maps
+  // to — that's the PM's context, not theirs. Only the PM sees this field.
+  const delivWrap = document.getElementById('subPODelivWrap');
+  if(delivWrap) delivWrap.style.display = isOpsAdmin() ? 'none' : '';
+  const sel = document.getElementById('subPODeliv');
+  const selectedId = sub ? sub.deliverableId : null;
+  sel.innerHTML = `<option value="">— Not linked to a deliverable —</option>` +
+    (proj.deliverables||[]).filter(d => !d.completed || d.id===selectedId).map(d =>
+      `<option value="${d.id}"${d.id===selectedId?' selected':''}>${escapeAttr(d.name)}</option>`).join('');
+  const dl = document.getElementById('subcontractorNames');
+  if(dl) dl.innerHTML = [...new Set(subPOs.map(s => s.subcontractorName).filter(Boolean))]
+    .map(n => `<option value="${escapeAttr(n)}">`).join('');
+}
+function openAddSubPO(projId) {
+  const proj = projById(projId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(projId, proj?proj.creatorId:null); return; }
+  editingSubPOId = null;
+  addingSubPOToProjectId = projId;
+  document.getElementById('subPOModalTitle').textContent = 'Add Subcontractor PO';
+  document.getElementById('subPOSaveBtn').textContent = 'Add';
+  document.getElementById('subPODeleteBtn').style.display = 'none';
+  populateSubPOModal(projId, null);
+  openOverlay('subPOModal');
+}
+function openEditSubPO(subPOId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(s.projectId, proj?proj.creatorId:null); return; }
+  editingSubPOId = subPOId;
+  addingSubPOToProjectId = s.projectId;
+  document.getElementById('subPOModalTitle').textContent = 'Edit Subcontractor PO';
+  document.getElementById('subPOSaveBtn').textContent = 'Save Changes';
+  document.getElementById('subPODeleteBtn').style.display = '';
+  populateSubPOModal(s.projectId, s);
+  openOverlay('subPOModal');
+}
+function closeSubPOModal() { editingSubPOId = null; closeModal('subPOModal'); }
+async function saveSubPOItem() {
+  const subcontractorName = document.getElementById('subPOName').value.trim();
+  const amount = parseFloat(document.getElementById('subPOAmount').value);
+  // Admin can't set a link when adding new — they don't have that context.
+  // Editing an existing PO leaves whatever link the PM already set alone,
+  // even though the field is hidden from Admin's view.
+  const deliverableId = (isOpsAdmin() && !editingSubPOId) ? null : (document.getElementById('subPODeliv').value || null);
+  if(!subcontractorName) { showToast('⚠ Please enter a subcontractor name'); return; }
+  if(!amount || amount <= 0) { showToast('⚠ Please enter an amount'); return; }
+  const proj = projById(addingSubPOToProjectId);
+  const fileInput = document.getElementById('subPOFile');
+  let fileUrl = '', fileName = '';
+  if(fileInput.files && fileInput.files[0]) {
+    const up = await uploadFinanceFile(fileInput, `subcontractor-pos/${addingSubPOToProjectId}`);
+    if(up) { fileUrl = up.url; fileName = up.name; }
+  }
+  if(editingSubPOId) {
+    const s = subPOs.find(x => x.id === editingSubPOId); if(!s) return;
+    const before = `${s.subcontractorName} · ${fmtMoney(s.amount)}`;
+    s.subcontractorName = subcontractorName; s.amount = amount; s.deliverableId = deliverableId;
+    if(fileUrl) { s.fileUrl = fileUrl; s.fileName = fileName; }
+    await saveSubPO(s);
+    await writeAudit('subcontractor_po', s.id, 'updated', before, `${subcontractorName} · ${fmtMoney(amount)}`, proj?proj.name:'');
+    await notifyPMOfAdminChange(proj, `${currentUser.name} updated a subcontractor PO on "${proj.name}": ${subcontractorName} · ${fmtMoney(amount)}.`);
+    showToast('Subcontractor PO updated ✓');
+  } else {
+    const s = { id:'sp'+Date.now(), projectId:addingSubPOToProjectId, subcontractorName, amount, currency:'JOD',
+                deliverableId, fileUrl, fileName, status:'issued',
+                createdBy: currentUser.id, createdAt: new Date().toISOString(), confirmedAt:null, paidAt:null };
+    subPOs.push(s);
+    await saveSubPO(s);
+    await writeAudit('subcontractor_po', s.id, 'created', null, `${subcontractorName} · ${fmtMoney(amount)}`, proj?proj.name:'');
+    await notifyPMOfAdminChange(proj, `${currentUser.name} added a subcontractor PO to "${proj.name}": ${subcontractorName} · ${fmtMoney(amount)}.`);
+    showToast('Subcontractor PO added ✓');
+  }
+  closeSubPOModal();
+  renderProjects(); renderOpsFinance();
+}
+async function deleteSubPOItem() {
+  if(!editingSubPOId) return;
+  const s = subPOs.find(x => x.id === editingSubPOId); if(!s) return;
+  const proj = projById(s.projectId);
+  if(!confirm(`Delete the PO for "${s.subcontractorName}"? This cannot be undone.`)) return;
+  subPOs = subPOs.filter(x => x.id !== s.id);
+  try { await sb.from('subcontractor_pos').delete().eq('id', s.id); } catch(e) {}
+  await writeAudit('subcontractor_po', s.id, 'deleted', s.subcontractorName, null, proj?proj.name:'');
+  await notifyPMOfAdminChange(proj, `${currentUser.name} removed the subcontractor PO for "${s.subcontractorName}" from "${proj.name}".`);
+  closeSubPOModal();
+  renderProjects(); renderOpsFinance();
+  showToast('Deleted');
+}
+async function markSubPOConfirmed(subPOId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  s.status = 'ready_to_pay'; s.confirmedAt = new Date().toISOString();
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'status', 'issued', 'ready_to_pay', proj.name);
+  await notifyFinance('subpo_ready', `${s.subcontractorName} confirmed done on "${proj.name}" — ${fmtMoney(s.amount)} ready to pay.`, proj.id);
+  await notifyPMOfAdminChange(proj, `${currentUser.name} confirmed ${s.subcontractorName}'s work done on "${proj.name}".`);
+  renderProjects(); renderOpsFinance();
+  showToast('Confirmed — Finance notified ✓');
+}
+
+/* Called the moment a deliverable is ticked complete (self-completed or
+   approved). Flips any subcontractor PO linked to that deliverable to
+   ready-to-pay, and any milestone linked to it with auto-trigger on to
+   reached. Everything else — unlinked or manual — still needs an
+   explicit click, because internal completion isn't always the same
+   moment as client submission. */
+/* Called the moment a deliverable is ticked complete (self-completed or
+   approved). Only flips a subcontractor PO linked to that deliverable —
+   payment stages are a contract-level, not a deliverable-level, concept
+   and are always checked off deliberately by the PM or Finance. */
+function onDeliverableCompleted(proj, deliv) {
+  const linked = subPOs.filter(s => String(s.projectId) === String(proj.id) && s.deliverableId === deliv.id && s.status === 'issued');
+  linked.forEach(s => {
+    s.status = 'ready_to_pay'; s.confirmedAt = new Date().toISOString();
+    saveSubPO(s);
+    writeAudit('subcontractor_po', s.id, 'status', 'issued', 'ready_to_pay', proj.name);
+    notifyFinance('subpo_ready', `${s.subcontractorName} completed "${deliv.name}" on "${proj.name}" — ${fmtMoney(s.amount)} ready to pay.`, proj.id);
+  });
+  if(linked.length) { renderOpsFinance(); }
+}
+
+/* ── Admin Finance page — two lists, never merged ── */
+let financeSelectedProjectId = null;
+
+function renderOpsFinance() {
+  const kpiHost = document.getElementById('financeKpis');
+  if(!kpiHost) return;
+
+  if(financeTablesMissing) {
+    kpiHost.innerHTML = '';
+    ['financeAgingBar','financeQueueAR','financeQueueAP','financeProjectsTable','financeAuditList'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.innerHTML = '';
+    });
+    document.getElementById('financeQueueAR').innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">
+      Finance tables not set up yet. Run the finance migration in Supabase, then refresh.</div>`;
+    return;
+  }
+
+  const deptF = (document.getElementById('financeDeptFilter')||{}).value || '';
+  const scoped = deptF ? allProjects.filter(p => (p.department||DEFAULT_DEPT) === deptF) : allProjects;
+  const scopedIds = new Set(scoped.map(p => String(p.id)));
+
+  const k = financeKPIs(scopedIds);
+  renderFinanceKPIs(k);
+  document.getElementById('financeAgingBar').innerHTML = renderFinanceAgingBar(k.owed);
+  renderFinanceQueueAR(k.owed);
+  renderFinanceQueueAP(k.owedBy);
+  renderFinanceProjectsTable(deptF);
+  loadAuditLog().then(renderFinanceAudit);
+}
+
+/* Every number Finance actually cares about first thing in the morning,
+   in the same four-card strip the rest of the app already uses. */
+function financeKPIs(scopedIds) {
+  const readyMs = milestones.filter(m => m.status==='reached' && scopedIds.has(String(m.projectId)));
+  const outstandingMs = milestones.filter(m => ['invoiced','sent'].includes(m.status) && scopedIds.has(String(m.projectId)));
+  const owedBy = subPOs.filter(s => s.status === 'ready_to_pay' && scopedIds.has(String(s.projectId)));
+  const owed = [...readyMs, ...outstandingMs]; // feeds the aging bar's pipeline view
+  const readyToInvoice = readyMs.reduce((s,m) => s + Number(m.amount||0), 0);
+  const outstanding = outstandingMs.reduce((s,m) => s + Number(m.amount||0), 0);
+  const overdue = outstandingMs.filter(m => m.status==='sent' && m.sentAt && Math.floor((Date.now()-new Date(m.sentAt))/86400000) > 14)
+                       .reduce((s,m) => s + Number(m.amount||0), 0);
+  const owedToSubs = owedBy.reduce((s,x) => s + Number(x.amount||0), 0);
+  const now = jordanNow(); const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const collected = milestones.filter(m => m.status==='paid' && m.paidAt && new Date(m.paidAt) >= monthStart && scopedIds.has(String(m.projectId)))
+                               .reduce((s,m) => s + Number(m.amount||0), 0);
+  const paidOut = subPOs.filter(s => s.status==='paid' && s.paidAt && new Date(s.paidAt) >= monthStart && scopedIds.has(String(s.projectId)))
+                         .reduce((s,x) => s + Number(x.amount||0), 0);
+  return { owed, owedBy, readyToInvoice, outstanding, overdue, owedToSubs, netThisMonth: collected - paidOut };
+}
+function renderFinanceKPIs(k) {
+  const host = document.getElementById('financeKpis');
+  if(!host) return;
+  host.innerHTML = `
+    <div class="card"><div class="card-label">Ready to Invoice</div><div class="card-value" style="color:var(--orange)">${k.readyToInvoice?fmtMoney(k.readyToInvoice):'JOD 0'}</div><div class="card-sub">checked off, not yet billed</div></div>
+    <div class="card"><div class="card-label">Outstanding</div><div class="card-value" style="color:var(--blue)">${k.outstanding?fmtMoney(k.outstanding):'JOD 0'}</div><div class="card-sub">billed, awaiting payment</div></div>
+    <div class="card"><div class="card-label">Overdue</div><div class="card-value" style="color:var(--red)">${k.overdue?fmtMoney(k.overdue):'JOD 0'}</div><div class="card-sub">sent 14+ days ago</div></div>
+    <div class="card"><div class="card-label">Owed to Subcontractors</div><div class="card-value" style="color:var(--orange)">${k.owedToSubs?fmtMoney(k.owedToSubs):'JOD 0'}</div><div class="card-sub">ready to pay</div></div>
+    <div class="card"><div class="card-label">Net This Month</div><div class="card-value" style="color:${k.netThisMonth>=0?'var(--green)':'var(--red)'}">${fmtMoney(k.netThisMonth)}</div><div class="card-sub">collected minus paid out</div></div>`;
+}
+/* The classic AR-aging strip — a proportional bar showing exactly where
+   every outstanding JOD currently sits in the pipeline. */
+function renderFinanceAgingBar(owed) {
+  const reached = owed.filter(m=>m.status==='reached').reduce((s,m)=>s+Number(m.amount||0),0);
+  const invoiced = owed.filter(m=>m.status==='invoiced').reduce((s,m)=>s+Number(m.amount||0),0);
+  const sentOk = owed.filter(m=>m.status==='sent' && !(m.sentAt && Math.floor((Date.now()-new Date(m.sentAt))/86400000)>14)).reduce((s,m)=>s+Number(m.amount||0),0);
+  const sentOverdue = owed.filter(m=>m.status==='sent' && m.sentAt && Math.floor((Date.now()-new Date(m.sentAt))/86400000)>14).reduce((s,m)=>s+Number(m.amount||0),0);
+  const total = reached+invoiced+sentOk+sentOverdue;
+  if(!total) return `<div style="font-size:11.5px;color:var(--muted)">Nothing outstanding right now</div>`;
+  const seg = (val,color) => val ? `<div style="width:${(val/total*100).toFixed(2)}%;background:${color}"></div>` : '';
+  const swatch = (color) => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${color};margin-right:4px;flex-shrink:0"></span>`;
+  const legendItem = (color,label,val) => val ? `<span style="display:flex;align-items:center;font-size:10.5px;color:var(--text2)">${swatch(color)}${label} ${fmtMoney(val)}</span>` : '';
+  return `<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface2)">
+      ${seg(reached,'var(--orange)')}${seg(invoiced,'#8fb8e0')}${seg(sentOk,'var(--blue)')}${seg(sentOverdue,'var(--red)')}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
+      ${legendItem('var(--orange)','Ready to invoice',reached)}
+      ${legendItem('#8fb8e0','With PM',invoiced)}
+      ${legendItem('var(--blue)','Sent',sentOk)}
+      ${legendItem('var(--red)','Overdue',sentOverdue)}
+    </div>`;
+}
+function renderFinanceQueueAR(owed) {
+  const host = document.getElementById('financeQueueAR');
+  if(!host) return;
+  const actionable = owed.filter(m => m.status==='reached' || m.status==='sent')
+    .sort((a,b) => new Date(a.reachedAt||a.createdAt) - new Date(b.reachedAt||b.createdAt));
+  host.innerHTML = actionable.length ? actionable.map(m => {
+    const proj = projById(m.projectId);
+    const days = (m.status==='sent' && m.sentAt) ? Math.floor((Date.now()-new Date(m.sentAt))/86400000) : null;
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
+      <div style="min-width:0">
+        <div style="font-size:12.5px;font-weight:600">${proj?escapeAttr(proj.name):'—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeAttr(m.description)} · ${fmtMoney(m.amount)}</div>
+        ${days!==null?`<div style="font-size:10px;color:${days>14?'var(--red)':'var(--muted)'}">${days}d since sent</div>`:''}
+      </div>
+      <div style="flex-shrink:0">
+        ${m.status==='reached'?`<button class="btn btn-sm" style="font-size:10px" onclick="openIssueInvoice('${m.id}')">Issue invoice</button>`:''}
+        ${m.status==='sent'?`<button class="btn btn-sm" style="font-size:10px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markMilestonePaid('${m.id}')">Mark paid</button>`:''}
+      </div>
+    </div>`;
+  }).join('') : `<div style="padding:10px 0;color:var(--muted);font-size:12px">Nothing needs action right now</div>`;
+}
+function renderFinanceQueueAP(owedBy) {
+  const host = document.getElementById('financeQueueAP');
+  if(!host) return;
+  const sorted = owedBy.slice().sort((a,b) => new Date(a.confirmedAt||a.createdAt) - new Date(b.confirmedAt||b.createdAt));
+  host.innerHTML = sorted.length ? sorted.map(s => {
+    const proj = projById(s.projectId);
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
+      <div style="min-width:0">
+        <div style="font-size:12.5px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
+        <div style="font-size:11px;color:var(--muted)">${proj?escapeAttr(proj.name):'—'} · ${fmtMoney(s.amount)}</div>
+      </div>
+      <button class="btn btn-sm" style="font-size:10px;background:var(--green);color:#fff;border-color:var(--green);flex-shrink:0" onclick="markSubPOPaid('${s.id}')">Mark paid</button>
+    </div>`;
+  }).join('') : `<div style="padding:10px 0;color:var(--muted);font-size:12px">Nothing needs action right now</div>`;
+}
+
+/* Every project, one row each, sorted by what needs attention first.
+   Click a row and its full billing opens directly beneath it in the
+   same table — nothing jumps anywhere else on the page. */
+function financePendingCount(projId) {
+  return milestones.filter(m => String(m.projectId)===String(projId) && m.status==='reached').length
+       + subPOs.filter(s => String(s.projectId)===String(projId) && s.status==='ready_to_pay').length;
+}
+function renderFinanceProjectsTable(deptF) {
+  const table = document.getElementById('financeProjectsTable');
+  if(!table) return;
+  deptF = deptF !== undefined ? deptF : ((document.getElementById('financeDeptFilter')||{}).value || '');
+  const search = ((document.getElementById('financeProjSearch')||{}).value || '').toLowerCase();
+  const statusF = (document.getElementById('financeProjStatusFilter')||{}).value;
+  const status = statusF === undefined ? 'active' : statusF;
+
+  const list = allProjects.filter(p => !deptF || (p.department||DEFAULT_DEPT) === deptF)
+    .filter(p => status === '' || (status === 'archived' ? !!p.archived : !p.archived))
+    .filter(p => !search || (p.name||'').toLowerCase().includes(search) || (p.client||'').toLowerCase().includes(search))
+    .map(p => ({ p, pending: financePendingCount(p.id), snap: projectFinanceSnapshot(p.id) }))
+    .sort((a,b) => (b.pending - a.pending) || a.p.name.localeCompare(b.p.name));
+
+  if(!list.length) {
+    table.innerHTML = `<tr><td style="padding:16px;text-align:center;color:var(--muted);font-size:12px">No projects match</td></tr>`;
+    return;
+  }
+  table.innerHTML = `<thead><tr style="background:var(--surface2)">
+      <th style="text-align:left;padding:7px 9px">Project</th>
+      <th style="text-align:left;padding:7px 9px">PM</th>
+      <th style="text-align:right;padding:7px 9px">Contracted</th>
+      <th style="text-align:right;padding:7px 9px">Outstanding</th>
+      <th style="text-align:right;padding:7px 9px">Owed to Subs</th>
+    </tr></thead><tbody>` +
+    list.map(({p, pending, snap}) => {
+      const pm = personById(p.creatorId);
+      const open = String(financeSelectedProjectId) === String(p.id);
+      const rowBg = open ? 'var(--surface2)' : 'transparent';
+      let rows = `<tr class="adm-row" onclick="selectFinanceProject('${p.id}')" style="cursor:pointer;border-top:1px solid var(--border);background:${rowBg}">
+        <td style="padding:7px 9px;font-weight:600">${open?'▾ ':'▸ '}${escapeAttr(p.name)} ${statusBadge(p)}</td>
+        <td style="padding:7px 9px;color:var(--text2)">${pm?escapeAttr(pm.name):'—'}</td>
+        <td style="padding:7px 9px;text-align:right">${snap.contracted?fmtMoney(snap.contracted):'—'}</td>
+        <td style="padding:7px 9px;text-align:right;color:var(--blue);font-weight:600">${snap.outstanding?fmtMoney(snap.outstanding):'—'}</td>
+        <td style="padding:7px 9px;text-align:right;color:var(--orange);font-weight:600">
+          ${snap.owedToSubs?fmtMoney(snap.owedToSubs):'—'}${pending?` <span style="background:var(--orange);color:#fff;border-radius:8px;padding:1px 6px;font-size:9.5px;font-weight:700">${pending}</span>`:''}
+        </td>
+      </tr>`;
+      if(open) {
+        rows += `<tr><td colspan="5" style="padding:0 9px 16px;background:var(--surface2)">${renderProjectBilling(p)}</td></tr>`;
+      }
+      return rows;
+    }).join('') + `</tbody>`;
+}
+function selectFinanceProject(projId) {
+  financeSelectedProjectId = (String(financeSelectedProjectId) === String(projId)) ? null : projId;
+  renderFinanceProjectsTable();
+}
+/* Recent finance changes, filtered out of the same audit log the
+   Projects tab already keeps — who marked what and when. */
+function renderFinanceAudit() {
+  const host = document.getElementById('financeAuditList');
+  if(!host) return;
+  const rows = (auditRows||[]).filter(r => ['contract','milestone','subcontractor_po'].includes(r.entity)).slice(0,60);
+  if(!rows.length) {
+    host.innerHTML = `<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">No finance changes recorded yet</div>`;
+    return;
+  }
+  const label = { contract:'Contract/VO', milestone:'Payment Stage', subcontractor_po:'Subcontractor PO' };
+  host.innerHTML = rows.map(r => {
+    const when = r.changed_at ? fmtDateEU(r.changed_at.slice(0,10)) + ' ' + r.changed_at.slice(11,16) : '';
+    return `<div style="padding:8px 0;border-top:1px solid var(--border);font-size:11.5px">
+      <div><strong>${r.note?escapeAttr(r.note):'—'}</strong></div>
+      <div style="color:var(--muted);margin-top:2px">${label[r.entity]||r.entity}${r.field?' · '+r.field:''} · ${r.before_value??'—'} → <strong style="color:var(--text)">${r.after_value??'—'}</strong></div>
+      <div style="color:var(--muted);margin-top:2px">${r.changed_by_name||'Unknown'} · ${when}</div>
+    </div>`;
+  }).join('');
+}
+async function clearFinanceActivity() {
+  if(!isFinanceRole()) { showToast('Only Finance can clear this'); return; }
+  if(!confirm('Clear finance activity history? This only removes contract, payment-stage and subcontractor-PO entries — nothing else in the audit log is touched. This cannot be undone.')) return;
+  try {
+    await sb.from('audit_log').delete().in('entity', ['contract','milestone','subcontractor_po']);
+  } catch(e) { showToast('⚠ Could not clear — try again'); return; }
+  auditRows = (auditRows||[]).filter(r => !['contract','milestone','subcontractor_po'].includes(r.entity));
+  renderFinanceAudit();
+  showToast('Finance activity cleared ✓');
+}
+
+/* Issuing an invoice is a Finance action that produces a real file —
+   the PM shouldn't have to ask for it separately, so it attaches right
+   here and shows up as a download on their side immediately. */
+let issuingMilestoneId = null;
+function openIssueInvoice(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  if(!isFinanceRole()) { showToast('Only Finance can issue an invoice'); return; }
+  const proj = projById(m.projectId);
+  issuingMilestoneId = milestoneId;
+  document.getElementById('issueInvoiceLabel').textContent = `${proj?proj.name:''} — ${m.description} · ${fmtMoney(m.amount)}`;
+  document.getElementById('issueInvoiceFile').value = '';
+  openOverlay('issueInvoiceModal');
+}
+async function saveIssueInvoice() {
+  const m = milestones.find(x => x.id === issuingMilestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  const fileInput = document.getElementById('issueInvoiceFile');
+  let fileUrl = '', fileName = '';
+  if(fileInput.files && fileInput.files[0]) {
+    const up = await uploadFinanceFile(fileInput, `invoices/${m.projectId}`);
+    if(up) { fileUrl = up.url; fileName = up.name; }
+  } else if(!confirm('No file attached — issue the invoice without one? The PM will still be notified, but will have to prepare the document themselves.')) {
+    return;
+  }
+  m.status = 'invoiced'; m.invoicedAt = new Date().toISOString();
+  if(fileUrl) { m.invoiceFileUrl = fileUrl; m.invoiceFileName = fileName; }
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'reached', 'invoiced', proj?proj.name:'');
+  if(proj && proj.creatorId) {
+    const note = fileUrl
+      ? `The invoice for "${m.description}" on "${proj.name}" (${fmtMoney(m.amount)}) is attached — download it from the project's Billing section and send it to the client.`
+      : `The invoice for "${m.description}" on "${proj.name}" (${fmtMoney(m.amount)}) is ready — please prepare it and send it to the client.`;
+    addNotification(proj.creatorId, 'invoice_ready_for_client', { message: note, projectId: proj.id });
+    const pm = personById(proj.creatorId);
+    if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Invoice ready — ${proj.name}`, note); } catch(e) {} }
+  }
+  closeModal('issueInvoiceModal');
+  renderOpsFinance(); renderProjects();
+  showToast('Invoice issued — PM notified ✓');
+}
+async function markMilestonePaid(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  if(!isFinanceRole()) { showToast('Only Finance can confirm a client payment'); return; }
+  if(!confirm(`Mark ${fmtMoney(m.amount)} as received from the client?`)) return;
+  const proj = projById(m.projectId);
+  m.status = 'paid'; m.paidAt = new Date().toISOString();
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'sent', 'paid', proj?proj.name:'');
+  if(proj && proj.creatorId) {
+    const note = `Payment received from the client for "${m.description}" on "${proj.name}" — ${fmtMoney(m.amount)}.`;
+    addNotification(proj.creatorId, 'payment_received', { message: note, projectId: proj.id });
+    const pm = personById(proj.creatorId);
+    if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Payment received — ${proj.name}`, note); } catch(e) {} }
+  }
+  renderOpsFinance(); renderProjects();
+  showToast('Marked paid — PM notified ✓');
+}
+async function markSubPOPaid(subPOId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  if(!isFinanceRole()) { showToast('Only Finance can confirm a subcontractor payment'); return; }
+  if(!confirm(`Mark ${fmtMoney(s.amount)} as paid to ${s.subcontractorName}?`)) return;
+  const proj = projById(s.projectId);
+  s.status = 'paid'; s.paidAt = new Date().toISOString();
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'status', 'ready_to_pay', 'paid', proj?proj.name:'');
+  if(proj && proj.creatorId) {
+    addNotification(proj.creatorId, 'subpo_paid',
+      { message:`${s.subcontractorName} was paid ${fmtMoney(s.amount)} on "${proj.name}".`, projectId: proj.id });
+  }
+  renderOpsFinance(); renderProjects();
+  showToast('Marked paid ✓');
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -4886,6 +5924,7 @@ async function applyColumnMerge() {
 
 async function mountOpsTimesheets() {
   // Outstanding list + audit trail sit above the reused HR view
+  await renderOpsPendingApprovals();
   const monthSel = document.getElementById('opsMissingMonth');
   if(monthSel && !monthSel.options.length) {
     const opts = getTsMonthOptions();
@@ -4972,7 +6011,7 @@ const LEAVE_KINDS = [
 let leaveBalances = [];          // [{personId, year, annual, sick, compensation}]
 let balancesTableMissing = false;
 
-function currentLeaveYear() { return new Date().getFullYear(); }
+function currentLeaveYear() { return jordanNow().getFullYear(); }
 
 function hhmmToMinutes(t) {
   if(!t || !/^\d{1,2}:\d{2}$/.test(t)) return null;
@@ -5501,12 +6540,13 @@ function getOpsNotifyConfig() {
   const row = allTeam.find(p => p.id === 9998);
   const raw = (row && row.email) ? row.email : '';
   const [addrPart, flagPart] = raw.split('|');
-  const emails = (addrPart || '').split(',').map(s=>s.trim()).filter(Boolean);
-  const flags = (flagPart || 'T').toUpperCase();
+  const emails = [...new Set((addrPart || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean))];
+  const flags = (flagPart || 'TF').toUpperCase();
   return {
     emails,
     timesheets: flags.includes('T'),
-    people:     flags.includes('P')
+    people:     flags.includes('P'),
+    finance:    flags.includes('F')
   };   // leave is HR's business, never the Admin's
 }
 
@@ -5519,6 +6559,7 @@ async function saveOpsNotifyConfig() {
   let flags = '';
   if((document.getElementById('opsNotifyTimesheets')||{}).checked) flags += 'T';
   if((document.getElementById('opsNotifyPeople')||{}).checked)     flags += 'P';
+  if((document.getElementById('opsNotifyFinance')||{}).checked)    flags += 'F';
   const value = emails.join(',') + '|' + flags;
 
   const { error } = await sb.from('team').upsert({
@@ -5538,6 +6579,7 @@ function opsNotifyRecipients(kind) {
   if(kind === 'leave') return [];                       // leave never goes to Admin
   if(kind === 'timesheet' && !cfg.timesheets) return [];
   if(kind === 'people'    && !cfg.people)     return [];
+  if(kind === 'finance'   && !cfg.finance)    return [];
   return cfg.emails;
 }
 
@@ -5635,7 +6677,7 @@ async function notifyAdminOfBudgetChange(proj, before, next) {
   const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('people') : [];
   for(const addr of to) {
     try { await sendApprovalEmail(addr, 'Admin', who,
-            `Budget updated: ${proj.name}`, line + '\n\n' + url, url); } catch(e) {}
+            `Budget updated: ${proj.name}`, line, url); } catch(e) {}
   }
   showToast('Budget updated — Admin notified');
 }
@@ -5647,7 +6689,7 @@ function fmtMoney(n) {
 function proposalCard(p) {
   const pm = personById(p.creatorId);
   const due = p.end ? fmtDateEU(p.end) : '—';
-  const daysLeft = p.end ? Math.ceil((new Date(p.end+'T12:00:00') - new Date()) / 86400000) : null;
+  const daysLeft = p.end ? Math.ceil((new Date(p.end+'T12:00:00') - jordanNow()) / 86400000) : null;
   // Once it has gone out, the date stops nagging — it waits on the client,
   // which is not the same as being late.
   const submitted = !!p.proposalSubmitted;
@@ -5782,14 +6824,6 @@ async function notifyAdminOfProposal(p, outcome) {
   }
 }
 
-function openAddProposalModal() {
-  openAddProjectModal();
-  newItemIsProposal = true;
-  setProjectModalMode(true);
-  // No start date on a proposal — it runs from today to submission
-  const s = document.getElementById('pjStart');
-  if(s) s.value = ymd(new Date());
-}
 let newItemIsProposal = false;
 
 function addNotification(toPersonId, type, data) {
@@ -5809,6 +6843,12 @@ function updateInboxBadge() {
   badge.textContent = total;
 }
 
+let myWorkGroupBy = (function(){ try { return localStorage.getItem('myWorkGroupBy') || 'date'; } catch(e) { return 'date'; } })();
+function setMyWorkGroupBy(mode) {
+  myWorkGroupBy = mode;
+  try { localStorage.setItem('myWorkGroupBy', mode); } catch(e) {}
+  renderMyWork();
+}
 function renderMyWork() {
   if(!currentUser) {
     document.getElementById('myworkTasks').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Sign in to see your work.</div>';
@@ -5869,14 +6909,19 @@ function renderMyWork() {
     </div>`;
   }
 
-  tasksHtml+=`<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px">Active Tasks</div>`;
-  if(activeTasks.length) {
-    tasksHtml+=activeTasks.map(t=>{
-      const due=daysUntil(t.date);
-      const isOverdue=due==='Overdue';
-      const isUrgent=!isOverdue&&due.includes('day')&&parseInt(due)<7;
-      const urgentColor=isOverdue?'var(--red)':isUrgent?'var(--orange)':'var(--text2)';
-      return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;box-shadow:var(--shadow)">
+  tasksHtml+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px">Active Tasks</div>
+    <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600">
+      <div onclick="setMyWorkGroupBy('date')" style="padding:4px 10px;cursor:pointer;${myWorkGroupBy==='date'?'background:var(--text);color:#fff':'color:var(--text2)'}">By Due Date</div>
+      <div onclick="setMyWorkGroupBy('project')" style="padding:4px 10px;cursor:pointer;${myWorkGroupBy==='project'?'background:var(--text);color:#fff':'color:var(--text2)'}">By Project</div>
+    </div>
+  </div>`;
+  const taskRowHtml = (t) => {
+    const due=daysUntil(t.date);
+    const isOverdue=due==='Overdue';
+    const isUrgent=!isOverdue&&due.includes('day')&&parseInt(due)<7;
+    const urgentColor=isOverdue?'var(--red)':isUrgent?'var(--orange)':'var(--text2)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;box-shadow:var(--shadow)">
         <input type="checkbox" ${t.pendingApproval?'checked':''} style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;flex-shrink:0" onchange="submitTaskForApproval('${t.projId}','${t.id}',this)">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600${t.pendingApproval?';color:var(--muted);text-decoration:line-through':''}">${t.name}</div>
@@ -5888,7 +6933,19 @@ function renderMyWork() {
           <div style="font-size:10px;color:${urgentColor};margin-top:2px">${due}</div>
         </div>
       </div>`;
-    }).join('');
+  };
+  if(activeTasks.length) {
+    if(myWorkGroupBy === 'project') {
+      const byProj = {};
+      activeTasks.forEach(t => { (byProj[t.projName] = byProj[t.projName] || []).push(t); });
+      tasksHtml += Object.keys(byProj).sort((a,b)=>a.localeCompare(b)).map(projName => {
+        const group = byProj[projName].slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+        return `<div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 6px">📁 ${projName}</div>` +
+          group.map(taskRowHtml).join('');
+      }).join('');
+    } else {
+      tasksHtml+=activeTasks.map(taskRowHtml).join('');
+    }
   } else {
     tasksHtml+=`<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:12px">No active tasks 🎉</div>`;
   }
@@ -5942,6 +6999,8 @@ function renderMyWork() {
       else if(n.type==='proposal_lost'){icon='📁';msg=n.data.text||n.data.message||'A proposal was archived as lost';color='var(--muted)';}
       else if(n.type==='budget_changed'){icon='💰';msg=n.data.message||'A budget was updated';color='var(--orange)';}
       else if(n.type==='assigned_pm'){icon='📌';msg=n.data.message||'You were assigned to a project';color='var(--green)';}
+      else if(n.type==='admin_project_change'){icon='🛠️';msg=n.data.message||'Admin made a change on one of your projects';color='var(--blue)';}
+      else if(n.type==='profile_changed'){icon='👤';msg=n.data.message||'Your account was updated';color='var(--blue)';}
       // Anything without its own branch still shows whatever text it carries,
       // so a new notification type can never render as a blank row.
       if(!msg) msg = (n.data && (n.data.message || n.data.text)) || 'Update';
@@ -5982,14 +7041,6 @@ async function clearAllNotifs() {
   updateInboxBadge();
 }
 
-function toggleCompletedHistory(btn) {
-  const el=document.getElementById('completedHistoryList'); if(!el) return;
-  const open=btn.getAttribute('data-open')==='1';
-  el.style.display=open?'none':'block';
-  btn.setAttribute('data-open',open?'0':'1');
-  btn.textContent=open?`🕐 History (${el.children.length})`:'↑ Hide history';
-}
-
 
 function submitTaskForApproval(projId, delivId, checkbox) {
   const proj = projects.find(p=>p.id==projId); if(!proj) return;
@@ -5999,6 +7050,7 @@ function submitTaskForApproval(projId, delivId, checkbox) {
     if(iAmPM) {
       // PM completing their own task — instant, no approval needed
       deliv.completed = true; deliv.pendingApproval = false;
+      onDeliverableCompleted(proj, deliv);
       showToast('Task completed ✓');
     } else {
       deliv.pendingApproval = true; deliv.completed = false;
@@ -6031,6 +7083,7 @@ function approveDeliverable(projId, delivId, approved) {
   const pmName = currentUser.name;
   if(approved) {
     deliv.completed = true; deliv.pendingApproval = false;
+    onDeliverableCompleted(proj, deliv);
     if(deliv.assignedTo) addNotification(deliv.assignedTo, 'task_approved', {delivName:deliv.name, projName:proj.name, pmName, delivId, projId});
     showToast(`${deliv.name} approved ✓`);
   } else {
@@ -6047,21 +7100,6 @@ function updateLogThisWeekBtn() {
   if(!btn||!currentUser||isHR()) return;
   // Show for all team members — they should always be able to log busy periods
   btn.style.display = 'inline-flex';
-}
-
-function openWeekSummaryModal(wk) {
-  const ws = new Date(wk+'T12:00:00');
-  const we = new Date(ws); we.setDate(we.getDate()+4);
-  document.getElementById('weekSummaryTitle').textContent = fmt(ws,true)+' – '+fmt(we,true);
-  document.getElementById('weekSummaryBody').innerHTML = team.filter(p=>p.role!=='timesheet_only').map(p=>{
-    const eff = getEffectiveLoad(p.id, wk);
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:28px;height:28px;font-size:11px">${initials(p.name)}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:600">${p.name}</div><div style="font-size:10px;color:var(--muted)">${eff.projects.map(x=>x.name).join(', ')||'No active projects'}</div></div>
-      <div style="text-align:right"><span style="font-size:14px;font-weight:700;color:${loadColor(eff.load)}">${eff.load}%</span><div style="font-size:10px;color:var(--muted)">${chipLabel(eff.load)}</div></div>
-    </div>`;
-  }).join('');
-  openOverlay('weekSummaryModal');
 }
 
 function openOverlay(id) { document.getElementById(id).classList.add('open'); }
@@ -6081,10 +7119,10 @@ function setOverrideUser(p) {
 function openWeeklyOverrideModal() {
   if(!currentUser || isAdmin()) return;
   setOverrideUser(currentUser);
-  const today = wKey(new Date());
+  const today = wKey(jordanNow());
   document.getElementById('ovStart').value = today;
   document.getElementById('ovEnd').value = today;
-  const eff = getEffectiveLoad(currentUser.id, wKey(weekStart(new Date(), weekOffset)));
+  const eff = getEffectiveLoad(currentUser.id, wKey(weekStart(jordanNow(), weekOffset)));
   const ovLoadEl = document.getElementById('ovLoad');
   ovLoadEl.max = 100;                       // capacity cannot exceed a full workload
   ovLoadEl.value = Math.min(eff.load||80, 100);
@@ -6193,125 +7231,6 @@ function saveOverrideForm() {
   closeModal('overrideModal');
   renderWeekly(); renderMonthly(); updateSummary();
   if(!document.getElementById('view-finder').classList.contains('hidden')) renderFinder();
-}
-
-function setProjectModalMode(isProposal) {
-  const set = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
-  set('pjNameLabel', isProposal ? 'Proposal Name' : 'Project Name');
-  set('pjEndLabel',  isProposal ? 'Submission Date' : 'End / Deliverable Date');
-  const t = document.getElementById('pjModalTitle');
-  if(t) t.textContent = isProposal ? 'Add Proposal' : 'Add Project';
-  const sub = document.getElementById('pjModalSub');
-  if(sub) sub.textContent = isProposal
-    ? 'Proposals set the baseline workload up to their submission date'
-    : 'Projects set the baseline workload automatically across their entire duration';
-  // A proposal only needs a submission date
-  const sw = document.getElementById('pjStartWrap');
-  if(sw) sw.style.display = isProposal ? 'none' : '';
-  const bw = document.getElementById('pjBudgetWrap');
-  if(bw) bw.style.display = isProposal ? '' : 'none';
-  const ph = document.getElementById('pjProposalHint');
-  if(ph) ph.style.display = isProposal ? '' : 'none';
-  const jh = document.getElementById('pjProjectHint');
-  if(jh) jh.style.display = isProposal ? 'none' : '';
-  const nameEl = document.getElementById('pjName');
-  if(nameEl) nameEl.placeholder = isProposal ? 'e.g. 25-31 Aqaba Coastal Study' : 'e.g. Dibbeen Jerash';
-}
-
-function openAddProjectModal() {
-  newItemIsProposal = false;
-  setProjectModalMode(false);
-  document.getElementById('pjName').value='';
-  const _b=document.getElementById('pjBudget'); if(_b) _b.value='';
-  document.getElementById('pjClient').value='';
-  document.getElementById('pjStart').value='';
-  const endInput = document.getElementById('pjEnd');
-  endInput.value=''; endInput.min='';
-  document.getElementById('pjStart').onchange = function() {
-    if(this.value) { endInput.min = this.value; if(endInput.value && endInput.value<=this.value) endInput.value=''; }
-  };
-  document.getElementById('pjNotes').value='';
-  const wrap=document.getElementById('pjMembersWrap');
-  wrap.innerHTML=`
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Assign Team Members</div>
-    <div id="pjAddedMembers"></div>
-    <div style="display:flex;gap:8px;margin-top:6px">
-      <select id="pjAddPersonSel" style="flex:1;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
-        <option value="">＋ Add a person…</option>
-        ${team.filter(p=>p.role!=='timesheet_only').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-      <button class="btn" onclick="pjAddPerson()" style="flex-shrink:0">Add</button>
-    </div>`;
-  openOverlay('addProjModal');
-}
-
-function pjAddPerson() {
-  const sel = document.getElementById('pjAddPersonSel');
-  const pid = parseInt(sel.value); if(!pid) return;
-  const p = team.find(t=>t.id===pid); if(!p) return;
-  if(document.getElementById('pjAllocRow_'+pid)) { showToast(p.name.split(' ')[0]+' already added'); return; }
-  const wrap = document.getElementById('pjAddedMembers');
-  const div = document.createElement('div');
-  div.id = 'pjAllocRow_'+pid;
-  div.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)';
-  div.innerHTML=`
-    <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(p.name)}</div>
-    <span style="flex:1;font-size:13px;font-weight:500">${p.name}</span>
-    <label style="font-size:11px;color:var(--muted)">Allocation:</label>
-    <input type="number" min="0" max="100" step="5" value="50" id="pjAlloc_${pid}" style="width:65px;text-align:center;padding:5px 8px" placeholder="0%">
-    <span style="font-size:11px;color:var(--muted)">%</span>
-    <button onclick="document.getElementById('pjAllocRow_${pid}').remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0 2px" title="Remove">×</button>`;
-  wrap.appendChild(div);
-  sel.value = '';
-}
-
-function getMaxProjectAlloc(personId, start, end, excludeProjectId) {
-  let total = 0;
-  projects.forEach(p => {
-    if(p.id == excludeProjectId) return;
-    if(p.end < start || p.start > end) return;
-    const m = p.members.find(m=>m.personId===personId);
-    if(m && m.allocation>0) total += m.allocation;
-  });
-  return total;
-}
-
-function saveNewProject() {
-  const name=document.getElementById('pjName').value.trim();
-  const client=document.getElementById('pjClient').value.trim();
-  const start=document.getElementById('pjStart').value;
-  const end=document.getElementById('pjEnd').value;
-  if(!name){showToast('⚠ Please enter a project name');return;}
-  if(!start){showToast('⚠ Please set a start date');return;}
-  if(!end){showToast('⚠ Please set an end date');return;}
-  if(end<=start){showToast('⚠ End date must be after start date');return;}
-  const creatorId = currentUser ? currentUser.id : (team[0]?.id||1);
-  const members=[]; let blockingErrors=[];
-  const addedRows = document.querySelectorAll('[id^="pjAllocRow_"]');
-  addedRows.forEach(row=>{
-    const pid = parseInt(row.id.replace('pjAllocRow_',''));
-    const p = team.find(t=>t.id===pid); if(!p) return;
-    const v=parseInt(document.getElementById('pjAlloc_'+pid).value)||0;
-    if(v<=0) return;
-    if(v>100){blockingErrors.push(`${p.name.split(' ')[0]}: allocation cannot exceed 100%`);return;}
-    const existingLoad=getMaxProjectAlloc(pid,start,end,null);
-    if(existingLoad+v>100){blockingErrors.push(`${p.name.split(' ')[0]} is already at ${existingLoad}% — adding ${v}% would put them over capacity. Reduce the allocation or discuss the workload with their manager.`);return;}
-    members.push({personId:pid,allocation:v,role:pid===creatorId?'pm':'coordinator'});
-  });
-  if(blockingErrors.length){showToast('⚠ Cannot save:\n'+blockingErrors.join('\n'),6000);return;}
-  if(!members.find(m=>m.personId===creatorId)) members.unshift({personId:creatorId,allocation:0,role:'pm'});
-  else members.find(m=>m.personId===creatorId).role='pm';
-  const budgetRaw = (document.getElementById('pjBudget')||{}).value;
-  const newProj = {id:Date.now(),name,client,start,end,creatorId,notes:document.getElementById('pjNotes').value.trim(),deliverables:[],members,department:activeDept,isProposal:!!newItemIsProposal,
-    budget: (newItemIsProposal && budgetRaw) ? Number(budgetRaw) : null};
-  allProjects.push(newProj);
-  projects.push(newProj);
-  const wasProposal = newItemIsProposal;
-  newItemIsProposal = false;
-  closeModal('addProjModal');
-  saveProject(newProj);
-  renderProjects(); renderWeekly(); renderMonthly(); updateSummary();
-  showToast(`${name} added ✓`);
 }
 
 function openAssignMember(projId) {
@@ -6673,9 +7592,17 @@ function saveNoteSection() {
   showToast('Section created ✓');
 }
 function deleteNoteSection(sectionId) {
-  if (!confirm('Delete this section and all its content?')) return;
-  saveNotes(loadNotes().filter(s => s.id !== sectionId));
-  if (currentNoteSection === sectionId) currentNoteSection = null;
+  const sections = loadNotes();
+  // Subsections point at their parent but nothing ever cleans them up —
+  // deleting a parent silently orphaned them: still in storage, but no
+  // longer reachable from anywhere in the sidebar. Delete them with it,
+  // matching what this dialog already promises.
+  const children = sections.filter(s => s.parentId === sectionId);
+  const warn = children.length ? ` Its ${children.length} subsection${children.length===1?'':'s'} will be deleted too.` : '';
+  if (!confirm('Delete this section and all its content?' + warn)) return;
+  const idsToRemove = new Set([sectionId, ...children.map(c => c.id)]);
+  saveNotes(sections.filter(s => !idsToRemove.has(s.id)));
+  if (idsToRemove.has(currentNoteSection)) currentNoteSection = null;
   renderNotesView();
 }
 function selectNoteSection(sectionId) {
@@ -7363,12 +8290,9 @@ function nbInsertTodo() {
   } else {_createIsolatedList('ul','nb-todo-list',note,window.getSelection());}
   clearTimeout(nbSaveTimer); nbSaveTimer=setTimeout(()=>saveAllNotes(currentNoteSection),400);
 }
-function nbCreateListAtCursor(tag,cls){const cmd=tag==='ol'?'insertOrderedList':'insertUnorderedList'; document.execCommand(cmd); if(cls){const sel=window.getSelection();if(sel&&sel.rangeCount){let n=sel.anchorNode;if(n&&n.nodeType===3)n=n.parentElement;const l=n&&n.closest(tag);if(l)l.classList.add(cls);}}}
-function nbSplitLiToType(li,newClass){if(newClass==='nb-todo-list'&&li.parentElement)li.parentElement.classList.add('nb-todo-list');}
 
 /* ── Cursor helpers ───────────────────────────────────────────── */
 function placeCursorEnd(el){try{const r=document.createRange(),s=window.getSelection();r.selectNodeContents(el);r.collapse(false);s.removeAllRanges();s.addRange(r);}catch(e){}}
-function placeCursorStart(el){try{const r=document.createRange(),s=window.getSelection();r.setStart(el,0);r.collapse(true);s.removeAllRanges();s.addRange(r);}catch(e){}}
 
 /* ── Stickies ─────────────────────────────────────────────────── */
 function renderStickies(s) {
@@ -7437,21 +8361,9 @@ let stickySaveTimer=null;
 function setStickyColor(sectionId,stickyId,color){const sections=loadNotes();const s=sections.find(x=>x.id===sectionId);if(!s)return;const st=(s.stickies||[]).find(x=>x.id===stickyId);if(!st)return;st.color=color;saveNotes(sections);renderStickies(s);}
 
 /* ── Stubs ────────────────────────────────────────────────────── */
-function selectNoteType(){}
 function globalFmt(cmd){document.execCommand(cmd,false,null);}
 function globalHighlight(c){document.execCommand('hiliteColor',false,c);}
 function globalFontSize(s){nbFontSize(s);}
-function captureLastFocused(){}
-function changeBlockType(){}
-function nbBlockHtml(){}
-function attachSingleBlockListeners(){}
-function addBlockAfter(){}
-function removeBlock(){}
-function attachSingleDnD(){}
-function attachDnDListeners(){}
-function saveSectionFromDOM(){}
-function renderNoteEditor_old(){}
-
 
 function getTsMonthOptions() {
   const opts=[];
@@ -8058,6 +8970,13 @@ async function notifyTimesheet(stage, person, monthLabel, total, manager, ts) {
     const who = manager ? `approved by ${manager.name}` : 'approved automatically (no manager assigned)';
     const body = `${person.name}'s ${monthLabel} timesheet was ${who}.\n\n`
                + (breakdown || `Total logged: ${total} hours.`);
+    // Tell the person themselves, not just Admin — an in-app notification
+    // alone was easy to miss.
+    if(person.email) {
+      try { await sendApprovalEmail(person.email, person.name, manager ? manager.name : 'Admin',
+              `Timesheet approved: ${monthLabel}`,
+              `Your ${monthLabel} timesheet was ${who}.`, approvalsUrl); } catch(e) {}
+    }
     const recipients = ((typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('timesheet') : [])
       .map(a => ({ addr: a, name: 'Admin' }));
     for(const r of recipients) {
@@ -9148,12 +10067,27 @@ async function renderTimesheetApprovals() {
     return;
   }
 
-  list.innerHTML = mine.map(t => timesheetApprovalCard(t)).join('');
+  // A single pending timesheet just shows in full, same as always. With
+  // more than one, stacking every full day-by-day table one after another
+  // gets unwieldy fast — so those collapse to a name-and-total row, with
+  // one open at a time.
+  if(mine.length === 1) {
+    list.innerHTML = timesheetApprovalCard(mine[0], true);
+  } else {
+    if(!mine.some(t => String(t.id) === String(tsApprovalExpandedId))) tsApprovalExpandedId = null;
+    list.innerHTML = mine.map(t => timesheetApprovalCard(t, String(t.id) === String(tsApprovalExpandedId))).join('');
+  }
 }
+function toggleTsApprovalCard(tsId) {
+  tsApprovalExpandedId = (String(tsApprovalExpandedId) === String(tsId)) ? null : tsId;
+  renderTimesheetApprovals();
+}
+let tsApprovalExpandedId = null;
 
 /* A full breakdown, not just a total: every day with hours, split by
-   project, with leave shown alongside. */
-function timesheetApprovalCard(t) {
+   project, with leave shown alongside. Collapsed to just the header row
+   when there's more than one pending and this isn't the open one. */
+function timesheetApprovalCard(t, expanded) {
   const person = personById(t.person_id);
   const cols   = t.columns || [];
   const rows   = t.rows || {};
@@ -9186,6 +10120,23 @@ function timesheetApprovalCard(t) {
     if(dayTotal > 0 || dayLeaves.length || holiday) {
       dayRows.push({ d, date, key, vals, dayTotal, dayLeaves, holiday });
     }
+  }
+
+  const collapsible = !expanded;
+  const headerClick = collapsible ? ` onclick="toggleTsApprovalCard('${t.id}')" style="cursor:pointer"` : '';
+
+  if(!expanded) {
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"${headerClick}>
+        <span style="font-size:11px;color:var(--muted);width:10px;flex-shrink:0">▸</span>
+        <div style="flex:1;min-width:180px">
+          <div style="font-weight:700;font-size:14px">${person ? person.name : 'Unknown'}</div>
+          <div style="font-size:12px;color:var(--muted)">${tsMonthLabel(t.month)} · ${grand} hrs across ${cols.length} ${cols.length===1?'column':'columns'}</div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();approveTimesheet('${t.id}')">Approve</button>
+        <button class="btn btn-sm" onclick="event.stopPropagation();returnTimesheet('${t.id}')" style="background:#f0ede9;color:var(--muted)">Send back</button>
+      </div>
+    </div>`;
   }
 
   const th = (txt, align) => `<th style="padding:6px 9px;font-size:10px;font-weight:700;color:var(--text2);
@@ -9230,14 +10181,15 @@ function timesheetApprovalCard(t) {
     : `<div style="padding:14px;color:var(--muted);font-size:12px">No project columns on this timesheet.</div>`;
 
   return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px"${headerClick}>
+      ${collapsible?`<span style="font-size:11px;color:var(--muted);width:10px;flex-shrink:0">▾</span>`:''}
       <div style="flex:1;min-width:180px">
         <div style="font-weight:700;font-size:14px">${person ? person.name : 'Unknown'}</div>
         <div style="font-size:12px;color:var(--muted)">${tsMonthLabel(t.month)} · ${grand} hrs across ${cols.length} ${cols.length===1?'column':'columns'}</div>
       </div>
-      <button class="btn btn-sm" onclick="exportTimesheetForApproval('${t.person_id}','${t.month}')">📥 Export Excel</button>
-      <button class="btn btn-sm btn-primary" onclick="approveTimesheet('${t.id}')">Approve</button>
-      <button class="btn btn-sm" onclick="returnTimesheet('${t.id}')" style="background:#f0ede9;color:var(--muted)">Send back</button>
+      <button class="btn btn-sm" onclick="event.stopPropagation();exportTimesheetForApproval('${t.person_id}','${t.month}')">📥 Export Excel</button>
+      <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();approveTimesheet('${t.id}')">Approve</button>
+      <button class="btn btn-sm" onclick="event.stopPropagation();returnTimesheet('${t.id}')" style="background:#f0ede9;color:var(--muted)">Send back</button>
     </div>
     ${table}
   </div>`;
@@ -9258,19 +10210,44 @@ async function exportTimesheetForApproval(personId, month) {
   } catch(e) { console.error(e); showToast('Export failed'); }
 }
 
-function viewTimesheetForApproval(personId, month) {
-  // Managers read a submitted timesheet through the HR-style monthly view
-  showToast('Opening ' + (personById(personId)?.name || 'timesheet'));
-  switchTab('timesheet', document.querySelector('[data-view="timesheet"]'));
+/* Admin's safety net — every pending timesheet company-wide, with the
+   same Return/Approve actions a manager has, in case the assigned
+   manager can't get to it (flags a cross-department assignment, since
+   that's easy to lose track of). */
+async function renderOpsPendingApprovals() {
+  const host = document.getElementById('opsPendingApprovals');
+  if(!host) return;
+  await loadPendingTimesheets();
+  if(!pendingTimesheets.length) {
+    host.innerHTML = `<div style="padding:12px;color:var(--muted);font-size:12px">Nothing waiting on a manager right now</div>`;
+    return;
+  }
+  host.innerHTML = pendingTimesheets.map(t => {
+    const person = personById(t.person_id);
+    const mgr = getManagerFor(t.person_id);
+    const crossDept = person && mgr && personDept(person) !== personDept(mgr);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--border)">
+      <div style="min-width:0">
+        <div style="font-size:12.5px;font-weight:600">${person?person.name:'Unknown'} — ${tsMonthLabel(t.month)}</div>
+        <div style="font-size:11px;color:var(--muted)">
+          Manager: ${mgr?mgr.name:'— none assigned —'}${crossDept?' <span style="color:var(--orange);font-weight:600">(different department)</span>':''} · ${tsTotalHours(t)} hrs
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-sm" style="font-size:11px" onclick="returnTimesheet('${t.id}')">Return for changes</button>
+        <button class="btn btn-sm" style="font-size:11px;background:var(--green);color:#fff;border-color:var(--green)" onclick="approveTimesheet('${t.id}')">Approve</button>
+      </div>
+    </div>`;
+  }).join('');
 }
-
 async function approveTimesheet(tsId) {
   const t = pendingTimesheets.find(x => String(x.id) === String(tsId));
   if(!t) return;
   const person = personById(t.person_id);
   const mgr = getManagerFor(t.person_id);
-  if(!mgr || String(mgr.id) !== String(currentUser.id)) {
-    showToast('Only the direct manager can approve this timesheet'); return;
+  const isTheirManager = mgr && String(mgr.id) === String(currentUser.id);
+  if(!isTheirManager && !isOpsAdmin() && !isAdmin()) {
+    showToast('Only the direct manager or Admin can approve this timesheet'); return;
   }
   const { error } = await sb.from('timesheets').update({
     approval_status: 'approved',
@@ -9286,6 +10263,7 @@ async function approveTimesheet(tsId) {
   if(person) await notifyTimesheet('approved', person, tsMonthLabel(t.month), tsTotalHours(t), currentUser, t);
 
   await renderTimesheetApprovals();
+  if(document.getElementById('opsPendingApprovals')) await renderOpsPendingApprovals();
   updateInboxBadge();
   showToast('Timesheet approved ✓');
 }
@@ -9294,8 +10272,9 @@ async function returnTimesheet(tsId) {
   const t = pendingTimesheets.find(x => String(x.id) === String(tsId));
   if(!t) return;
   const mgr = getManagerFor(t.person_id);
-  if(!mgr || String(mgr.id) !== String(currentUser.id)) {
-    showToast('Only the direct manager can return this timesheet'); return;
+  const isTheirManager = mgr && String(mgr.id) === String(currentUser.id);
+  if(!isTheirManager && !isOpsAdmin() && !isAdmin()) {
+    showToast('Only the direct manager or Admin can return this timesheet'); return;
   }
   const note = prompt('Send it back for changes. Add a note if you like (optional):', '');
   if(note === null) return;   // cancelled
@@ -9323,6 +10302,7 @@ async function returnTimesheet(tsId) {
   }
 
   await renderTimesheetApprovals();
+  if(document.getElementById('opsPendingApprovals')) await renderOpsPendingApprovals();
   showToast('Sent back for changes');
 }
 
@@ -9783,7 +10763,10 @@ async function loadAllData() {
     sb.from('notifications').select('*').order('created_at_ts'),
     sb.from('leaves').select('*'),
     sb.from('leave_balances').select('*'),
-    sb.from('public_holidays').select('*').order('holiday_date')
+    sb.from('public_holidays').select('*').order('holiday_date'),
+    sb.from('contracts').select('*').order('id'),
+    sb.from('milestones').select('*').order('id'),
+    sb.from('subcontractor_pos').select('*').order('id')
   ]);
   const got = i => settled[i].status === 'fulfilled' ? settled[i].value : { data:null, error:settled[i].reason };
 
@@ -9884,6 +10867,50 @@ async function loadAllData() {
       publicHolidays = (res.data || []).map(r => ({ id:r.id, date:r.holiday_date, name:r.name }));
     }
   } catch(e) { holidaysTableMissing = true; }
+
+  try {
+    const res = got(7);
+    if(res.error) { financeTablesMissing = true; }
+    else {
+      financeTablesMissing = false;
+      contracts = (res.data || []).map(r => ({
+        id:r.id, projectId:r.project_id, name:r.name||'',
+        value:(r.value===null||r.value===undefined)?null:Number(r.value),
+        currency:r.currency||'JOD', fileUrl:r.file_url||'', fileName:r.file_name||'',
+        createdBy:r.created_by, createdAt:r.created_at
+      }));
+    }
+  } catch(e) { financeTablesMissing = true; }
+
+  try {
+    const res = got(8);
+    if(!res.error) {
+      milestones = (res.data || []).map(r => ({
+        id:r.id, contractId:r.contract_id, projectId:r.project_id,
+        description:r.description||'',
+        amount:(r.amount===null||r.amount===undefined)?null:Number(r.amount),
+        percentage:(r.percentage===null||r.percentage===undefined)?null:Number(r.percentage),
+        status:r.status||'pending', createdAt:r.created_at,
+        reachedAt:r.reached_at, invoicedAt:r.invoiced_at, sentAt:r.sent_at, paidAt:r.paid_at,
+        reachedBy:r.reached_by, deliverableId:r.deliverable_id||null, autoTrigger:!!r.auto_trigger,
+        invoiceFileUrl:r.invoice_file_url||'', invoiceFileName:r.invoice_file_name||''
+      }));
+    }
+  } catch(e) {}
+
+  try {
+    const res = got(9);
+    if(!res.error) {
+      subPOs = (res.data || []).map(r => ({
+        id:r.id, projectId:r.project_id, subcontractorName:r.subcontractor_name||'',
+        amount:(r.amount===null||r.amount===undefined)?null:Number(r.amount),
+        currency:r.currency||'JOD', deliverableId:r.deliverable_id||null,
+        fileUrl:r.file_url||'', fileName:r.file_name||'',
+        status:r.status||'issued', createdBy:r.created_by, createdAt:r.created_at,
+        confirmedAt:r.confirmed_at, paidAt:r.paid_at
+      }));
+    }
+  } catch(e) {}
 }
 
 // ── SAVE helpers (called after each mutation) ────────────────────
@@ -9969,7 +10996,63 @@ function subscribeRealtime() {
       await reloadNotifications(); updateInboxBadge();
       if(!document.getElementById('view-mywork').classList.contains('hidden')) renderMyWork();
     })
+    .on('postgres_changes', {event:'*', schema:'public', table:'contracts'}, async () => {
+      await reloadFinanceData(); renderProjects(); renderOpsFinance();
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'milestones'}, async () => {
+      await reloadFinanceData(); renderProjects(); renderOpsFinance();
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'subcontractor_pos'}, async () => {
+      await reloadFinanceData(); renderProjects(); renderOpsFinance();
+    })
+    .on('postgres_changes', {event:'*', schema:'public', table:'timesheets'}, async () => {
+      // So a newly submitted timesheet shows up for its manager (and for
+      // Admin's override list) without anyone having to navigate away and back.
+      await loadPendingTimesheets();
+      const mine = pendingTimesheets.filter(t => {
+        const mgr = getManagerFor(t.person_id);
+        return mgr && String(mgr.id) === String(currentUser.id);
+      });
+      const b = document.getElementById('mwTsBadge');
+      if(b) { b.textContent = mine.length; b.style.display = mine.length ? '' : 'none'; }
+      if(typeof mwTab !== 'undefined' && mwTab === 'timesheets') renderTimesheetApprovals();
+      if(document.getElementById('opsPendingApprovals')) renderOpsPendingApprovals();
+    })
     .subscribe();
+}
+async function reloadFinanceData() {
+  try {
+    const [cRes, mRes, sRes] = await Promise.all([
+      sb.from('contracts').select('*').order('id'),
+      sb.from('milestones').select('*').order('id'),
+      sb.from('subcontractor_pos').select('*').order('id')
+    ]);
+    if(!cRes.error) {
+      financeTablesMissing = false;
+      contracts = (cRes.data||[]).map(r => ({
+        id:r.id, projectId:r.project_id, name:r.name||'',
+        value:(r.value===null||r.value===undefined)?null:Number(r.value),
+        currency:r.currency||'JOD', fileUrl:r.file_url||'', fileName:r.file_name||'',
+        createdBy:r.created_by, createdAt:r.created_at
+      }));
+    }
+    if(!mRes.error) milestones = (mRes.data||[]).map(r => ({
+      id:r.id, contractId:r.contract_id, projectId:r.project_id, description:r.description||'',
+      amount:(r.amount===null||r.amount===undefined)?null:Number(r.amount),
+      percentage:(r.percentage===null||r.percentage===undefined)?null:Number(r.percentage),
+      status:r.status||'pending', createdAt:r.created_at,
+      reachedAt:r.reached_at, invoicedAt:r.invoiced_at, sentAt:r.sent_at, paidAt:r.paid_at, reachedBy:r.reached_by,
+      deliverableId:r.deliverable_id||null, autoTrigger:!!r.auto_trigger,
+      invoiceFileUrl:r.invoice_file_url||'', invoiceFileName:r.invoice_file_name||''
+    }));
+    if(!sRes.error) subPOs = (sRes.data||[]).map(r => ({
+      id:r.id, projectId:r.project_id, subcontractorName:r.subcontractor_name||'',
+      amount:(r.amount===null||r.amount===undefined)?null:Number(r.amount),
+      currency:r.currency||'JOD', deliverableId:r.deliverable_id||null,
+      fileUrl:r.file_url||'', fileName:r.file_name||'', status:r.status||'issued',
+      createdBy:r.created_by, createdAt:r.created_at, confirmedAt:r.confirmed_at, paidAt:r.paid_at
+    }));
+  } catch(e) { console.warn('reloadFinanceData failed:', e.message||e); }
 }
 
 async function reloadProjects() {
@@ -10003,14 +11086,11 @@ async function reloadNotifications() {
   if(data) notifications = data.map(r => ({id:r.id,toPersonId:r.to_person_id,type:r.type,data:r.data,readAt:r.read_at,createdAt:r.created_at_ts}));
 }
 
-// Legacy stub — no longer needed but kept so nothing breaks
-function saveAllData() {}
-
 function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); updateSummary(); }
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-05-06-v3 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v68 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
