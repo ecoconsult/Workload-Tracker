@@ -5429,17 +5429,18 @@ async function clearFinanceActivity() {
   renderFinanceAudit();
   showToast('Finance activity cleared ✓');
 }
-/* The complement of the Finance panel above — project, balance, account
-   and timesheet entries. Clearing one of these two panels never touches
-   the other's history, since each only ever deletes its own slice. */
+/* The complement of the Finance panel above — everything except Finance's
+   own entries. Built the same way renderAuditLog() decides what to show
+   (excluding the finance types, not listing everything else by name), so
+   the two can never drift apart the way a hand-maintained list would. */
 async function clearOpsAudit() {
   if(!isOpsAdmin() && !isAdmin()) { showToast('Only Admin can clear this'); return; }
-  if(!confirm('Clear this activity history? This removes project, balance and account entries — Finance\'s own history on the Finance tab is untouched. This cannot be undone.')) return;
-  const types = ['balance','budget','person','timesheet','manager'];
+  if(!confirm('Clear this activity history? This removes everything except Finance\'s own history (contracts, payment stages, subcontractor POs), which stays on the Finance tab. This cannot be undone.')) return;
+  const financeTypes = ['contract','milestone','subcontractor_po'];
   try {
-    await sb.from('audit_log').delete().in('entity', types);
+    await sb.from('audit_log').delete().not('entity', 'in', `(${financeTypes.join(',')})`);
   } catch(e) { showToast('⚠ Could not clear — try again'); return; }
-  auditRows = (auditRows||[]).filter(r => !types.includes(r.entity));
+  auditRows = (auditRows||[]).filter(r => financeTypes.includes(r.entity));
   renderAuditLog();
   showToast('Activity cleared ✓');
 }
@@ -11112,7 +11113,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v69 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v70 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
