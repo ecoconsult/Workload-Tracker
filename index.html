@@ -1653,8 +1653,14 @@ select option{background:#fff}
     <h2 id="milestoneModalTitle">Add Payment Stage</h2>
     <p class="modal-sub" id="milestoneContractLabel"></p>
     <div class="field"><label>Description</label><input type="text" id="milestoneDesc" placeholder="e.g. Upon signature, Upon final deliverable"></div>
-    <div class="field"><label>Percentage of contract value</label>
+    <div class="field">
+      <label>Amount</label>
+      <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+        <div id="milestoneModePct" onclick="setMilestoneEntryMode('pct')" style="padding:5px 12px;cursor:pointer">Percentage</div>
+        <div id="milestoneModeFixed" onclick="setMilestoneEntryMode('fixed')" style="padding:5px 12px;cursor:pointer">Fixed Amount</div>
+      </div>
       <input type="number" id="milestonePct" placeholder="e.g. 50" min="0" max="100" step="0.01" oninput="updateMilestonePctPreview()">
+      <input type="number" id="milestoneAmountFixed" placeholder="e.g. 50000" min="0" step="0.01" oninput="updateMilestonePctPreview()" style="display:none">
     </div>
     <div id="milestonePctPreview" style="font-size:12px;color:var(--muted);margin:-8px 0 14px;min-height:14px"></div>
     <div class="modal-actions">
@@ -4991,12 +4997,27 @@ async function deleteContractItem() {
 }
 
 let addingMilestoneToContractId = null, addingMilestoneProjectId = null, editingMilestoneId = null;
+let milestoneEntryMode = 'pct';
+function setMilestoneEntryMode(mode) {
+  milestoneEntryMode = mode;
+  document.getElementById('milestonePct').style.display = mode==='pct' ? '' : 'none';
+  document.getElementById('milestoneAmountFixed').style.display = mode==='fixed' ? '' : 'none';
+  const on = { background:'var(--text)', color:'#fff' }, off = { background:'transparent', color:'var(--text2)' };
+  Object.assign(document.getElementById('milestoneModePct').style, mode==='pct' ? on : off);
+  Object.assign(document.getElementById('milestoneModeFixed').style, mode==='fixed' ? on : off);
+  updateMilestonePctPreview();
+}
 function updateMilestonePctPreview() {
-  const pct = parseFloat(document.getElementById('milestonePct').value);
   const c = contracts.find(x => x.id === addingMilestoneToContractId);
   const preview = document.getElementById('milestonePctPreview');
   if(!preview) return;
-  preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(c.value * pct / 100)}` : '';
+  if(milestoneEntryMode === 'pct') {
+    const pct = parseFloat(document.getElementById('milestonePct').value);
+    preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(c.value * pct / 100)}` : '';
+  } else {
+    const amt = parseFloat(document.getElementById('milestoneAmountFixed').value);
+    preview.textContent = (c && c.value && amt >= 0) ? `= ${(amt / c.value * 100).toFixed(2)}% of contract value` : '';
+  }
 }
 function openAddMilestone(contractId, projId) {
   const proj = projById(projId);
@@ -5010,7 +5031,8 @@ function openAddMilestone(contractId, projId) {
   document.getElementById('milestoneDeleteBtn').style.display = 'none';
   document.getElementById('milestoneDesc').value = '';
   document.getElementById('milestonePct').value = '';
-  document.getElementById('milestonePctPreview').textContent = '';
+  document.getElementById('milestoneAmountFixed').value = '';
+  setMilestoneEntryMode('pct');
   openOverlay('milestoneModal');
 }
 function openEditMilestone(milestoneId) {
@@ -5026,17 +5048,25 @@ function openEditMilestone(milestoneId) {
   document.getElementById('milestoneDeleteBtn').style.display = '';
   document.getElementById('milestoneDesc').value = m.description;
   document.getElementById('milestonePct').value = m.percentage ?? '';
-  updateMilestonePctPreview();
+  document.getElementById('milestoneAmountFixed').value = m.amount ?? '';
+  setMilestoneEntryMode('pct');
   openOverlay('milestoneModal');
 }
 function closeMilestoneModal() { editingMilestoneId = null; closeModal('milestoneModal'); }
 async function saveMilestoneItem() {
   const description = document.getElementById('milestoneDesc').value.trim();
-  const percentage = parseFloat(document.getElementById('milestonePct').value);
-  if(!description) { showToast('⚠ Please describe the stage'); return; }
-  if(!percentage || percentage <= 0 || percentage > 100) { showToast('⚠ Please enter a percentage between 0 and 100'); return; }
   const c = contracts.find(x => x.id === addingMilestoneToContractId);
-  const amount = c ? Math.round((c.value * percentage / 100) * 100) / 100 : null;
+  let percentage, amount;
+  if(milestoneEntryMode === 'pct') {
+    percentage = parseFloat(document.getElementById('milestonePct').value);
+    if(!percentage || percentage <= 0 || percentage > 100) { showToast('⚠ Please enter a percentage between 0 and 100'); return; }
+    amount = c ? Math.round((c.value * percentage / 100) * 100) / 100 : null;
+  } else {
+    amount = parseFloat(document.getElementById('milestoneAmountFixed').value);
+    if(!amount || amount <= 0) { showToast('⚠ Please enter an amount'); return; }
+    percentage = (c && c.value) ? Math.round((amount / c.value * 100) * 100) / 100 : null;
+  }
+  if(!description) { showToast('⚠ Please describe the stage'); return; }
   const proj = projById(addingMilestoneProjectId);
   if(editingMilestoneId) {
     const m = milestones.find(x => x.id === editingMilestoneId); if(!m) return;
@@ -5044,7 +5074,7 @@ async function saveMilestoneItem() {
     m.description = description; m.percentage = percentage; m.amount = amount;
     await saveMilestoneRow(m);
     await writeAudit('milestone', m.id, 'updated', before, `${description} · ${percentage}%`, proj?proj.name:'');
-    await notifyPMOfAdminChange(proj, `${currentUser.name} updated a payment stage on "${proj.name}": ${description} · ${percentage}% = ${fmtMoney(amount)}.`);
+    await notifyPMOfAdminChange(proj, `${currentUser.name} updated a payment stage on "${proj.name}": ${description} · ${fmtMoney(amount)}.`);
     showToast('Payment stage updated ✓');
   } else {
     const m = { id:'m'+Date.now(), contractId:addingMilestoneToContractId, projectId:addingMilestoneProjectId,
@@ -5053,7 +5083,7 @@ async function saveMilestoneItem() {
                 deliverableId:null, autoTrigger:false, invoiceFileUrl:'', invoiceFileName:'' };
     milestones.push(m);
     await saveMilestoneRow(m);
-    await notifyPMOfAdminChange(proj, `${currentUser.name} added a payment stage to "${proj.name}": ${description} · ${percentage}% = ${fmtMoney(amount)}.`);
+    await notifyPMOfAdminChange(proj, `${currentUser.name} added a payment stage to "${proj.name}": ${description} · ${fmtMoney(amount)}.`);
     showToast('Payment stage added ✓');
   }
   closeMilestoneModal();
@@ -11113,7 +11143,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v72 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v73 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
