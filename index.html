@@ -990,7 +990,10 @@ select option{background:#fff}
           <table id="opsProjTable" class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:960px"></table>
         </div>
         <div style="flex:1 1 260px;max-width:300px;min-width:240px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px">
-          <div style="font-size:13px;font-weight:700;margin-bottom:2px">Recent changes</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+            <div style="font-size:13px;font-weight:700">Recent changes</div>
+            <span onclick="clearOpsAudit()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">Clear</span>
+          </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Who changed a leave balance or a project, and when</div>
           <div id="opsAuditList" style="max-height:520px;overflow-y:auto"></div>
         </div>
@@ -4592,13 +4595,18 @@ async function loadAuditLog(limit) {
 function renderAuditLog() {
   const host = document.getElementById('opsAuditList');
   if(!host) return;
-  if(!auditRows.length) {
+  // Finance's own changes (contracts, payment stages, subcontractor POs)
+  // have their own audit panel on the Finance tab — keep them out of here
+  // so the two never show the same entries twice and "Clear" on one can
+  // never touch the other's history.
+  const rows = auditRows.filter(r => !['contract','milestone','subcontractor_po'].includes(r.entity));
+  if(!rows.length) {
     host.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">
       No changes recorded yet. If this stays empty, run step7-audit-log.sql in Supabase.</div>`;
     return;
   }
-  const label = { balance:'Leave balance', budget:'Budget', manager:'Manager' };
-  host.innerHTML = auditRows.slice(0,60).map(r => {
+  const label = { balance:'Leave balance', budget:'Budget', manager:'Manager', person:'Person', timesheet:'Timesheet' };
+  host.innerHTML = rows.slice(0,60).map(r => {
     const when = r.changed_at ? fmtDateEU(r.changed_at.slice(0,10)) + ' ' + r.changed_at.slice(11,16) : '';
     const subject = r.entity === 'balance'
       ? (personById(r.entity_id)?.name || 'Someone')
@@ -5420,6 +5428,20 @@ async function clearFinanceActivity() {
   auditRows = (auditRows||[]).filter(r => !['contract','milestone','subcontractor_po'].includes(r.entity));
   renderFinanceAudit();
   showToast('Finance activity cleared ✓');
+}
+/* The complement of the Finance panel above — project, balance, account
+   and timesheet entries. Clearing one of these two panels never touches
+   the other's history, since each only ever deletes its own slice. */
+async function clearOpsAudit() {
+  if(!isOpsAdmin() && !isAdmin()) { showToast('Only Admin can clear this'); return; }
+  if(!confirm('Clear this activity history? This removes project, balance and account entries — Finance\'s own history on the Finance tab is untouched. This cannot be undone.')) return;
+  const types = ['balance','budget','person','timesheet','manager'];
+  try {
+    await sb.from('audit_log').delete().in('entity', types);
+  } catch(e) { showToast('⚠ Could not clear — try again'); return; }
+  auditRows = (auditRows||[]).filter(r => !types.includes(r.entity));
+  renderAuditLog();
+  showToast('Activity cleared ✓');
 }
 
 /* Issuing an invoice is a Finance action that produces a real file —
@@ -11090,7 +11112,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v68 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v69 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
