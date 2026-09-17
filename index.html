@@ -680,7 +680,7 @@ select option{background:#fff}
       <div class="tab" onclick="switchTab('mywork',this)" id="myworkTab" data-view="mywork" title="Private — only you can see this"><span class="tab-lock"></span>My Work <span id="inboxBadge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px"></span></div>
   <div class="tab" onclick="switchTab('notes',this)" data-view="notes" title="Private — only you can see this"><span class="tab-lock"></span>📝 My Notes</div>
   <div class="tab" onclick="switchTab('leaves',this)" data-view="leaves">🏖 Public Holidays</div>
-      <div class="tab" onclick="switchTab('timesheet',this)" data-view="timesheet" title="Private — only you, your manager and HR can see this"><span class="tab-lock"></span>🕐 My Timesheet</div>
+      <div class="tab" onclick="switchTab('timesheet',this)" data-view="timesheet" title="Private — only you, your manager and Admin can see this"><span class="tab-lock"></span>🕐 My Timesheet</div>
 </div>
 
 <div class="main">
@@ -3505,7 +3505,7 @@ function renderOpsPeople() {
   if(warn) {
     if(unassigned.length) {
       warn.style.display = '';
-      warn.innerHTML = `<strong>${unassigned.length} ${unassigned.length===1?'person has':'people have'} no manager assigned.</strong> Their timesheets skip review and are approved automatically, with HR notified: ` +
+      warn.innerHTML = `<strong>${unassigned.length} ${unassigned.length===1?'person has':'people have'} no manager assigned.</strong> Their timesheets skip review and are approved automatically, with Admin notified: ` +
         unassigned.map(p=>p.name).join(', ') + '.';
     } else {
       warn.style.display = 'none';
@@ -8855,7 +8855,7 @@ async function submitUserTimesheet() {
   closeModal('confirmTsModal');
 
   // Route to the direct manager. Nobody assigned means nobody can review
-  // it, so it is approved on the spot and HR and the Admin are told.
+  // it, so it is approved on the spot and Admin is told.
   const mgr = getManagerFor(tsData.person_id) || getManagerFor(currentUser.id);
   const autoApproved = !mgr;
 
@@ -11113,7 +11113,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v70 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-17-v72 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
