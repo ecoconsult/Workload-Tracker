@@ -1719,6 +1719,44 @@ select option{background:#fff}
   </div>
 </div>
 
+<!-- SUBCONTRACTOR PO PAYMENT MODAL -->
+<div class="overlay" id="subPOStageModal">
+  <div class="modal" style="width:410px">
+    <button class="modal-close" onclick="closeSubPOStageModal()">×</button>
+    <h2 id="subPOStageTitle">Add Payment</h2>
+    <p class="modal-sub" id="subPOStageLabel"></p>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+      Only needed if this PO is paid in more than one go — an advance before work starts, for example.
+      Anything already paid here is never billed again: confirming the work done later only flags whatever is still outstanding.
+    </div>
+    <div class="field"><label>Description</label><input type="text" id="subPOStageDesc" placeholder="e.g. Advance before work, Balance on completion"></div>
+    <div class="field">
+      <label>Amount</label>
+      <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+        <div id="subPOStageModePct" onclick="setSubPOStageMode('pct')" style="padding:5px 12px;cursor:pointer">Percentage</div>
+        <div id="subPOStageModeFixed" onclick="setSubPOStageMode('fixed')" style="padding:5px 12px;cursor:pointer">Fixed Amount</div>
+      </div>
+      <input type="number" id="subPOStagePct" placeholder="e.g. 50" min="0" max="100" step="0.01" oninput="updateSubPOStagePreview()">
+      <div id="subPOStageAmountWrap" style="display:none">
+        <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+          <div id="subPOStageAmountCurJod" onclick="setAmountCurrency('subPOStageAmount','jod')" style="padding:5px 12px;cursor:pointer">JOD</div>
+          <div id="subPOStageAmountCurUsd" onclick="setAmountCurrency('subPOStageAmount','usd')" style="padding:5px 12px;cursor:pointer">USD</div>
+        </div>
+        <input type="number" id="subPOStageAmount" placeholder="e.g. 5000" min="0" step="0.01" oninput="updateSubPOStagePreview()">
+        <input type="number" id="subPOStageAmountUsd" placeholder="e.g. 7000" min="0" step="0.01" oninput="updateSubPOStagePreview()" style="display:none">
+      </div>
+    </div>
+    <div id="subPOStagePreview" style="font-size:12px;color:var(--muted);margin:-8px 0 14px;min-height:14px"></div>
+    <div class="field"><label>Subcontractor's invoice (optional)</label><input type="file" id="subPOStageFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div id="subPOStageCurrentFile" style="display:none;font-size:11px;margin:-8px 0 14px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="subPOStageDeleteBtn" style="display:none" onclick="deleteSubPOStage()">Delete</button>
+      <button class="btn" onclick="closeSubPOStageModal()">Cancel</button>
+      <button class="btn btn-primary" id="subPOStageSaveBtn" onclick="saveSubPOStage()">Add</button>
+    </div>
+  </div>
+</div>
+
 <!-- ISSUE INVOICE MODAL -->
 <div class="overlay" id="issueInvoiceModal">
   <div class="modal" style="width:420px">
@@ -4791,7 +4829,8 @@ async function saveSubPO(s) {
       amount: s.amount, currency: s.currency || 'JOD', deliverable_id: s.deliverableId || null,
       file_url: s.fileUrl || null, file_name: s.fileName || null, status: s.status,
       created_by: s.createdBy, created_at: s.createdAt,
-      confirmed_at: s.confirmedAt || null, paid_at: s.paidAt || null
+      confirmed_at: s.confirmedAt || null, paid_at: s.paidAt || null,
+      stages: s.stages || []
     });
     if(error) { reportSaveFailure('Subcontractor PO', error); return false; }
     return true;
@@ -4852,6 +4891,28 @@ async function notifyPMOfAdminChange(proj, message) {
    A stage sitting at "reached" has not been billed — it must never be
    counted as outstanding, or Outstanding trivially equals Contracted
    any time nothing has been invoiced yet, which is exactly the bug. */
+/* Subcontractor POs can optionally be split into payment stages — an
+   advance before work starts, the balance on completion, or any other
+   split. A PO with no stages behaves exactly as it always did: the whole
+   amount, payable once the work is confirmed done. These three helpers
+   are the single source of truth for that either/or, so no caller has to
+   know which shape it's dealing with. */
+function subPOStages(s) { return Array.isArray(s.stages) ? s.stages : []; }
+/* Everything still owed on this PO, whatever its shape. */
+function subPOUnpaidTotal(s) {
+  const st = subPOStages(s);
+  if(!st.length) return s.status === 'paid' ? 0 : Number(s.amount||0);
+  return st.filter(x => x.status !== 'paid').reduce((t,x) => t + Number(x.amount||0), 0);
+}
+/* Only what Finance can actually pay right now — an advance is payable
+   the moment it's ticked, without waiting for the work to be confirmed. */
+function subPODueNow(s) {
+  const st = subPOStages(s);
+  if(!st.length) return s.status === 'ready_to_pay' ? Number(s.amount||0) : 0;
+  return st.filter(x => x.status === 'due').reduce((t,x) => t + Number(x.amount||0), 0);
+}
+function subPOStagesTotal(s) { return subPOStages(s).reduce((t,x) => t + Number(x.amount||0), 0); }
+
 function projectFinanceSnapshot(projId) {
   const cs = contracts.filter(c => String(c.projectId) === String(projId));
   const cIds = cs.map(c => c.id);
@@ -4861,8 +4922,8 @@ function projectFinanceSnapshot(projId) {
   const readyToInvoice = ms.filter(m => m.status==='reached').reduce((s,m) => s + Number(m.amount||0), 0);
   const outstanding = ms.filter(m => ['invoiced','sent'].includes(m.status)).reduce((s,m) => s + Number(m.amount||0), 0);
   const collected = ms.filter(m => m.status==='paid').reduce((s,m) => s + Number(m.amount||0), 0);
-  const owedToSubs = sp.filter(s => s.status !== 'paid').reduce((s,x) => s + Number(x.amount||0), 0);
-  const hasPending = ms.some(m => m.status === 'reached') || sp.some(s => s.status === 'ready_to_pay');
+  const owedToSubs = sp.reduce((t,x) => t + subPOUnpaidTotal(x), 0);
+  const hasPending = ms.some(m => m.status === 'reached') || sp.some(s => subPODueNow(s) > 0);
   return { contracted, readyToInvoice, outstanding, collected, owedToSubs, hasPending };
 }
 
@@ -4961,24 +5022,63 @@ function renderProjectBilling(p) {
     </div>`;
   }).join('');
 
+  const SUBPO_STAGE_LABEL = { pending:'Not yet due', due:'Ready to pay', paid:'Paid' };
+  const SUBPO_STAGE_COLOR = { pending:'var(--muted)', due:'var(--orange)', paid:'var(--green)' };
   const subPORows = sp.map(s => {
     const deliv = s.deliverableId ? (p.deliverables||[]).find(d => d.id === s.deliverableId) : null;
     const timeline = subPOTimeline(s);
-    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-      <div style="min-width:0">
-        <div style="font-size:12px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
-        <div style="font-size:10px;color:var(--muted)">${deliv?'Linked: '+escapeAttr(deliv.name):'Manual entry'}${s.fileUrl?` · <a href="${s.fileUrl}" target="_blank" style="color:var(--blue)">📄 PO</a>`:''}</div>
-        ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <div style="font-size:12px;font-weight:600">${fmtMoney(s.amount)}</div>
-        <div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[s.status]}">${FINANCE_STATUS_LABEL[s.status]}</div>
-        <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
-          ${manage && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
-          ${financeAdmin && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
-          ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPO('${s.id}')" title="Edit">✎</button>`:''}
+    const stages = subPOStages(s);
+    const assigned = subPOStagesTotal(s);
+
+    // With stages, each one is its own payable line; without, the PO keeps
+    // its original single "confirm then pay" behaviour untouched.
+    const stageRows = stages.map(st => `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:8px;min-width:0">
+          <input type="checkbox" ${st.status!=='pending'?'checked':''} ${(!manage||st.status!=='pending')?'disabled':''}
+            style="width:14px;height:14px;margin-top:2px;flex-shrink:0;accent-color:var(--green);cursor:${manage&&st.status==='pending'?'pointer':'default'}"
+            onchange="markSubPOStageDue('${s.id}','${st.id}')">
+          <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(st.description)} · ${fmtMoney(st.amount)}
+            ${st.paidAt?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${fmtShortDate(st.paidAt)}</div>`:''}
+            ${st.invoiceFileUrl?`<a href="${st.invoiceFileUrl}" target="_blank" style="font-size:9px;color:var(--blue)">📄 Invoice</a>`:''}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:10px;font-weight:600;color:${SUBPO_STAGE_COLOR[st.status]}">${SUBPO_STAGE_LABEL[st.status]}</div>
+          <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
+            ${financeAdmin && st.status==='due'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOStagePaid('${s.id}','${st.id}')">Mark paid</button>`:''}
+            ${manage && st.status!=='paid'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPOStage('${s.id}','${st.id}')" title="Edit">✎</button>`:''}
+          </div>
+        </div>
+      </div>`).join('');
+
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
+          <div style="font-size:10px;color:var(--muted)">${deliv?'Linked: '+escapeAttr(deliv.name):'Manual entry'}${s.fileUrl?` · <a href="${s.fileUrl}" target="_blank" style="color:var(--blue)">📄 PO</a>`:''}</div>
+          ${timeline&&!stages.length?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:12px;font-weight:600">${fmtMoney(s.amount)}</div>
+          ${stages.length
+            ? `<div style="font-size:10px;font-weight:600;color:${subPOUnpaidTotal(s)?'var(--orange)':'var(--green)'}">${subPOUnpaidTotal(s)?fmtMoney(subPOUnpaidTotal(s))+' outstanding':'Fully paid'}</div>`
+            : `<div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[s.status]}">${FINANCE_STATUS_LABEL[s.status]}</div>`}
+          <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
+            ${manage && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
+            ${financeAdmin && !stages.length && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
+            ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPO('${s.id}')" title="Edit">✎</button>`:''}
+          </div>
         </div>
       </div>
+      ${stages.length?(()=>{
+        const paidSoFar = stages.filter(x=>x.status==='paid').reduce((t,x)=>t+Number(x.amount||0),0);
+        const diff = Math.abs(assigned-Number(s.amount||0));
+        return `<div style="font-size:9px;color:var(--muted);margin-top:4px">${fmtMoney(assigned)} of ${fmtMoney(s.amount)} split into ${stages.length} payment${stages.length===1?'':'s'}${diff>0.5?` · ${fmtMoney(diff)} ${assigned>Number(s.amount||0)?'over':'unassigned'}`:''}${paidSoFar?` · ${fmtMoney(paidSoFar)} already paid, only the rest will be billed on completion`:''}</div>`;
+      })():''}
+      ${stageRows}
+      ${manage && s.status!=='paid'?`<button class="btn btn-sm" style="font-size:10px;margin-top:6px" onclick="openAddSubPOStage('${s.id}')">+ Split into payments${stages.length?'':' (optional)'}</button>`:''}
+      ${manage && !stages.length && s.status==='issued'?`<div style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.5">Optional — leave this alone and the full ${fmtMoney(s.amount)} is simply flagged to Finance when you confirm the work done.</div>`:''}
     </div>`;
   }).join('');
 
@@ -5372,12 +5472,176 @@ async function markSubPOConfirmed(subPOId) {
   const proj = projById(s.projectId);
   if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
   s.status = 'ready_to_pay'; s.confirmedAt = new Date().toISOString();
+  // With stages, confirming the work makes everything still outstanding
+  // payable — an advance that was never ticked is owed too, now the work
+  // is actually done.
+  subPOStages(s).forEach(x => { if(x.status === 'pending') { x.status = 'due'; x.dueAt = new Date().toISOString(); } });
+  // Never fall back to the full PO value when stages exist — anything
+  // already paid must not be re-reported. Only an unstaged PO uses the total.
+  const owed = subPOStages(s).length ? subPODueNow(s) : Number(s.amount||0);
   await saveSubPO(s);
   await writeAudit('subcontractor_po', s.id, 'status', 'issued', 'ready_to_pay', proj.name);
-  await notifyFinance('subpo_ready', `${s.subcontractorName} confirmed done on "${proj.name}" — ${fmtMoney(s.amount)} ready to pay.`, proj.id);
+  await notifyFinance('subpo_ready', `${s.subcontractorName} confirmed done on "${proj.name}" — ${fmtMoney(owed)} ready to pay.`, proj.id);
   await notifyPMOfAdminChange(proj, `${currentUser.name} confirmed ${s.subcontractorName}'s work done on "${proj.name}".`);
   renderProjects(); renderOpsFinance();
   showToast('Confirmed — Finance notified ✓');
+}
+/* Ticking a single stage — this is how a 50% advance becomes payable
+   before any work has been confirmed. */
+/* Add / edit one payment on a subcontractor PO. Percentage is of the
+   PO's own value (not the contract's), which is what "50% upfront"
+   actually means in practice. */
+let stagePOId = null, editingStageId = null, subPOStageMode = 'pct', subPOStageRemoveFile = false;
+function setSubPOStageMode(mode) {
+  subPOStageMode = mode;
+  document.getElementById('subPOStagePct').style.display = mode==='pct' ? '' : 'none';
+  document.getElementById('subPOStageAmountWrap').style.display = mode==='fixed' ? '' : 'none';
+  const on = { background:'var(--text)', color:'#fff' }, off = { background:'transparent', color:'var(--text2)' };
+  Object.assign(document.getElementById('subPOStageModePct').style, mode==='pct' ? on : off);
+  Object.assign(document.getElementById('subPOStageModeFixed').style, mode==='fixed' ? on : off);
+  updateSubPOStagePreview();
+}
+function subPOStageResolvedAmount() {
+  const po = subPOs.find(x => x.id === stagePOId);
+  if(!po) return NaN;
+  if(subPOStageMode === 'pct') {
+    const pct = parseFloat(document.getElementById('subPOStagePct').value);
+    return isNaN(pct) ? NaN : Math.round((Number(po.amount||0) * pct / 100) * 100) / 100;
+  }
+  return readAmountJOD('subPOStageAmount');
+}
+function updateSubPOStagePreview() {
+  const po = subPOs.find(x => x.id === stagePOId);
+  const preview = document.getElementById('subPOStagePreview');
+  if(!preview || !po) return;
+  const amt = subPOStageResolvedAmount();
+  if(isNaN(amt) || amt <= 0) { preview.textContent = ''; return; }
+  const pct = Number(po.amount) ? (amt / Number(po.amount) * 100).toFixed(2) : null;
+  preview.textContent = `= ${fmtMoney(amt)}` + (pct !== null ? ` · ${pct}% of this PO` : '');
+}
+function renderSubPOStageCurrentFile(st) {
+  const host = document.getElementById('subPOStageCurrentFile');
+  if(!host) return;
+  if(!st || !st.invoiceFileUrl) { host.style.display = 'none'; return; }
+  host.style.display = '';
+  if(subPOStageRemoveFile) {
+    host.innerHTML = `<span style="color:var(--red)">File will be removed when you save.</span> <a href="javascript:void(0)" onclick="subPOStageRemoveFile=false;renderSubPOStageCurrentFile(subPOStages(subPOs.find(x=>x.id==='${stagePOId}')).find(y=>y.id==='${st.id}'))" style="color:var(--blue)">Undo</a>`;
+  } else {
+    host.innerHTML = `📄 <a href="${st.invoiceFileUrl}" target="_blank" style="color:var(--blue)">${escapeAttr(st.invoiceFileName||'Current file')}</a> · <a href="javascript:void(0)" onclick="subPOStageRemoveFile=true;renderSubPOStageCurrentFile(subPOStages(subPOs.find(x=>x.id==='${stagePOId}')).find(y=>y.id==='${st.id}'))" style="color:var(--red)">Remove</a>`;
+  }
+}
+function openAddSubPOStage(subPOId) {
+  const po = subPOs.find(x => x.id === subPOId); if(!po) return;
+  const proj = projById(po.projectId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(po.projectId, proj?proj.creatorId:null); return; }
+  stagePOId = subPOId; editingStageId = null; subPOStageRemoveFile = false;
+  document.getElementById('subPOStageTitle').textContent = 'Add Payment';
+  document.getElementById('subPOStageSaveBtn').textContent = 'Add';
+  document.getElementById('subPOStageDeleteBtn').style.display = 'none';
+  document.getElementById('subPOStageLabel').textContent = `${po.subcontractorName} · ${fmtMoney(po.amount)}`;
+  document.getElementById('subPOStageDesc').value = '';
+  document.getElementById('subPOStagePct').value = '';
+  document.getElementById('subPOStageAmount').value = '';
+  document.getElementById('subPOStageFile').value = '';
+  document.getElementById('subPOStageCurrentFile').style.display = 'none';
+  resetAmountCurrency('subPOStageAmount');
+  setSubPOStageMode('pct');
+  openOverlay('subPOStageModal');
+}
+function openEditSubPOStage(subPOId, stageId) {
+  const po = subPOs.find(x => x.id === subPOId); if(!po) return;
+  const st = subPOStages(po).find(x => x.id === stageId); if(!st) return;
+  const proj = projById(po.projectId);
+  if(!proj || !canManageFinance(proj)) { showNoAccess(po.projectId, proj?proj.creatorId:null); return; }
+  stagePOId = subPOId; editingStageId = stageId; subPOStageRemoveFile = false;
+  document.getElementById('subPOStageTitle').textContent = 'Edit Payment';
+  document.getElementById('subPOStageSaveBtn').textContent = 'Save Changes';
+  document.getElementById('subPOStageDeleteBtn').style.display = '';
+  document.getElementById('subPOStageLabel').textContent = `${po.subcontractorName} · ${fmtMoney(po.amount)}`;
+  document.getElementById('subPOStageDesc').value = st.description || '';
+  document.getElementById('subPOStagePct').value = '';
+  document.getElementById('subPOStageAmount').value = st.amount ?? '';
+  document.getElementById('subPOStageFile').value = '';
+  resetAmountCurrency('subPOStageAmount');
+  setSubPOStageMode('fixed');   // editing shows the stored JOD figure as-is
+  renderSubPOStageCurrentFile(st);
+  openOverlay('subPOStageModal');
+}
+function closeSubPOStageModal() { editingStageId = null; subPOStageRemoveFile = false; closeModal('subPOStageModal'); }
+async function saveSubPOStage() {
+  const po = subPOs.find(x => x.id === stagePOId); if(!po) return;
+  const description = document.getElementById('subPOStageDesc').value.trim();
+  const amount = subPOStageResolvedAmount();
+  if(!description) { showToast('⚠ Please describe this payment'); return; }
+  if(!amount || amount <= 0 || isNaN(amount)) { showToast('⚠ Please enter an amount'); return; }
+  const proj = projById(po.projectId);
+  const fileInput = document.getElementById('subPOStageFile');
+  let fileUrl = '', fileName = '';
+  if(fileInput.files && fileInput.files[0]) {
+    const up = await uploadFinanceFile(fileInput, `subcontractor-invoices/${po.projectId}`);
+    if(up) { fileUrl = up.url; fileName = up.name; }
+  }
+  if(!Array.isArray(po.stages)) po.stages = [];
+  if(editingStageId) {
+    const st = po.stages.find(x => x.id === editingStageId); if(!st) return;
+    st.description = description; st.amount = amount;
+    if(fileUrl) { st.invoiceFileUrl = fileUrl; st.invoiceFileName = fileName; }
+    else if(subPOStageRemoveFile) { st.invoiceFileUrl = ''; st.invoiceFileName = ''; }
+  } else {
+    po.stages.push({ id:'st'+Date.now(), description, amount, status:'pending',
+                     createdAt:new Date().toISOString(), dueAt:null, paidAt:null,
+                     invoiceFileUrl:fileUrl, invoiceFileName:fileName });
+  }
+  const ok = await saveSubPO(po);
+  if(ok === false) return;   // the save helper already told them it failed
+  await writeAudit('subcontractor_po', po.id, editingStageId?'payment updated':'payment added',
+                   null, `${description} · ${fmtMoney(amount)}`, proj?proj.name:'');
+  closeSubPOStageModal();
+  renderProjects(); renderOpsFinance();
+  showToast(editingStageId ? 'Payment updated ✓' : 'Payment added ✓');
+}
+async function deleteSubPOStage() {
+  const po = subPOs.find(x => x.id === stagePOId); if(!po || !editingStageId) return;
+  const st = subPOStages(po).find(x => x.id === editingStageId); if(!st) return;
+  if(!confirm(`Delete the payment "${st.description}"? This cannot be undone.`)) return;
+  po.stages = subPOStages(po).filter(x => x.id !== editingStageId);
+  const proj = projById(po.projectId);
+  const ok = await saveSubPO(po);
+  if(ok === false) return;
+  await writeAudit('subcontractor_po', po.id, 'payment deleted', st.description, null, proj?proj.name:'');
+  closeSubPOStageModal();
+  renderProjects(); renderOpsFinance();
+  showToast('Deleted');
+}
+async function markSubPOStageDue(subPOId, stageId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  st.status = 'due'; st.dueAt = new Date().toISOString();
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'stage due', st.description, fmtMoney(st.amount), proj.name);
+  await notifyFinance('subpo_ready', `${s.subcontractorName} — "${st.description}" on "${proj.name}" is ready to pay, ${fmtMoney(st.amount)}.`, proj.id);
+  renderProjects(); renderOpsFinance();
+  showToast('Marked ready to pay — Finance notified ✓');
+}
+async function markSubPOStagePaid(subPOId, stageId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
+  if(!isFinanceRole()) { showToast('Only Finance can confirm a payment'); return; }
+  if(!confirm(`Mark ${fmtMoney(st.amount)} as paid to ${s.subcontractorName} for "${st.description}"?`)) return;
+  const proj = projById(s.projectId);
+  st.status = 'paid'; st.paidAt = new Date().toISOString();
+  // Once every stage is settled the PO itself is finished.
+  if(subPOStages(s).every(x => x.status === 'paid')) { s.status = 'paid'; s.paidAt = new Date().toISOString(); }
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'stage paid', st.description, fmtMoney(st.amount), proj?proj.name:'');
+  if(proj && proj.creatorId) {
+    addNotification(proj.creatorId, 'subpo_paid',
+      { message:`${s.subcontractorName} was paid ${fmtMoney(st.amount)} (${st.description}) on "${proj.name}".`, projectId: proj.id });
+  }
+  renderOpsFinance(); renderProjects();
+  showToast('Marked paid ✓');
 }
 
 /* Called the moment a deliverable is ticked complete (self-completed or
@@ -5394,9 +5658,14 @@ function onDeliverableCompleted(proj, deliv) {
   const linked = subPOs.filter(s => String(s.projectId) === String(proj.id) && s.deliverableId === deliv.id && s.status === 'issued');
   linked.forEach(s => {
     s.status = 'ready_to_pay'; s.confirmedAt = new Date().toISOString();
+    // Any stage not already ticked or paid becomes payable now the work is done.
+    subPOStages(s).forEach(x => { if(x.status === 'pending') { x.status = 'due'; x.dueAt = new Date().toISOString(); } });
+    // Never fall back to the full PO value when stages exist — anything
+  // already paid must not be re-reported. Only an unstaged PO uses the total.
+  const owed = subPOStages(s).length ? subPODueNow(s) : Number(s.amount||0);
     saveSubPO(s);
     writeAudit('subcontractor_po', s.id, 'status', 'issued', 'ready_to_pay', proj.name);
-    notifyFinance('subpo_ready', `${s.subcontractorName} completed "${deliv.name}" on "${proj.name}" — ${fmtMoney(s.amount)} ready to pay.`, proj.id);
+    notifyFinance('subpo_ready', `${s.subcontractorName} completed "${deliv.name}" on "${proj.name}" — ${fmtMoney(owed)} ready to pay.`, proj.id);
   });
   if(linked.length) { renderOpsFinance(); }
 }
@@ -5443,13 +5712,13 @@ function renderOpsFinance() {
 function financeKPIs(scopedIds) {
   const readyMs = milestones.filter(m => m.status==='reached' && scopedIds.has(String(m.projectId)));
   const outstandingMs = milestones.filter(m => ['invoiced','sent'].includes(m.status) && scopedIds.has(String(m.projectId)));
-  const owedBy = subPOs.filter(s => s.status === 'ready_to_pay' && scopedIds.has(String(s.projectId)));
+  const owedBy = subPOs.filter(s => subPODueNow(s) > 0 && scopedIds.has(String(s.projectId)));
   const owed = [...readyMs, ...outstandingMs]; // feeds the aging bar's pipeline view
   const readyToInvoice = readyMs.reduce((s,m) => s + Number(m.amount||0), 0);
   const outstanding = outstandingMs.reduce((s,m) => s + Number(m.amount||0), 0);
   const overdue = outstandingMs.filter(m => m.status==='sent' && m.sentAt && Math.floor((Date.now()-new Date(m.sentAt))/86400000) > 14)
                        .reduce((s,m) => s + Number(m.amount||0), 0);
-  const owedToSubs = owedBy.reduce((s,x) => s + Number(x.amount||0), 0);
+  const owedToSubs = owedBy.reduce((s,x) => s + subPODueNow(x), 0);
   const now = jordanNow(); const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const collected = milestones.filter(m => m.status==='paid' && m.paidAt && new Date(m.paidAt) >= monthStart && scopedIds.has(String(m.projectId)))
                                .reduce((s,m) => s + Number(m.amount||0), 0);
@@ -5514,12 +5783,26 @@ function renderFinanceQueueAP(owedBy) {
   const host = document.getElementById('financeQueueAP');
   if(!host) return;
   const sorted = owedBy.slice().sort((a,b) => new Date(a.confirmedAt||a.createdAt) - new Date(b.confirmedAt||b.createdAt));
+  // A PO split into payments shows one line per payment that's actually
+  // due — so a 50% advance is its own payable item, not buried in the PO.
   host.innerHTML = sorted.length ? sorted.map(s => {
     const proj = projById(s.projectId);
+    const due = subPOStages(s).filter(x => x.status === 'due');
+    if(due.length) {
+      return due.map(st => `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
+        <div style="min-width:0">
+          <div style="font-size:12.5px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
+          <div style="font-size:11px;color:var(--muted)">${proj?escapeAttr(proj.name):'—'} · ${escapeAttr(st.description)} · ${fmtMoney(st.amount)}</div>
+          ${st.invoiceFileUrl?`<a href="${st.invoiceFileUrl}" target="_blank" style="font-size:10px;color:var(--blue)">📄 Invoice</a>`:''}
+        </div>
+        <button class="btn btn-sm" style="font-size:10px;background:var(--green);color:#fff;border-color:var(--green);flex-shrink:0" onclick="markSubPOStagePaid('${s.id}','${st.id}')">Mark paid</button>
+      </div>`).join('');
+    }
     return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:8px 0;border-top:1px solid var(--border)">
       <div style="min-width:0">
         <div style="font-size:12.5px;font-weight:600">${escapeAttr(s.subcontractorName)}</div>
         <div style="font-size:11px;color:var(--muted)">${proj?escapeAttr(proj.name):'—'} · ${fmtMoney(s.amount)}</div>
+        ${s.fileUrl?`<a href="${s.fileUrl}" target="_blank" style="font-size:10px;color:var(--blue)">📄 PO</a>`:''}
       </div>
       <button class="btn btn-sm" style="font-size:10px;background:var(--green);color:#fff;border-color:var(--green);flex-shrink:0" onclick="markSubPOPaid('${s.id}')">Mark paid</button>
     </div>`;
@@ -5738,6 +6021,11 @@ async function markMilestonePaid(milestoneId) {
 async function markSubPOPaid(subPOId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
   if(!isFinanceRole()) { showToast('Only Finance can confirm a subcontractor payment'); return; }
+  // Hard guard against double payment: a PO split into payments must only
+  // ever be settled one payment at a time, never in full through here.
+  if(subPOStages(s).length) {
+    showToast('This PO is split into separate payments — pay each one individually'); return;
+  }
   if(!confirm(`Mark ${fmtMoney(s.amount)} as paid to ${s.subcontractorName}?`)) return;
   const proj = projById(s.projectId);
   s.status = 'paid'; s.paidAt = new Date().toISOString();
@@ -11247,7 +11535,7 @@ async function loadAllData() {
         currency:r.currency||'JOD', deliverableId:r.deliverable_id||null,
         fileUrl:r.file_url||'', fileName:r.file_name||'',
         status:r.status||'issued', createdBy:r.created_by, createdAt:r.created_at,
-        confirmedAt:r.confirmed_at, paidAt:r.paid_at
+        confirmedAt:r.confirmed_at, paidAt:r.paid_at, stages:r.stages||[]
       }));
     }
   } catch(e) {}
@@ -11399,7 +11687,8 @@ async function reloadFinanceData() {
       amount:(r.amount===null||r.amount===undefined)?null:Number(r.amount),
       currency:r.currency||'JOD', deliverableId:r.deliverable_id||null,
       fileUrl:r.file_url||'', fileName:r.file_name||'', status:r.status||'issued',
-      createdBy:r.created_by, createdAt:r.created_at, confirmedAt:r.confirmed_at, paidAt:r.paid_at
+      createdBy:r.created_by, createdAt:r.created_at, confirmedAt:r.confirmed_at, paidAt:r.paid_at,
+      stages:r.stages||[]
     }));
   } catch(e) { console.warn('reloadFinanceData failed:', e.message||e); }
 }
@@ -11439,7 +11728,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-20-v79 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-20-v82 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
