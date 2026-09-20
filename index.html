@@ -1636,8 +1636,18 @@ select option{background:#fff}
     <h2 id="contractModalTitle">Add Contract / VO</h2>
     <p class="modal-sub" id="contractProjLabel"></p>
     <div class="field"><label>Name</label><input type="text" id="contractName" placeholder="e.g. Main Contract, Wastewater VO"></div>
-    <div class="field"><label>Value (JOD)</label><input type="number" id="contractValue" placeholder="e.g. 100000"></div>
+    <div class="field">
+      <label>Value</label>
+      <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+        <div id="contractValueCurJod" onclick="setAmountCurrency('contractValue','jod')" style="padding:5px 12px;cursor:pointer">JOD</div>
+        <div id="contractValueCurUsd" onclick="setAmountCurrency('contractValue','usd')" style="padding:5px 12px;cursor:pointer">USD</div>
+      </div>
+      <input type="number" id="contractValue" placeholder="e.g. 100000">
+      <input type="number" id="contractValueUsd" placeholder="e.g. 140000" oninput="updateAmountCurrencyPreview('contractValue')" style="display:none">
+      <div id="contractValuePreview" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+    </div>
     <div class="field"><label>Contract file (optional)</label><input type="file" id="contractFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div id="contractCurrentFile" style="display:none;font-size:11px;margin:-8px 0 14px"></div>
     <div class="modal-actions">
       <button class="btn btn-danger" id="contractDeleteBtn" style="display:none" onclick="deleteContractItem()">Delete</button>
       <button class="btn" onclick="closeContractModal()">Cancel</button>
@@ -1660,7 +1670,14 @@ select option{background:#fff}
         <div id="milestoneModeFixed" onclick="setMilestoneEntryMode('fixed')" style="padding:5px 12px;cursor:pointer">Fixed Amount</div>
       </div>
       <input type="number" id="milestonePct" placeholder="e.g. 50" min="0" max="100" step="0.01" oninput="updateMilestonePctPreview()">
-      <input type="number" id="milestoneAmountFixed" placeholder="e.g. 50000" min="0" step="0.01" oninput="updateMilestonePctPreview()" style="display:none">
+      <div id="milestoneAmountFixedWrap" style="display:none">
+        <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+          <div id="milestoneAmountFixedCurJod" onclick="setAmountCurrency('milestoneAmountFixed','jod')" style="padding:5px 12px;cursor:pointer">JOD</div>
+          <div id="milestoneAmountFixedCurUsd" onclick="setAmountCurrency('milestoneAmountFixed','usd')" style="padding:5px 12px;cursor:pointer">USD</div>
+        </div>
+        <input type="number" id="milestoneAmountFixed" placeholder="e.g. 50000" min="0" step="0.01" oninput="updateMilestonePctPreview()">
+        <input type="number" id="milestoneAmountFixedUsd" placeholder="e.g. 70000" min="0" step="0.01" oninput="updateMilestonePctPreview()" style="display:none">
+      </div>
     </div>
     <div id="milestonePctPreview" style="font-size:12px;color:var(--muted);margin:-8px 0 14px;min-height:14px"></div>
     <div class="modal-actions">
@@ -1681,9 +1698,19 @@ select option{background:#fff}
       <input type="text" id="subPOName" list="subcontractorNames" placeholder="e.g. Al-Rawi Hydrology Services">
       <datalist id="subcontractorNames"></datalist>
     </div>
-    <div class="field"><label>Amount (JOD)</label><input type="number" id="subPOAmount" placeholder="e.g. 8000"></div>
+    <div class="field">
+      <label>Amount</label>
+      <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:7px;overflow:hidden;font-size:11px;font-weight:600;margin-bottom:8px;width:fit-content">
+        <div id="subPOAmountCurJod" onclick="setAmountCurrency('subPOAmount','jod')" style="padding:5px 12px;cursor:pointer">JOD</div>
+        <div id="subPOAmountCurUsd" onclick="setAmountCurrency('subPOAmount','usd')" style="padding:5px 12px;cursor:pointer">USD</div>
+      </div>
+      <input type="number" id="subPOAmount" placeholder="e.g. 8000">
+      <input type="number" id="subPOAmountUsd" placeholder="e.g. 11000" oninput="updateAmountCurrencyPreview('subPOAmount')" style="display:none">
+      <div id="subPOAmountPreview" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:14px"></div>
+    </div>
     <div class="field" id="subPODelivWrap"><label>Linked Deliverable (optional)</label><select id="subPODeliv"></select></div>
     <div class="field"><label>PO file (optional)</label><input type="file" id="subPOFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div id="subPOCurrentFile" style="display:none;font-size:11px;margin:-8px 0 14px"></div>
     <div class="modal-actions">
       <button class="btn btn-danger" id="subPODeleteBtn" style="display:none" onclick="deleteSubPOItem()">Delete</button>
       <button class="btn" onclick="closeSubPOModal()">Cancel</button>
@@ -1696,13 +1723,14 @@ select option{background:#fff}
 <div class="overlay" id="issueInvoiceModal">
   <div class="modal" style="width:420px">
     <button class="modal-close" onclick="closeModal('issueInvoiceModal')">×</button>
-    <h2>Issue Invoice</h2>
+    <h2 id="issueInvoiceTitle">Issue Invoice</h2>
     <p class="modal-sub" id="issueInvoiceLabel"></p>
     <div class="field"><label>Invoice file</label><input type="file" id="issueInvoiceFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
+    <div id="issueInvoiceCurrentFile" style="display:none;font-size:11px;margin:-8px 0 14px"></div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">The PM will see this attached on the project and can download it to send straight to the client.</div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('issueInvoiceModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveIssueInvoice()">Issue Invoice</button>
+      <button class="btn btn-primary" id="issueInvoiceSaveBtn" onclick="saveIssueInvoice()">Issue Invoice</button>
     </div>
   </div>
 </div>
@@ -4854,7 +4882,7 @@ function renderProjectBilling(p) {
           <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(m.description)} · ${m.percentage}% = ${fmtMoney(m.amount)}
             ${stalled?`<div style="font-size:9px;color:var(--orange);margin-top:2px">⏱ ${stalledDays}d, not yet reached</div>`:''}
             ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
-            ${m.invoiceFileUrl?`<a href="${m.invoiceFileUrl}" target="_blank" style="font-size:9px;color:var(--blue);display:inline-block;margin-top:2px">📄 Download invoice</a>`:''}
+            ${m.invoiceFileUrl?`<a href="${m.invoiceFileUrl}" target="_blank" style="font-size:9px;color:var(--blue);display:inline-block;margin-top:2px">📄 Download invoice</a>${financeAdmin?` · <a href="javascript:void(0)" onclick="openReplaceInvoiceFile('${m.id}')" style="font-size:9px;color:var(--muted)">Change</a>`:''}`:''}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -4927,6 +4955,7 @@ function openAddContract(projId) {
   const proj = projById(projId);
   if(!proj || !canManageFinance(proj)) { showNoAccess(projId, proj?proj.creatorId:null); return; }
   editingContractId = null;
+  contractRemoveFile = false;
   addingContractToProjectId = projId;
   document.getElementById('contractModalTitle').textContent = 'Add Contract / VO';
   document.getElementById('contractSaveBtn').textContent = 'Add';
@@ -4935,6 +4964,8 @@ function openAddContract(projId) {
   document.getElementById('contractName').value = '';
   document.getElementById('contractValue').value = '';
   document.getElementById('contractFile').value = '';
+  document.getElementById('contractCurrentFile').style.display = 'none';
+  resetAmountCurrency('contractValue');
   openOverlay('contractModal');
 }
 function openEditContract(contractId) {
@@ -4942,22 +4973,40 @@ function openEditContract(contractId) {
   const proj = projById(c.projectId);
   if(!proj || !canManageFinance(proj)) { showNoAccess(c.projectId, proj?proj.creatorId:null); return; }
   editingContractId = contractId;
+  contractRemoveFile = false;
   addingContractToProjectId = c.projectId;
   document.getElementById('contractModalTitle').textContent = 'Edit Contract / VO';
   document.getElementById('contractSaveBtn').textContent = 'Save Changes';
   document.getElementById('contractDeleteBtn').style.display = '';
-  document.getElementById('contractProjLabel').textContent = `Project: ${proj.name}${c.fileUrl?' · a file is already attached — choosing a new one replaces it':''}`;
+  document.getElementById('contractProjLabel').textContent = `Project: ${proj.name}`;
   document.getElementById('contractName').value = c.name;
   document.getElementById('contractValue').value = c.value ?? '';
   document.getElementById('contractFile').value = '';
+  resetAmountCurrency('contractValue'); // editing always shows the stored JOD figure, in JOD
+  renderContractCurrentFile(c);
   openOverlay('contractModal');
 }
-function closeContractModal() { editingContractId = null; closeModal('contractModal'); }
+/* Shows the file already on record, with a way to clear it outright —
+   attaching the wrong thing, or an update that makes it obsolete,
+   otherwise had no way back except overwriting it with another file. */
+function renderContractCurrentFile(c) {
+  const host = document.getElementById('contractCurrentFile');
+  if(!host) return;
+  if(!c.fileUrl) { host.style.display = 'none'; return; }
+  host.style.display = '';
+  if(contractRemoveFile) {
+    host.innerHTML = `<span style="color:var(--red)">File will be removed when you save.</span> <a href="javascript:void(0)" onclick="contractRemoveFile=false;renderContractCurrentFile(contracts.find(x=>x.id==='${c.id}'))" style="color:var(--blue)">Undo</a>`;
+  } else {
+    host.innerHTML = `📄 <a href="${c.fileUrl}" target="_blank" style="color:var(--blue)">${escapeAttr(c.fileName||'Current file')}</a> · <a href="javascript:void(0)" onclick="contractRemoveFile=true;renderContractCurrentFile(contracts.find(x=>x.id==='${c.id}'))" style="color:var(--red)">Remove</a> · choosing a new file above replaces it`;
+  }
+}
+let contractRemoveFile = false;
+function closeContractModal() { editingContractId = null; contractRemoveFile = false; closeModal('contractModal'); }
 async function saveContractItem() {
   const name = document.getElementById('contractName').value.trim();
-  const value = parseFloat(document.getElementById('contractValue').value);
+  const value = readAmountJOD('contractValue');
   if(!name) { showToast('⚠ Please enter a name'); return; }
-  if(!value || value <= 0) { showToast('⚠ Please enter a value'); return; }
+  if(!value || value <= 0 || isNaN(value)) { showToast('⚠ Please enter a value'); return; }
   const proj = projById(addingContractToProjectId);
   const fileInput = document.getElementById('contractFile');
   let fileUrl = '', fileName = '';
@@ -4971,6 +5020,7 @@ async function saveContractItem() {
     const valueChanged = Number(c.value) !== Number(value);
     c.name = name; c.value = value;
     if(fileUrl) { c.fileUrl = fileUrl; c.fileName = fileName; }
+    else if(contractRemoveFile) { c.fileUrl = ''; c.fileName = ''; }
     await saveContract(c);
     // Stages not yet invoiced are still a percentage of this contract, so
     // their JOD amount moves with it. Anything already invoiced is a real
@@ -5020,7 +5070,7 @@ let milestoneEntryMode = 'pct';
 function setMilestoneEntryMode(mode) {
   milestoneEntryMode = mode;
   document.getElementById('milestonePct').style.display = mode==='pct' ? '' : 'none';
-  document.getElementById('milestoneAmountFixed').style.display = mode==='fixed' ? '' : 'none';
+  document.getElementById('milestoneAmountFixedWrap').style.display = mode==='fixed' ? '' : 'none';
   const on = { background:'var(--text)', color:'#fff' }, off = { background:'transparent', color:'var(--text2)' };
   Object.assign(document.getElementById('milestoneModePct').style, mode==='pct' ? on : off);
   Object.assign(document.getElementById('milestoneModeFixed').style, mode==='fixed' ? on : off);
@@ -5034,8 +5084,15 @@ function updateMilestonePctPreview() {
     const pct = parseFloat(document.getElementById('milestonePct').value);
     preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(c.value * pct / 100)}` : '';
   } else {
-    const amt = parseFloat(document.getElementById('milestoneAmountFixed').value);
-    preview.textContent = (c && c.value && amt >= 0) ? `= ${(amt / c.value * 100).toFixed(2)}% of contract value` : '';
+    // readAmountJOD resolves whichever currency is active, so this always
+    // reflects the real JOD figure regardless of what unit was typed.
+    const amt = readAmountJOD('milestoneAmountFixed');
+    if(c && c.value && amt >= 0 && !isNaN(amt)) {
+      const inUsd = (currencyFieldMode['milestoneAmountFixed'] === 'usd');
+      preview.textContent = (inUsd ? `= ${fmtMoney(amt)} · ` : '') + `${(amt / c.value * 100).toFixed(2)}% of contract value`;
+    } else {
+      preview.textContent = '';
+    }
   }
 }
 function openAddMilestone(contractId, projId) {
@@ -5051,6 +5108,7 @@ function openAddMilestone(contractId, projId) {
   document.getElementById('milestoneDesc').value = '';
   document.getElementById('milestonePct').value = '';
   document.getElementById('milestoneAmountFixed').value = '';
+  resetAmountCurrency('milestoneAmountFixed');
   setMilestoneEntryMode('pct');
   openOverlay('milestoneModal');
 }
@@ -5068,6 +5126,7 @@ function openEditMilestone(milestoneId) {
   document.getElementById('milestoneDesc').value = m.description;
   document.getElementById('milestonePct').value = m.percentage ?? '';
   document.getElementById('milestoneAmountFixed').value = m.amount ?? '';
+  resetAmountCurrency('milestoneAmountFixed'); // editing always shows the stored JOD figure, in JOD
   setMilestoneEntryMode('pct');
   openOverlay('milestoneModal');
 }
@@ -5081,8 +5140,8 @@ async function saveMilestoneItem() {
     if(!percentage || percentage <= 0 || percentage > 100) { showToast('⚠ Please enter a percentage between 0 and 100'); return; }
     amount = c ? Math.round((c.value * percentage / 100) * 100) / 100 : null;
   } else {
-    amount = parseFloat(document.getElementById('milestoneAmountFixed').value);
-    if(!amount || amount <= 0) { showToast('⚠ Please enter an amount'); return; }
+    amount = readAmountJOD('milestoneAmountFixed');
+    if(!amount || amount <= 0 || isNaN(amount)) { showToast('⚠ Please enter an amount'); return; }
     percentage = (c && c.value) ? Math.round((amount / c.value * 100) * 100) / 100 : null;
   }
   if(!description) { showToast('⚠ Please describe the stage'); return; }
@@ -5152,6 +5211,9 @@ function populateSubPOModal(projId, sub) {
   document.getElementById('subPOName').value = sub ? sub.subcontractorName : '';
   document.getElementById('subPOAmount').value = sub ? (sub.amount ?? '') : '';
   document.getElementById('subPOFile').value = '';
+  resetAmountCurrency('subPOAmount'); // always shows/expects the stored JOD figure when editing
+  subPORemoveFile = false;
+  renderSubPOCurrentFile(sub);
   // Admin/Finance doesn't have visibility into which deliverable this maps
   // to — that's the PM's context, not theirs. Only the PM sees this field.
   const delivWrap = document.getElementById('subPODelivWrap');
@@ -5165,6 +5227,20 @@ function populateSubPOModal(projId, sub) {
   if(dl) dl.innerHTML = [...new Set(subPOs.map(s => s.subcontractorName).filter(Boolean))]
     .map(n => `<option value="${escapeAttr(n)}">`).join('');
 }
+/* Same "remove it outright" option as the Contract modal — same reasons:
+   the wrong file attached, or one that's simply out of date. */
+function renderSubPOCurrentFile(sub) {
+  const host = document.getElementById('subPOCurrentFile');
+  if(!host) return;
+  if(!sub || !sub.fileUrl) { host.style.display = 'none'; return; }
+  host.style.display = '';
+  if(subPORemoveFile) {
+    host.innerHTML = `<span style="color:var(--red)">File will be removed when you save.</span> <a href="javascript:void(0)" onclick="subPORemoveFile=false;renderSubPOCurrentFile(subPOs.find(x=>x.id==='${sub.id}'))" style="color:var(--blue)">Undo</a>`;
+  } else {
+    host.innerHTML = `📄 <a href="${sub.fileUrl}" target="_blank" style="color:var(--blue)">${escapeAttr(sub.fileName||'Current file')}</a> · <a href="javascript:void(0)" onclick="subPORemoveFile=true;renderSubPOCurrentFile(subPOs.find(x=>x.id==='${sub.id}'))" style="color:var(--red)">Remove</a> · choosing a new file above replaces it`;
+  }
+}
+let subPORemoveFile = false;
 function openAddSubPO(projId) {
   const proj = projById(projId);
   if(!proj || !canManageFinance(proj)) { showNoAccess(projId, proj?proj.creatorId:null); return; }
@@ -5188,16 +5264,16 @@ function openEditSubPO(subPOId) {
   populateSubPOModal(s.projectId, s);
   openOverlay('subPOModal');
 }
-function closeSubPOModal() { editingSubPOId = null; closeModal('subPOModal'); }
+function closeSubPOModal() { editingSubPOId = null; subPORemoveFile = false; closeModal('subPOModal'); }
 async function saveSubPOItem() {
   const subcontractorName = document.getElementById('subPOName').value.trim();
-  const amount = parseFloat(document.getElementById('subPOAmount').value);
+  const amount = readAmountJOD('subPOAmount');
   // Admin can't set a link when adding new — they don't have that context.
   // Editing an existing PO leaves whatever link the PM already set alone,
   // even though the field is hidden from Admin's view.
   const deliverableId = (isOpsAdmin() && !editingSubPOId) ? null : (document.getElementById('subPODeliv').value || null);
   if(!subcontractorName) { showToast('⚠ Please enter a subcontractor name'); return; }
-  if(!amount || amount <= 0) { showToast('⚠ Please enter an amount'); return; }
+  if(!amount || amount <= 0 || isNaN(amount)) { showToast('⚠ Please enter an amount'); return; }
   const proj = projById(addingSubPOToProjectId);
   const fileInput = document.getElementById('subPOFile');
   let fileUrl = '', fileName = '';
@@ -5210,6 +5286,7 @@ async function saveSubPOItem() {
     const before = `${s.subcontractorName} · ${fmtMoney(s.amount)}`;
     s.subcontractorName = subcontractorName; s.amount = amount; s.deliverableId = deliverableId;
     if(fileUrl) { s.fileUrl = fileUrl; s.fileName = fileName; }
+    else if(subPORemoveFile) { s.fileUrl = ''; s.fileName = ''; }
     await saveSubPO(s);
     await writeAudit('subcontractor_po', s.id, 'updated', before, `${subcontractorName} · ${fmtMoney(amount)}`, proj?proj.name:'');
     await notifyPMOfAdminChange(proj, `${currentUser.name} updated a subcontractor PO on "${proj.name}": ${subcontractorName} · ${fmtMoney(amount)}.`);
@@ -5498,14 +5575,47 @@ async function clearOpsAudit() {
    the PM shouldn't have to ask for it separately, so it attaches right
    here and shows up as a download on their side immediately. */
 let issuingMilestoneId = null;
+let issuingIsReplace = false, invoiceRemoveFile = false;
 function openIssueInvoice(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
   if(!isFinanceRole()) { showToast('Only Finance can issue an invoice'); return; }
   const proj = projById(m.projectId);
   issuingMilestoneId = milestoneId;
+  issuingIsReplace = false; invoiceRemoveFile = false;
+  document.getElementById('issueInvoiceTitle').textContent = 'Issue Invoice';
+  document.getElementById('issueInvoiceSaveBtn').textContent = 'Issue Invoice';
   document.getElementById('issueInvoiceLabel').textContent = `${proj?proj.name:''} — ${m.description} · ${fmtMoney(m.amount)}`;
   document.getElementById('issueInvoiceFile').value = '';
+  document.getElementById('issueInvoiceCurrentFile').style.display = 'none';
   openOverlay('issueInvoiceModal');
+}
+/* Once an invoice's already issued there was no way back if the wrong
+   file went up, or a corrected version needs to replace it — same fix
+   as the Contract and PO modals, reusing this same modal in a second mode
+   that only ever touches the file, never the stage's status. */
+function openReplaceInvoiceFile(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  if(!isFinanceRole()) { showToast('Only Finance can change this'); return; }
+  const proj = projById(m.projectId);
+  issuingMilestoneId = milestoneId;
+  issuingIsReplace = true; invoiceRemoveFile = false;
+  document.getElementById('issueInvoiceTitle').textContent = 'Replace Invoice File';
+  document.getElementById('issueInvoiceSaveBtn').textContent = 'Save';
+  document.getElementById('issueInvoiceLabel').textContent = `${proj?proj.name:''} — ${m.description} · ${fmtMoney(m.amount)}`;
+  document.getElementById('issueInvoiceFile').value = '';
+  renderIssueInvoiceCurrentFile(m);
+  openOverlay('issueInvoiceModal');
+}
+function renderIssueInvoiceCurrentFile(m) {
+  const host = document.getElementById('issueInvoiceCurrentFile');
+  if(!host) return;
+  if(!m.invoiceFileUrl) { host.style.display = 'none'; return; }
+  host.style.display = '';
+  if(invoiceRemoveFile) {
+    host.innerHTML = `<span style="color:var(--red)">File will be removed when you save.</span> <a href="javascript:void(0)" onclick="invoiceRemoveFile=false;renderIssueInvoiceCurrentFile(milestones.find(x=>x.id==='${m.id}'))" style="color:var(--blue)">Undo</a>`;
+  } else {
+    host.innerHTML = `📄 <a href="${m.invoiceFileUrl}" target="_blank" style="color:var(--blue)">${escapeAttr(m.invoiceFileName||'Current file')}</a> · <a href="javascript:void(0)" onclick="invoiceRemoveFile=true;renderIssueInvoiceCurrentFile(milestones.find(x=>x.id==='${m.id}'))" style="color:var(--red)">Remove</a> · choosing a new file above replaces it`;
+  }
 }
 async function saveIssueInvoice() {
   const m = milestones.find(x => x.id === issuingMilestoneId); if(!m) return;
@@ -5515,9 +5625,27 @@ async function saveIssueInvoice() {
   if(fileInput.files && fileInput.files[0]) {
     const up = await uploadFinanceFile(fileInput, `invoices/${m.projectId}`);
     if(up) { fileUrl = up.url; fileName = up.name; }
-  } else if(!confirm('No file attached — issue the invoice without one? The PM will still be notified, but will have to prepare the document themselves.')) {
+  } else if(!issuingIsReplace && !confirm('No file attached — issue the invoice without one? The PM will still be notified, but will have to prepare the document themselves.')) {
     return;
   }
+
+  if(issuingIsReplace) {
+    if(fileUrl) { m.invoiceFileUrl = fileUrl; m.invoiceFileName = fileName; }
+    else if(invoiceRemoveFile) { m.invoiceFileUrl = ''; m.invoiceFileName = ''; }
+    await saveMilestoneRow(m);
+    await writeAudit('milestone', m.id, 'invoice file', 'replaced', 'replaced', proj?proj.name:'');
+    if(fileUrl && proj && proj.creatorId) {
+      const note = `The invoice file for "${m.description}" on "${proj.name}" was updated — download the new version from the project's Billing section.`;
+      addNotification(proj.creatorId, 'invoice_ready_for_client', { message: note, projectId: proj.id });
+      const pm = personById(proj.creatorId);
+      if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Invoice file updated — ${proj.name}`, note); } catch(e) {} }
+    }
+    closeModal('issueInvoiceModal');
+    renderOpsFinance(); renderProjects();
+    showToast('Invoice file updated ✓');
+    return;
+  }
+
   m.status = 'invoiced'; m.invoicedAt = new Date().toISOString();
   if(fileUrl) { m.invoiceFileUrl = fileUrl; m.invoiceFileName = fileName; }
   await saveMilestoneRow(m);
@@ -6756,6 +6884,64 @@ async function notifyAdminOfBudgetChange(proj, before, next) {
 function fmtMoney(n) {
   const v = Number(n || 0);
   return 'JOD ' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+/* One conversion, used by every amount field that accepts USD entry —
+   1 USD = 0.708 JOD. JOD is always the figure actually stored; USD is
+   purely an entry convenience, converted once, right here, so there is
+   exactly one formula in the whole app and it can never drift between
+   fields. Everything downstream (Finance, the ledger, every display)
+   only ever sees JOD. */
+const USD_TO_JOD = 0.708;
+function usdToJod(usd) { return Math.round(usd * USD_TO_JOD * 100) / 100; }
+
+const currencyFieldMode = {}; // fieldId -> 'jod' | 'usd'
+
+/* Wires the JOD/USD toggle for one field. fieldId is the existing JOD
+   input's id; this expects sibling elements fieldId+'Usd' (the USD
+   input), fieldId+'CurJod' / fieldId+'CurUsd' (the two toggle buttons)
+   and, optionally, fieldId+'Preview' (a live JOD readout while typing
+   in USD — every field using this should have one, so a typo in the
+   rate or the number is visible before saving, not after). */
+function setAmountCurrency(fieldId, mode) {
+  currencyFieldMode[fieldId] = mode;
+  const jodInput = document.getElementById(fieldId);
+  const usdInput = document.getElementById(fieldId + 'Usd');
+  const jodBtn = document.getElementById(fieldId + 'CurJod');
+  const usdBtn = document.getElementById(fieldId + 'CurUsd');
+  if(jodInput) jodInput.style.display = mode === 'jod' ? '' : 'none';
+  if(usdInput) usdInput.style.display = mode === 'usd' ? '' : 'none';
+  const on = { background:'var(--text)', color:'#fff' }, off = { background:'transparent', color:'var(--text2)' };
+  if(jodBtn) Object.assign(jodBtn.style, mode === 'jod' ? on : off);
+  if(usdBtn) Object.assign(usdBtn.style, mode === 'usd' ? on : off);
+  updateAmountCurrencyPreview(fieldId);
+}
+function updateAmountCurrencyPreview(fieldId) {
+  const preview = document.getElementById(fieldId + 'Preview');
+  if(!preview) return;
+  const mode = currencyFieldMode[fieldId] || 'jod';
+  if(mode === 'usd') {
+    const usd = parseFloat((document.getElementById(fieldId + 'Usd')||{}).value);
+    preview.textContent = (usd >= 0 && !isNaN(usd)) ? `= ${fmtMoney(usdToJod(usd))} at 1 USD = ${USD_TO_JOD} JOD` : '';
+  } else {
+    preview.textContent = '';
+  }
+}
+/* The one place the USD→JOD conversion actually happens on save — every
+   save path calls this instead of reading the JOD input directly, so a
+   figure typed in USD can never accidentally get stored as if it were JOD. */
+function readAmountJOD(fieldId) {
+  const mode = currencyFieldMode[fieldId] || 'jod';
+  if(mode === 'usd') {
+    const usd = parseFloat((document.getElementById(fieldId + 'Usd')||{}).value);
+    return isNaN(usd) ? NaN : usdToJod(usd);
+  }
+  return parseFloat((document.getElementById(fieldId)||{}).value);
+}
+function resetAmountCurrency(fieldId) {
+  const usdInput = document.getElementById(fieldId + 'Usd');
+  if(usdInput) usdInput.value = '';
+  setAmountCurrency(fieldId, 'jod');
 }
 
 function proposalCard(p) {
@@ -11180,7 +11366,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-17-v74 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-20-v76 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
