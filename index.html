@@ -2570,6 +2570,12 @@ async function adminDeleteProject(projId) {
   const kind = p.isProposal ? 'proposal' : 'project';
   const members = (p.members||[]).length;
   const delivs  = (p.deliverables||[]).length;
+  // Contracts, payment stages and subcontractor POs cascade-delete with
+  // their project at the database level — invisible to this app's own
+  // delete/audit functions, and until now this warning never mentioned it.
+  const projContracts = contracts.filter(c => String(c.projectId) === String(p.id));
+  const projSubPOs = subPOs.filter(s => String(s.projectId) === String(p.id));
+  const projMilestones = milestones.filter(m => projContracts.some(c => c.id === m.contractId));
 
   // Hours already logged against it live on timesheets and are not touched,
   // but they will no longer resolve to a name in the LOE report.
@@ -2589,8 +2595,19 @@ async function adminDeleteProject(projId) {
     delivs  ? `${delivs} deliverable${delivs===1?'':'s'}`   : null
   ].filter(Boolean).join(' and ');
 
+  let financeNote = '';
+  if(projContracts.length || projSubPOs.length) {
+    const contractedTotal = projContracts.reduce((s,c)=>s+Number(c.value||0),0);
+    const subTotal = projSubPOs.reduce((s,x)=>s+Number(x.amount||0),0);
+    const bits = [];
+    if(projContracts.length) bits.push(`${projContracts.length} contract${projContracts.length===1?'':'s'}/VO${projContracts.length===1?'':'s'} (${fmtMoney(contractedTotal)}, ${projMilestones.length} payment stage${projMilestones.length===1?'':'s'})`);
+    if(projSubPOs.length) bits.push(`${projSubPOs.length} subcontractor PO${projSubPOs.length===1?'':'s'} (${fmtMoney(subTotal)})`);
+    financeNote = `\n\n⚠ This also permanently deletes ${bits.join(' and ')} — all of it, including any invoice or PO files attached. This is not shown anywhere else and cannot be recovered.`;
+  }
+
   if(!confirm(`Permanently delete the ${kind} "${p.name}"?`
     + (detail ? `\n\nIt has ${detail}, which go with it.` : '')
+    + financeNote
     + loggedNote
     + `\n\nThis cannot be undone. To take it out of circulation without losing it, use Complete instead.`)) return;
 
@@ -2655,11 +2672,29 @@ function deleteProject(id) {
   const proj = projects.find(p=>p.id===id);
   if(!canEditProject(proj)) { showNoAccess(proj.id,proj.creatorId); return; }
   deletingProjectId = id;
+  // Same cascade-delete risk as the Admin delete flow — contracts, payment
+  // stages and subcontractor POs go with the project at the database level,
+  // with nothing else warning about it, so this message has to.
+  const projContracts = contracts.filter(c => String(c.projectId) === String(proj.id));
+  const projSubPOs = subPOs.filter(s => String(s.projectId) === String(proj.id));
+  const projMilestones = milestones.filter(m => projContracts.some(c => c.id === m.contractId));
+  let financeNote = '';
+  if(projContracts.length || projSubPOs.length) {
+    const contractedTotal = projContracts.reduce((s,c)=>s+Number(c.value||0),0);
+    const subTotal = projSubPOs.reduce((s,x)=>s+Number(x.amount||0),0);
+    const bits = [];
+    if(projContracts.length) bits.push(`${projContracts.length} contract${projContracts.length===1?'':'s'}/VO${projContracts.length===1?'':'s'} (${fmtMoney(contractedTotal)}, ${projMilestones.length} payment stage${projMilestones.length===1?'':'s'})`);
+    if(projSubPOs.length) bits.push(`${projSubPOs.length} subcontractor PO${projSubPOs.length===1?'':'s'} (${fmtMoney(subTotal)})`);
+    financeNote = ` It also permanently deletes ${bits.join(' and ')} — all of it, including any invoice or PO files. This is not shown anywhere else and cannot be recovered.`;
+  }
   document.getElementById('confirmDeleteMsg').textContent =
-    'This will remove "' + proj.name + '" and all its baselines. This cannot be undone.';
+    'This will remove "' + proj.name + '" and all its baselines.' + financeNote + ' This cannot be undone.';
   document.getElementById('confirmDeleteBtn').onclick = function() {
     allProjects = allProjects.filter(p=>p.id!==deletingProjectId);
     projects = projects.filter(p=>p.id!==deletingProjectId);
+    contracts = contracts.filter(c => String(c.projectId) !== String(deletingProjectId));
+    milestones = milestones.filter(m => String(m.projectId) !== String(deletingProjectId));
+    subPOs = subPOs.filter(s => String(s.projectId) !== String(deletingProjectId));
     deleteProjectFromDB(deletingProjectId);
     closeModal('confirmDeleteModal');
     renderProjects(); renderWeekly(); renderMonthly(); updateSummary();
@@ -4712,19 +4747,30 @@ function projById(id) {
 }
 
 /* ── Save helpers — mirror saveProject's upsert-per-mutation pattern ── */
+/* Supabase returns errors in the response rather than throwing, so a
+   try/catch alone silently swallowed rejected writes — a row would sit in
+   the local array looking saved, then vanish on refresh because it never
+   reached the database. These now surface the failure immediately. */
+function reportSaveFailure(what, error) {
+  const msg = (error && (error.message || error.hint || error.details)) || 'unknown error';
+  console.error(`${what} failed to save:`, error);
+  showToast(`⚠ "${what}" did NOT save — ${msg}. Nothing was stored, please try again.`, 8000);
+}
 async function saveContract(c) {
   try {
-    await sb.from('contracts').upsert({
+    const { error } = await sb.from('contracts').upsert({
       id: c.id, project_id: c.projectId, name: c.name,
       value: c.value, currency: c.currency || 'JOD',
       file_url: c.fileUrl || null, file_name: c.fileName || null,
       created_by: c.createdBy, created_at: c.createdAt
     });
-  } catch(e) { console.warn('saveContract failed:', e.message||e); }
+    if(error) { reportSaveFailure('Contract / VO', error); return false; }
+    return true;
+  } catch(e) { reportSaveFailure('Contract / VO', e); return false; }
 }
 async function saveMilestoneRow(m) {
   try {
-    await sb.from('milestones').upsert({
+    const { error } = await sb.from('milestones').upsert({
       id: m.id, contract_id: m.contractId, project_id: m.projectId,
       description: m.description, amount: m.amount, percentage: m.percentage, status: m.status,
       created_at: m.createdAt || null,
@@ -4734,18 +4780,22 @@ async function saveMilestoneRow(m) {
       deliverable_id: m.deliverableId || null, auto_trigger: !!m.autoTrigger,
       invoice_file_url: m.invoiceFileUrl || null, invoice_file_name: m.invoiceFileName || null
     });
-  } catch(e) { console.warn('saveMilestoneRow failed:', e.message||e); }
+    if(error) { reportSaveFailure('Payment stage', error); return false; }
+    return true;
+  } catch(e) { reportSaveFailure('Payment stage', e); return false; }
 }
 async function saveSubPO(s) {
   try {
-    await sb.from('subcontractor_pos').upsert({
+    const { error } = await sb.from('subcontractor_pos').upsert({
       id: s.id, project_id: s.projectId, subcontractor_name: s.subcontractorName,
       amount: s.amount, currency: s.currency || 'JOD', deliverable_id: s.deliverableId || null,
       file_url: s.fileUrl || null, file_name: s.fileName || null, status: s.status,
       created_by: s.createdBy, created_at: s.createdAt,
       confirmed_at: s.confirmedAt || null, paid_at: s.paidAt || null
     });
-  } catch(e) { console.warn('saveSubPO failed:', e.message||e); }
+    if(error) { reportSaveFailure('Subcontractor PO', error); return false; }
+    return true;
+  } catch(e) { reportSaveFailure('Subcontractor PO', e); return false; }
 }
 
 /* ── File upload — contract/PO documents, so nobody has to ask for them ── */
@@ -4858,7 +4908,7 @@ function renderProjectBilling(p) {
     // billing data having been deleted, which it hasn't been.
     return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;font-size:11.5px;color:var(--orange)">
       ⚠ Couldn't load billing data just now — nothing has been deleted, this is a connection hiccup.
-      <a href="javascript:location.reload()" style="color:var(--blue)">Refresh to try again</a>.
+      <a href="javascript:void(0)" onclick="retryFinanceLoad()" style="color:var(--blue)">Try again</a>.
     </div>`;
   }
   const snap = projectFinanceSnapshot(p.id);
@@ -5364,8 +5414,14 @@ function renderOpsFinance() {
       const el = document.getElementById(id);
       if(el) el.innerHTML = '';
     });
-    document.getElementById('financeQueueAR').innerHTML = `<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">
-      Finance tables not set up yet. Run the finance migration in Supabase, then refresh.</div>`;
+    // This used to say "tables not set up yet", which is wrong and actively
+    // alarming when the real cause is almost always a momentary connection
+    // hiccup — the tables and the data are fine, this one load attempt
+    // just didn't land.
+    document.getElementById('financeQueueAR').innerHTML = `<div style="padding:14px;text-align:center;color:var(--orange);font-size:12px;line-height:1.7">
+      ⚠ Couldn't load Finance data just now — nothing has been deleted, this is a connection hiccup.<br>
+      <a href="javascript:void(0)" onclick="retryFinanceLoad()" style="color:var(--blue)">Try again</a>
+    </div>`;
     return;
   }
 
@@ -10983,9 +11039,10 @@ async function exportHRProjectLOE() {
 }
 
 
-function showToast(msg) {
+function showToast(msg, ms) {
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2500);
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(()=>t.classList.remove('show'), ms || 2500);
 }
 
 // ═══════════════════════════════════════════════
@@ -11128,16 +11185,23 @@ async function loadAllData() {
 
   // A free Supabase project can still be waking up from being idle on the
   // very first request after a while — that shows up as this one query
-  // failing even though the data itself is completely untouched. One retry
-  // after a short pause covers that before the Billing section on every
-  // project goes silently blank, which is indistinguishable from data loss
-  // to look at even though nothing was actually deleted.
+  // failing even though the data itself is completely untouched. Two
+  // retries with a growing pause between them covers a slow wake-up
+  // before the Billing section on every project goes silently blank,
+  // which is indistinguishable from data loss to look at even though
+  // nothing was actually deleted. One retry at 1.2s turned out not to be
+  // enough in practice — a cold Supabase instance can take longer than
+  // that to come back.
   const retryOnce = async (fn) => {
     try {
-      const first = await fn();
-      if(!first.error) return first;
-      await new Promise(r => setTimeout(r, 1200));
-      return await fn();
+      let res = await fn();
+      if(!res.error) return res;
+      for(const wait of [1500, 3000]) {
+        await new Promise(r => setTimeout(r, wait));
+        res = await fn();
+        if(!res.error) return res;
+      }
+      return res;
     } catch(e) { return { data:null, error:e }; }
   };
 
@@ -11296,6 +11360,15 @@ function subscribeRealtime() {
     })
     .subscribe();
 }
+/* The "Try again" link both warning messages above point to — reuses
+   reloadFinanceData() itself rather than a second copy of the same
+   mapping logic, so there's exactly one place this data ever gets parsed. */
+async function retryFinanceLoad() {
+  showToast('Retrying…');
+  await reloadFinanceData();
+  renderProjects(); renderOpsFinance();
+  showToast(financeTablesMissing ? '⚠ Still having trouble — check your connection and try again' : 'Loaded ✓');
+}
 async function reloadFinanceData() {
   try {
     const [cRes, mRes, sRes] = await Promise.all([
@@ -11366,7 +11439,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-20-v76 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-20-v79 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
