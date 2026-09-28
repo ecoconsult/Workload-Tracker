@@ -1086,6 +1086,16 @@ select option{background:#fff}
           </select>
         </div>
 
+        <!-- Only rendered visible when the hours in view actually come from
+             deliverable-scoped columns — projects logged as a whole never see it. -->
+        <div id="loeDetailWrap" style="display:none;flex-direction:column;gap:4px">
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Detail</label>
+          <select id="loeDetail" onchange="renderLoeReport()" style="width:160px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+            <option value="project">Project as a whole</option>
+            <option value="deliverable">Per deliverable</option>
+          </select>
+        </div>
+
         <div style="flex:1"></div>
         <button class="btn btn-sm" onclick="clearLoeFilters()" style="font-size:11px">Clear filters</button>
         <button class="btn btn-accent" onclick="exportLoeReport()" style="font-size:12px">📥 Export</button>
@@ -1251,10 +1261,17 @@ select option{background:#fff}
         <select id="tsColSel" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);flex:1;max-width:280px">
           <option value="">＋ Select project to add…</option>
         </select>
+        <select id="tsDelivSel" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);flex:1;max-width:260px;display:none">
+          <option value="">— Whole project —</option>
+        </select>
         <input type="text" id="tsOtherName" placeholder="Custom label" style="padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:160px;display:none">
         <button class="btn btn-accent" onclick="tsAddColumn()" style="font-size:12px;flex-shrink:0">＋ Add Column</button>
       </div>
-      <div style="overflow-x:auto">
+      <!-- The grid is its own scroll pane, not part of the page scroll: that is
+           what lets the header row and the Date column stay frozen while you
+           work down the month. Its height is measured at render (sizeTsMatrixPane)
+           so it always ends at the bottom of the window. -->
+      <div id="tsMatrixScroll" style="overflow:auto;border:1px solid var(--border);border-radius:8px">
         <div id="tsMatrix"></div>
       </div>
     </div>
@@ -1316,15 +1333,24 @@ select option{background:#fff}
         <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
           <div>
             <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Project</label>
-            <select id="hrProjSel" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);min-width:220px"></select>
+            <select id="hrProjSel" onchange="hrProjLOEInvalidate()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);min-width:220px"></select>
           </div>
           <div>
             <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">From Month</label>
-            <select id="hrProjFrom" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+            <select id="hrProjFrom" onchange="hrProjLOEInvalidate()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
           </div>
           <div>
             <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">To Month</label>
-            <select id="hrProjTo" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+            <select id="hrProjTo" onchange="hrProjLOEInvalidate()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+          </div>
+          <!-- Appears once a project is loaded, and only if its hours were
+               actually logged against deliverables. -->
+          <div id="hrProjDetailWrap" style="display:none">
+            <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Detail</label>
+            <select id="hrProjDetail" onchange="renderHRProjectLOE()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+              <option value="project">Project as a whole</option>
+              <option value="deliverable">Per deliverable</option>
+            </select>
           </div>
           <button class="btn btn-primary" onclick="loadHRProjectLOE()" style="font-size:13px">View LOE</button>
           <button class="btn btn-accent" onclick="exportHRProjectLOE()" style="font-size:13px">📥 Export</button>
@@ -3466,6 +3492,10 @@ function switchTab(view, el) {
   if(view==='mywork' && typeof renderTimesheetApprovals==='function') renderTimesheetApprovals();
   if(view==='proposals') renderProposals();
   requestAnimationFrame(syncStickyOffsets);
+  // The grid can only be measured once its view is actually on screen.
+  if(view==='timesheet') requestAnimationFrame(() => {
+    if(typeof sizeTsMatrixPane==='function') sizeTsMatrixPane();
+  });
 }
 
 
@@ -3650,6 +3680,7 @@ function toggleOpsPeopleEdit() {
 }
 
 function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function opsAddPersonRow() {
   opsPeopleEditMode = true;
@@ -4352,7 +4383,17 @@ async function loadLoeData() {
           const proj = (c.projectId && allProjects.find(p => String(p.id) === String(c.projectId)))
                     || allProjects.find(p => p.name === c.name)
                     || null;
+          // A column may be scoped to one deliverable inside the project.
+          // Both readings are kept on the row: the project is the rollup,
+          // the deliverable is the detail. Report the deliverable's current
+          // name, falling back to the one stored when the column was added.
+          const delivName = c.deliverableId
+            ? (((proj && proj.deliverables || []).find(d => String(d.id) === String(c.deliverableId))||{}).name
+               || c.deliverableName || 'Deliverable')
+            : '';
           loeRows.push({
+            deliverableId: c.deliverableId ? String(c.deliverableId) : null,
+            deliverableName: delivName,
             personId: ts.person_id,
             // Timesheets outlive accounts. If the person has been removed,
             // say whose id it was rather than lumping them under "Unknown".
@@ -4459,20 +4500,37 @@ function renderLoeReport() {
   const rows = filteredLoeRows();
   const groupBy = (document.getElementById('loeGroup')||{}).value || 'project';
 
+  /* The per-deliverable view is offered only where the split is actually in
+     use — if nothing in view was logged against a deliverable there is no
+     second way to read these hours, so the control stays out of the way. */
+  const splitInUse = rows.some(r => r.deliverableId);
+  const detailWrap = document.getElementById('loeDetailWrap');
+  const detailSel  = document.getElementById('loeDetail');
+  const detailOffered = splitInUse && groupBy === 'project';
+  if(detailWrap) detailWrap.style.display = detailOffered ? 'flex' : 'none';
+  const byDeliverable = detailOffered && detailSel && detailSel.value === 'deliverable';
+
   const keyFor = r => ({
-    project:    r.projectId ? 'id:' + r.projectId : r.projectName,
+    project:    (r.projectId ? 'id:' + r.projectId : r.projectName)
+                + (byDeliverable ? '::' + (r.deliverableId || '') : ''),
     person:     r.personName,
     department: deptShort(r.department),
     month:      r.month
   })[groupBy];
-  const labelFor = k => k.startsWith('id:')
-    ? (rows.find(r => 'id:' + r.projectId === k) || {}).projectName || k
-    : k;
+  /* Which projects are actually split. A project nobody tracks by deliverable
+     keeps its plain name even in this view — only a split project needs to
+     account for hours that were logged against none of its deliverables. */
+  const splitProjects = new Set(rows.filter(r => r.deliverableId)
+    .map(r => r.projectId ? 'id:' + r.projectId : r.projectName));
+  const dispFor = r => groupBy !== 'project' ? (keyFor(r) || '—')
+    : byDeliverable && splitProjects.has(r.projectId ? 'id:' + r.projectId : r.projectName)
+      ? `${r.projectName}  ▸  ${r.deliverableName || 'Not tied to a deliverable'}`
+      : r.projectName;
 
   const groups = {};
   rows.forEach(r => {
     const k = keyFor(r) || '—';
-    if(!groups[k]) groups[k] = { hours:0, days:new Set(), people:new Set(), projects:new Set() };
+    if(!groups[k]) groups[k] = { label:dispFor(r), proj:r.projectName||'', hours:0, days:new Set(), people:new Set(), projects:new Set() };
     groups[k].hours += r.hours;
     groups[k].days.add(r.date);
     groups[k].people.add(r.personId);
@@ -4480,8 +4538,12 @@ function renderLoeReport() {
   });
 
   const total = rows.reduce((s,r)=>s+r.hours, 0);
+  // Per deliverable, keep a project's lines together and ordered by size —
+  // scattering them by hours alone would make a project impossible to read.
   const entries = Object.entries(groups)
-    .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0]) : b[1].hours - a[1].hours);
+    .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0])
+      : byDeliverable && a[1].proj !== b[1].proj ? String(a[1].proj).localeCompare(String(b[1].proj))
+      : b[1].hours - a[1].hours);
 
   // Summary cards
   const stats = document.getElementById('loeStats');
@@ -4505,13 +4567,14 @@ function renderLoeReport() {
   }
 
   const th = (t,a) => `<th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid var(--border);text-align:${a||'left'};background:var(--surface2);white-space:nowrap">${t}</th>`;
-  const label = { project:'Project', person:'Person', department:'Department', month:'Month' }[groupBy];
+  const label = byDeliverable ? 'Project ▸ Deliverable'
+    : { project:'Project', person:'Person', department:'Department', month:'Month' }[groupBy];
 
   const body = entries.map(([k,g]) => {
     const pct = total ? Math.round(g.hours / total * 100) : 0;
-    const display = groupBy === 'month' ? tsMonthLabel(k) : labelFor(k);
+    const display = groupBy === 'month' ? tsMonthLabel(k) : (g.label || k);
     return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:7px 12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${display}">${display}</td>
+      <td style="padding:7px 12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeAttr(display)}">${escapeHtml(display)}</td>
       <td style="padding:7px 12px;text-align:right;font-variant-numeric:tabular-nums">${g.hours.toLocaleString('en-US')}</td>
       <td style="padding:7px 12px;text-align:right;color:var(--text2)">${Math.round(g.hours/8*10)/10}</td>
       <td style="padding:7px 12px;text-align:right;color:var(--text2)">${g.people.size}</td>
@@ -4553,6 +4616,9 @@ function exportLoeReport() {
     return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].textContent.trim() : '';
   };
   const groupBy = v('loeGroup') || 'project';
+  // Matches what the screen is showing — see renderLoeReport for the rule.
+  const splitInUse = rows.some(r => r.deliverableId);
+  const byDeliverable = splitInUse && groupBy === 'project' && v('loeDetail') === 'deliverable';
 
   // What was on screen, written into the file so the numbers can be traced
   const filterLines = [
@@ -4562,7 +4628,9 @@ function exportLoeReport() {
     ['Type',       v('loeType')    ? textOf('loeType')    : 'Projects & proposals'],
     ['From',       v('loeFrom')    ? textOf('loeFrom')    : 'Earliest'],
     ['To',         v('loeTo')      ? textOf('loeTo')      : 'Latest'],
-    ['Grouped by', textOf('loeGroup')]
+    ['Grouped by', textOf('loeGroup')],
+    ...(splitInUse && groupBy === 'project'
+        ? [['Detail', byDeliverable ? 'Per deliverable' : 'Project as a whole']] : [])
   ];
 
   const BORDER = {style:'thin', color:{rgb:'000000'}};
@@ -4609,17 +4677,25 @@ function exportLoeReport() {
       : '—';
 
     // ── Summary, grouped the way the screen is grouped ──
-    const keyFor = r => ({ project:r.projectName, person:r.personName,
-                           department:deptShort(r.department), month:r.month })[groupBy];
+    // Only projects that are actually split get a deliverable line — see
+    // renderLoeReport, which the export has to agree with exactly.
+    const splitProjects = new Set(rows.filter(r => r.deliverableId)
+      .map(r => r.projectId ? 'id:' + r.projectId : r.projectName));
+    const keyFor = r => ({
+      project: byDeliverable && splitProjects.has(r.projectId ? 'id:' + r.projectId : r.projectName)
+        ? `${r.projectName} ▸ ${r.deliverableName || 'Not tied to a deliverable'}`
+        : r.projectName,
+      person:r.personName, department:deptShort(r.department), month:r.month })[groupBy];
     const agg = {};
     rows.forEach(r => {
       const k = keyFor(r) || '—';
-      if(!agg[k]) agg[k] = { hours:0, people:new Set(), dates:new Set() };
+      if(!agg[k]) agg[k] = { proj:r.projectName||'', hours:0, people:new Set(), dates:new Set() };
       agg[k].hours += r.hours;
       agg[k].people.add(r.personId);
       agg[k].dates.add(r.date);
     });
-    const groupLabel = { project:'Project', person:'Person', department:'Department', month:'Month' }[groupBy];
+    const groupLabel = byDeliverable ? 'Project ▸ Deliverable'
+      : { project:'Project', person:'Person', department:'Department', month:'Month' }[groupBy];
 
     const sumAoa = [
       [`Level of Effort \u2014 ${periodLabel}`],
@@ -4631,7 +4707,9 @@ function exportLoeReport() {
     ];
     const headerRow = sumAoa.length - 1;
     Object.entries(agg)
-      .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0]) : b[1].hours - a[1].hours)
+      .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0])
+        : byDeliverable && a[1].proj !== b[1].proj ? String(a[1].proj).localeCompare(String(b[1].proj))
+        : b[1].hours - a[1].hours)
       .forEach(([k,g]) => sumAoa.push([
         groupBy === 'month' ? tsMonthLabel(k) : k,
         g.hours, Math.round(g.hours/8*10)/10, g.people.size, g.dates.size,
@@ -4655,19 +4733,25 @@ function exportLoeReport() {
     const detAoa = [
       [`Level of Effort \u2014 detail \u2014 ${periodLabel}`],
       [],
-      ['Date','Person','Department','Project','Type','Hours']
+      // The Deliverable column is carried whenever any row in view has one, so
+      // the raw entries can always be re-cut either way in the spreadsheet.
+      splitInUse ? ['Date','Person','Department','Project','Deliverable','Type','Hours']
+                 : ['Date','Person','Department','Project','Type','Hours']
     ];
     rows.slice()
       .sort((a,b) => String(a.date).localeCompare(String(b.date)) || a.personName.localeCompare(b.personName))
-      .forEach(r => detAoa.push([
-        fmtDateEU(r.date), r.personName, deptShort(r.department),
-        r.projectName, r.isProposal ? 'Proposal' : 'Project', r.hours
-      ]));
-    detAoa.push(['','','','','Total', total]);
+      .forEach(r => detAoa.push(splitInUse
+        ? [fmtDateEU(r.date), r.personName, deptShort(r.department), r.projectName,
+           r.deliverableName || '—', r.isProposal ? 'Proposal' : 'Project', r.hours]
+        : [fmtDateEU(r.date), r.personName, deptShort(r.department),
+           r.projectName, r.isProposal ? 'Proposal' : 'Project', r.hours]));
+    detAoa.push(splitInUse ? ['','','','','','Total', total] : ['','','','','Total', total]);
 
     const detWs = XLSX.utils.aoa_to_sheet(detAoa);
     style(detWs, detAoa, 2, { totalRow: detAoa.length-1 });
-    detWs['!cols'] = [{wch:13},{wch:22},{wch:11},{wch:32},{wch:11},{wch:9}];
+    detWs['!cols'] = splitInUse
+      ? [{wch:13},{wch:22},{wch:11},{wch:32},{wch:30},{wch:11},{wch:9}]
+      : [{wch:13},{wch:22},{wch:11},{wch:32},{wch:11},{wch:9}];
     detWs['!freeze'] = {xSplit:0, ySplit:3};
     XLSX.utils.book_append_sheet(wb, detWs, 'Detail');
 
@@ -9147,25 +9231,66 @@ function mergeApprovedLeavesIntoTsData(personId, month) {
   return true;
 }
 
+/* What a project still has left to offer the timesheet. Adding a column
+   consumes only the one thing it was for: a whole-project column uses up the
+   "whole project" option, a deliverable column uses up that deliverable. The
+   project itself stays on the list for as long as anything is left, so logging
+   a project as a whole never stops you adding a specific deliverable later. */
+function tsProjColState(p) {
+  const cols = (tsData && tsData.columns || []).filter(c =>
+    c.type === 'project' && String(c.projectId) === String(p.id));
+  const hasWhole = cols.some(c => !c.deliverableId);
+  const used = new Set(cols.filter(c => c.deliverableId).map(c => String(c.deliverableId)));
+  return {
+    hasWhole,
+    hasDelivCols: used.size > 0,
+    available: (p.deliverables || []).filter(d => !used.has(String(d.id)))
+  };
+}
+function tsProjectSelectable(p) {
+  const st = tsProjColState(p);
+  return !st.hasWhole || st.available.length > 0;
+}
+
+/* Shown only when the chosen project actually offers a choice — a project with
+   no deliverables, or none left unclaimed, keeps the row as simple as before. */
+function tsPopulateDelivSel() {
+  const sel = document.getElementById('tsColSel');
+  const dsel = document.getElementById('tsDelivSel');
+  const otherInp = document.getElementById('tsOtherName');
+  if(!sel || !dsel) return;
+  const val = sel.value || '';
+  if(otherInp) otherInp.style.display = val === 'other' ? '' : 'none';
+  const hide = () => { dsel.style.display = 'none'; dsel.innerHTML = ''; };
+  if(!val.startsWith('proj_')) return hide();
+  const proj = (projects||[]).find(p => String(p.id) === val.replace('proj_',''));
+  if(!proj) return hide();
+  const st = tsProjColState(proj);
+  if(!st.available.length) return hide();
+  const opts = [];
+  if(!st.hasWhole) opts.push(`<option value="">Whole project — no specific deliverable</option>`);
+  st.available.forEach(d => opts.push(
+    `<option value="${escapeAttr(d.id)}">${escapeHtml(d.name)}${d.completed ? ' ✓' : ''}</option>`));
+  dsel.innerHTML = opts.join('');
+  dsel.style.display = '';
+}
+
 function populateTsColDropdown() {
   if(!currentUser || !tsData) return;
   const sel = document.getElementById('tsColSel');
-  const otherInp = document.getElementById('tsOtherName');
   if(!sel) return;
   const uid = String(currentUser.id);
-  const existingIds = new Set((tsData.columns||[]).map(c => c.projectId ? String(c.projectId) : null).filter(Boolean));
 
   // My Projects: member of or created
   const myProjects = (projects||[]).filter(p =>
     (p.members||[]).some(m => String(m.personId) === uid) ||
     String(p.creatorId) === uid
-  ).filter(p => !existingIds.has(String(p.id)));
+  ).filter(tsProjectSelectable);
 
   // All other active projects
   const otherProjects = (projects||[]).filter(p =>
-    !myProjects.find(mp => mp.id === p.id) &&
-    !existingIds.has(String(p.id))
-  );
+    !myProjects.find(mp => mp.id === p.id)
+  ).filter(tsProjectSelectable);
 
   const mkOpts = list => list.map(p =>
     `<option value="proj_${p.id}">${p.name||'Unnamed'}</option>`).join('');
@@ -9182,7 +9307,8 @@ function populateTsColDropdown() {
   </optgroup>`;
 
   sel.innerHTML = inner;
-  if(otherInp) sel.onchange = function() { otherInp.style.display = this.value === 'other' ? '' : 'none'; };
+  sel.onchange = tsPopulateDelivSel;
+  tsPopulateDelivSel();
 }
 
 function tsAddColumn() {
@@ -9194,6 +9320,11 @@ function tsAddColumn() {
     const proj=projects.find(p=>String(p.id)===pidStr);
     if(!proj){showToast('Project not found');return;}
     col={id:'col'+Date.now(),name:proj.name,type:'project',projectId:pidStr};
+    // Optional: one specific deliverable inside that project.
+    const dsel=document.getElementById('tsDelivSel');
+    const delivId=(dsel && dsel.style.display!=='none') ? dsel.value : '';
+    const deliv=delivId ? (proj.deliverables||[]).find(d=>String(d.id)===String(delivId)) : null;
+    if(deliv){ col.deliverableId=String(deliv.id); col.deliverableName=deliv.name; }
   } else if(val==='other') {
     const custom=document.getElementById('tsOtherName').value.trim();
     if(!custom){showToast('Please enter a label');return;}
@@ -9207,6 +9338,8 @@ function tsAddColumn() {
   tsData.columns.push(col);
   sel.value='';
   document.getElementById('tsOtherName').style.display='none';
+  const dsel=document.getElementById('tsDelivSel');
+  if(dsel){ dsel.style.display='none'; dsel.innerHTML=''; }
   populateTsColDropdown();
   renderTsMatrix();
   saveTsDraft();
@@ -9217,7 +9350,7 @@ function tsAddColumn() {
    project id. Always DISPLAY the project's current name, so a rename is
    reflected everywhere — grid, exports, summaries and reports — while the
    saved record keeps its original text untouched as a historical trace. */
-function tsColLabel(col) {
+function tsColProjectLabel(col) {
   if(!col) return '';
   if(col.projectId) {
     const proj = (typeof allProjects !== 'undefined' ? allProjects : [])
@@ -9225,6 +9358,22 @@ function tsColLabel(col) {
     if(proj && proj.name) return proj.name;
   }
   return col.name || '';
+}
+
+/* Same rule for the deliverable: show its current name, fall back to the name
+   it carried when the column was added if the deliverable itself is gone. */
+function tsColDelivLabel(col) {
+  if(!col || !col.deliverableId) return '';
+  const proj = (typeof allProjects !== 'undefined' ? allProjects : [])
+    .find(p => String(p.id) === String(col.projectId));
+  const d = proj ? (proj.deliverables||[]).find(x => String(x.id) === String(col.deliverableId)) : null;
+  return (d && d.name) || col.deliverableName || '';
+}
+
+function tsColLabel(col) {
+  const base = tsColProjectLabel(col);
+  const sub  = tsColDelivLabel(col);
+  return sub ? `${base} — ${sub}` : base;
 }
 
 function renderTsMatrix() {
@@ -9237,18 +9386,28 @@ function renderTsMatrix() {
   const rows=tsData.rows||{};
   const locked=tsData.locked||tsData.submitted;
 
-  const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:2';
+  /* border-collapse:collapse drops a sticky cell's own borders once it detaches
+     and floats, so the header's edges are drawn with inset shadows instead —
+     those travel with the cell and stay visible the whole way down the month. */
+  const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:4;box-shadow:inset 0 -1px 0 var(--border),inset 0 1px 0 var(--border)';
   const tdStyle='padding:4px 6px;border:1px solid var(--border);text-align:center;';
 
   // Build header — always show Day + Date columns, then project columns, then Total
   let html=`<table style="border-collapse:collapse;width:100%;font-size:12px">
     <thead><tr>
       <th style="${thStyle};text-align:left;min-width:60px">Day</th>
-      <th style="${thStyle};text-align:left;min-width:110px;position:sticky;left:0;z-index:3">Date</th>
-      ${cols.map(c=>`<th style="${thStyle};min-width:120px">
-        ${tsColLabel(c)}
-        ${locked?'':` <button onclick="removeTsCol('${c.id}')" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;margin-left:2px;vertical-align:middle">×</button>`}
-      </th>`).join('')}
+      <th style="${thStyle};text-align:left;min-width:110px;left:0;z-index:6">Date</th>
+      ${cols.map(c=>{
+        const sub = tsColDelivLabel(c);
+        return `<th style="${thStyle};min-width:120px">
+        <div style="display:flex;align-items:flex-start;justify-content:center;gap:2px">
+          <div style="white-space:normal;line-height:1.35">
+            ${escapeHtml(tsColProjectLabel(c))}
+            ${sub?`<div style="font-weight:600;font-size:10px;color:var(--muted);margin-top:1px">↳ ${escapeHtml(sub)}</div>`:''}
+          </div>
+          ${locked?'':`<button onclick="removeTsCol('${c.id}')" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;line-height:1.35">×</button>`}
+        </div>
+      </th>`;}).join('')}
       ${!cols.length&&!locked?`<th style="${thStyle};color:var(--muted);font-style:italic;min-width:200px">← Add a project column to start logging</th>`:''}
       <th style="${thStyle};color:var(--text2);min-width:70px">Total</th>
     </tr></thead><tbody>`;
@@ -9294,7 +9453,7 @@ function renderTsMatrix() {
 
     html+=`<tr style="${rowBg ? 'background:'+rowBg : ''}">
       <td style="${tdStyle};color:${isWeekend?'var(--muted)':'var(--text2)'};">${dayLabel}</td>
-      <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">
+      <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;z-index:3;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">
         ${isMissing?'🔴 ':''}<span style="color:${isWeekend?'var(--muted)':'var(--text)'}">${displayDate}</span>${holTag}${leaveTag}
       </td>
       ${cols.map(c=>{
@@ -9329,7 +9488,7 @@ function renderTsMatrix() {
   });
   const grandTotal=colTotals.reduce((a,b)=>a+b,0);
   html+=`<tr style="background:var(--surface2);font-weight:700">
-    <td style="${tdStyle};text-align:left;position:sticky;left:0;background:var(--surface2)" colspan="2">Monthly Total</td>
+    <td style="${tdStyle};text-align:left;position:sticky;left:0;z-index:3;background:var(--surface2)" colspan="2">Monthly Total</td>
     ${colTotals.map((t,i)=>`<td id="ts-coltotal-${cols[i].id}" style="${tdStyle};color:var(--green);font-weight:700">${t>0?t:'—'}</td>`).join('')}
     ${!cols.length?`<td style="${tdStyle}">—</td>`:''}
     <td id="ts-grandtotal" style="${tdStyle};color:var(--text);font-weight:700">${grandTotal>0?grandTotal:'—'}</td>
@@ -9337,7 +9496,24 @@ function renderTsMatrix() {
 
   html+=`</tbody></table>`;
   container.innerHTML=html;
+  sizeTsMatrixPane();
 }
+
+/* The grid scrolls inside its own pane rather than with the page — that is the
+   only way position:sticky can pin the header row, since sticky needs a
+   scrolling ancestor with room to travel. The pane is sized to end at the
+   bottom of the window, so the page itself stays put and the header, the Date
+   column and the add-column controls are all on screen the whole month. */
+function sizeTsMatrixPane() {
+  const pane = document.getElementById('tsMatrixScroll');
+  if(!pane || !pane.offsetParent) return;
+  // Distance from the top of the DOCUMENT, so the result doesn't shift as the
+  // page is scrolled — the pane must not grow every time the user scrolls.
+  const docTop = pane.getBoundingClientRect().top + window.scrollY;
+  const h = Math.max(320, Math.round(window.innerHeight - docTop - 20));
+  pane.style.maxHeight = h + 'px';
+}
+window.addEventListener('resize', sizeTsMatrixPane);
 
 function updateTsCell(dateStr, colId, val) {
   if(!tsData.rows) tsData.rows={};
@@ -9595,6 +9771,12 @@ async function exportMyTimesheet() {
   const myLeaves = leaves.filter(l => l.personId == currentUser.id);
   const ws=buildTsSheet(tsData, currentUser.name, myLeaves);
   XLSX.utils.book_append_sheet(wb, ws, currentUser.name.split(' ')[0]||'Timesheet');
+  // Only when the month was logged per deliverable — otherwise the grid
+  // already IS the project view and a second sheet would say nothing new.
+  if(tsUsesDeliverables([tsData])) {
+    XLSX.utils.book_append_sheet(wb,
+      buildTsProjectRollupSheet([tsData], () => currentUser.name), 'By project');
+  }
   XLSX.writeFile(wb, `Timesheet_${currentUser.name.replace(' ','_')}_${tsData.month}.xlsx`);
 }
 
@@ -9821,6 +10003,10 @@ async function exportAllTimesheets(individual) {
       if(!theirs.length) continue;
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, buildTsSummarySheet(theirs, [person], months[0]), 'Summary');
+      if(tsUsesDeliverables(theirs)) {
+        XLSX.utils.book_append_sheet(wb,
+          buildTsProjectRollupSheet(theirs, () => person.name), 'By project');
+      }
       theirs.sort((a,b)=>String(a.month).localeCompare(String(b.month))).forEach(s => {
         const pLeaves = leaves.filter(l => String(l.personId) === String(s.person_id));
         XLSX.utils.book_append_sheet(wb, buildTsSheet(s, person.name, pLeaves), sheetName(person.name, s.month));
@@ -9836,6 +10022,11 @@ async function exportAllTimesheets(individual) {
 
   if(months.length > 1) {
     XLSX.utils.book_append_sheet(wb, buildRangeOverviewSheet(submitted, staff, months), 'Overview');
+  }
+  // One rollup across everyone in the export, so the per-deliverable and
+  // per-project readings of the same hours sit side by side.
+  if(tsUsesDeliverables(submitted)) {
+    XLSX.utils.book_append_sheet(wb, buildTsProjectRollupSheet(submitted, nameFor), 'By project');
   }
   months.forEach(month => {
     const forMonth = submitted.filter(s => String(s.month) === month);
@@ -10146,6 +10337,81 @@ function buildTsSheet(ts, personName, leavesForPerson) {
   // Freeze top 4 rows
   ws['!freeze']={xSplit:0,ySplit:4};
 
+  return ws;
+}
+
+/* True when any of these timesheets logs a project split by deliverable.
+   Everything below hangs off this, so an ordinary export is untouched. */
+function tsUsesDeliverables(sheets) {
+  return (sheets||[]).some(s => (s.columns||[]).some(c => c.deliverableId));
+}
+
+/* "By project" — the same hours the grid already shows, written out both ways
+   in one place: every deliverable line, then the per-deliverable totals, then
+   each project as a whole. Admin can read it either way without reconciling
+   two files, and the three blocks all add up to the same number. */
+function buildTsProjectRollupSheet(sheets, nameFor) {
+  const aoa = [
+    ['Hours by project and deliverable'],
+    [],
+    ['Person','Month','Project','Deliverable','Hours']
+  ];
+  const projTotals  = {};
+  const delivTotals = {};
+  let grand = 0;
+
+  (sheets||[]).slice()
+    .sort((a,b) => String(nameFor(a)).localeCompare(String(nameFor(b)))
+                || String(a.month).localeCompare(String(b.month)))
+    .forEach(s => {
+      (s.columns||[]).filter(c => c.type === 'project').forEach(c => {
+        const hrs = Object.values(s.rows||{}).reduce((t,row)=>t+(parseFloat(row[c.id])||0),0);
+        if(!hrs) return;
+        const pLabel = tsColProjectLabel(c);
+        const dLabel = tsColDelivLabel(c) || '(whole project)';
+        aoa.push([nameFor(s), s.month, pLabel, dLabel, Math.round(hrs*100)/100]);
+        projTotals[pLabel] = (projTotals[pLabel]||0) + hrs;
+        const k = pLabel + '\u0000' + dLabel;
+        delivTotals[k] = (delivTotals[k]||0) + hrs;
+        grand += hrs;
+      });
+    });
+
+  const r2 = n => Math.round(n*100)/100;
+  aoa.push(['','','','Total', r2(grand)]);
+
+  aoa.push([]);
+  aoa.push(['Per deliverable — whole team']);
+  const delivHead = aoa.length;
+  aoa.push(['Project','Deliverable','Hours','Share']);
+  Object.entries(delivTotals)
+    .sort((a,b) => {
+      const [ap] = a[0].split('\u0000'), [bp] = b[0].split('\u0000');
+      return ap.localeCompare(bp) || b[1] - a[1];
+    })
+    .forEach(([k,h]) => {
+      const [p,d] = k.split('\u0000');
+      aoa.push([p, d, r2(h), grand ? Math.round(h/grand*1000)/1000 : 0]);
+    });
+
+  aoa.push([]);
+  aoa.push(['Project as a whole']);
+  const projHead = aoa.length;
+  aoa.push(['Project','Hours','Share']);
+  Object.entries(projTotals).sort((a,b)=>b[1]-a[1])
+    .forEach(([p,h]) => aoa.push([p, r2(h), grand ? Math.round(h/grand*1000)/1000 : 0]));
+  aoa.push(['Total', r2(grand), 1]);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const ref = (r,c) => XLSX.utils.encode_cell({r,c});
+  const bold = (r,c) => { const a = ref(r,c); if(ws[a]) ws[a].s = Object.assign(ws[a].s||{}, {font:{bold:true, name:'Calibri', sz:11}}); };
+  [0, 2, delivHead-1, delivHead, projHead-1, projHead].forEach(r => { for(let c=0;c<5;c++) bold(r,c); });
+  // Share reads as a percentage in both summary blocks. The two blocks put it
+  // in different columns, so each range is formatted on its own.
+  for(let r=delivHead+1; r<=projHead-3; r++){ const a = ref(r,3); if(ws[a]) ws[a].z = '0.0%'; }
+  for(let r=projHead+1;  r<aoa.length;   r++){ const a = ref(r,2); if(ws[a]) ws[a].z = '0.0%'; }
+  ws['!cols'] = [{wch:24},{wch:10},{wch:30},{wch:30},{wch:10}];
+  ws['!freeze'] = {xSplit:0, ySplit:3};
   return ws;
 }
 
@@ -11212,6 +11478,64 @@ function populateHRProjectControls() {
   if(toEl&&cur) toEl.value=cur.val;
 }
 
+/* Gathers one project's logged hours out of a set of timesheets, both ways at
+   once: totalled per person, and broken down per person per deliverable.
+
+   Note the filter rather than a find. A timesheet can now carry SEVERAL
+   columns for the same project — one per deliverable — and taking only the
+   first would silently drop every other one, under-reporting the project. */
+function hrProjectLOEData(relevant, projId, projName) {
+  const proj = (projects||[]).find(p => String(p.id) === String(projId));
+  const byPerson = {};       // pid           -> { hours, months:Set }
+  const byPersonDeliv = {};  // pid::delivId  -> { pid, deliv, hours, months:Set }
+  let splitInUse = false;
+
+  (relevant||[]).forEach(ts => {
+    const cols = (ts.columns||[]).filter(c =>
+      c.type === 'project' && (String(c.projectId) === String(projId) || c.name === projName));
+    cols.forEach(c => {
+      const hrs = Object.values(ts.rows||{}).reduce((s,row)=>s+(parseFloat(row[c.id])||0),0);
+      if(hrs <= 0) return;
+      const pid = String(ts.person_id);
+      if(!byPerson[pid]) byPerson[pid] = { hours:0, months:new Set() };
+      byPerson[pid].hours += hrs;
+      byPerson[pid].months.add(ts.month);
+
+      let dName = '';
+      if(c.deliverableId) {
+        splitInUse = true;
+        dName = (((proj && proj.deliverables || [])
+                   .find(d => String(d.id) === String(c.deliverableId))||{}).name)
+                || c.deliverableName || 'Deliverable';
+      }
+      const k = pid + '::' + (c.deliverableId || '');
+      if(!byPersonDeliv[k]) byPersonDeliv[k] = { pid, deliv:dName, hours:0, months:new Set() };
+      byPersonDeliv[k].hours += hrs;
+      byPersonDeliv[k].months.add(ts.month);
+    });
+  });
+  return { byPerson, byPersonDeliv, splitInUse };
+}
+
+/* Hours logged on a split project but not against any one deliverable are
+   still that project's hours — named rather than hidden. */
+const HR_LOE_NO_DELIV = 'Not tied to a deliverable';
+
+// Held between renders so flipping Detail doesn't re-query Supabase.
+let hrProjLOECache = null;
+
+/* Changing the project or the months makes whatever is on screen belong to a
+   different question — clear it rather than leave a table and a Detail control
+   sitting over numbers that are no longer the ones being asked for. */
+function hrProjLOEInvalidate() {
+  hrProjLOECache = null;
+  const wrap = document.getElementById('hrProjDetailWrap');
+  if(wrap) wrap.style.display = 'none';
+  const container = document.getElementById('hrProjectResult');
+  if(container) container.innerHTML =
+    '<div style="padding:20px;color:var(--muted);text-align:center">Press <strong>View LOE</strong> to load this selection.</div>';
+}
+
 async function loadHRProjectLOE() {
   const projId = document.getElementById('hrProjSel').value;
   const fromMonth = document.getElementById('hrProjFrom').value;
@@ -11220,71 +11544,101 @@ async function loadHRProjectLOE() {
   const container = document.getElementById('hrProjectResult');
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Loading…</div>';
 
-  // Fetch all timesheets in range
-  const {data: tsAll} = await sb.from('timesheets').select('*');
+  const {data: tsAll, error} = await sb.from('timesheets').select('*');
+  if(error) {
+    container.innerHTML = `<div style="padding:20px;color:var(--red);text-align:center">Could not load timesheets — ${escapeHtml(error.message||'unknown error')}</div>`;
+    return;
+  }
   const relevant = (tsAll||[]).filter(s => s.month >= fromMonth && s.month <= toMonth);
-
-  // Find all people who logged hours against this project name
   const projName = proj ? proj.name : '';
-  const byPerson = {}; // personId -> {hours, months}
-  relevant.forEach(ts => {
-    const matchCol = (ts.columns||[]).find(c =>
-      c.type === 'project' && (String(c.projectId) === String(projId) || c.name === projName)
-    );
-    if(!matchCol) return;
-    const hrs = Object.values(ts.rows||{}).reduce((sum,row)=>sum+(parseFloat(row[matchCol.id])||0),0);
-    if(hrs <= 0) return;
-    if(!byPerson[ts.person_id]) byPerson[ts.person_id] = {hours:0, months:[]};
-    byPerson[ts.person_id].hours += hrs;
-    byPerson[ts.person_id].months.push(ts.month);
-  });
 
-  const entries = Object.entries(byPerson).sort(([,a],[,b])=>b.hours-a.hours);
-  const totalHrs = entries.reduce((s,[,v])=>s+v.hours,0);
+  hrProjLOECache = Object.assign(
+    { projName, fromMonth, toMonth },
+    hrProjectLOEData(relevant, projId, projName));
+  renderHRProjectLOE();
+}
 
-  if(!entries.length) {
+function renderHRProjectLOE() {
+  const container = document.getElementById('hrProjectResult');
+  if(!container) return;
+  const d = hrProjLOECache;
+  if(!d) { container.innerHTML = ''; return; }
+  const { projName, fromMonth, toMonth, byPerson, byPersonDeliv, splitInUse } = d;
+
+  // The choice is only offered where the split is actually in use.
+  const wrap = document.getElementById('hrProjDetailWrap');
+  const sel  = document.getElementById('hrProjDetail');
+  if(wrap) wrap.style.display = splitInUse ? '' : 'none';
+  const byDeliverable = splitInUse && sel && sel.value === 'deliverable';
+
+  const totalHrs = Object.values(byPerson).reduce((s,v)=>s+v.hours,0);
+  if(!totalHrs) {
     container.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">No timesheet entries found for this project in the selected period.</div>';
     return;
   }
 
+  const td = 'padding:9px 12px;border:1px solid var(--border)';
+  const th = (t,a) => `<th style="text-align:${a||'left'};padding:10px 12px;border:1px solid var(--border)">${t}</th>`;
+  const nameOf = pid => (team.find(x=>String(x.id)===String(pid))||null);
+  const months = set => [...set].sort().map(m=>fmtMonthYear(new Date(m+'-15'))).join(', ');
+  const personCell = p => `<td style="${td}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="avatar" style="background:${p?p.c.bg:'#eee'};color:${p?p.c.fg:'#666'};width:24px;height:24px;font-size:9px;flex-shrink:0">${p?initials(p.name):'?'}</div>
+        ${escapeHtml(p?p.name:'Unknown')}
+      </div></td>`;
+
+  let head, body;
+  if(byDeliverable) {
+    // Grouped by person, then largest deliverable first inside each person.
+    const rows = Object.values(byPersonDeliv).sort((a,b) => {
+      const an = (nameOf(a.pid)||{}).name || '', bn = (nameOf(b.pid)||{}).name || '';
+      return an.localeCompare(bn) || b.hours - a.hours;
+    });
+    head = th('Team Member')+th('Title')+th('Deliverable')+th('Hours Logged','center')+th('% of Project','center')+th('Months Active','center');
+    body = rows.map(r => {
+      const p = nameOf(r.pid);
+      const pct = totalHrs > 0 ? ((r.hours/totalHrs)*100).toFixed(1) : '0.0';
+      return `<tr>
+        ${personCell(p)}
+        <td style="${td};color:var(--muted)">${escapeHtml(p?p.title||'':'')}</td>
+        <td style="${td}">${escapeHtml(r.deliv || HR_LOE_NO_DELIV)}</td>
+        <td style="${td};text-align:center;font-weight:600">${r.hours.toFixed(1)}</td>
+        <td style="${td};text-align:center">${pct}%</td>
+        <td style="${td};text-align:center;font-size:11px;color:var(--muted)">${months(r.months)}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    const rows = Object.entries(byPerson).sort(([,a],[,b])=>b.hours-a.hours);
+    head = th('Team Member')+th('Title')+th('Hours Logged','center')+th('% of Project','center')+th('Months Active','center');
+    body = rows.map(([pid,v]) => {
+      const p = nameOf(pid);
+      const pct = totalHrs > 0 ? ((v.hours/totalHrs)*100).toFixed(1) : '0.0';
+      return `<tr>
+        ${personCell(p)}
+        <td style="${td};color:var(--muted)">${escapeHtml(p?p.title||'':'')}</td>
+        <td style="${td};text-align:center;font-weight:600">${v.hours.toFixed(1)}</td>
+        <td style="${td};text-align:center">${pct}%</td>
+        <td style="${td};text-align:center;font-size:11px;color:var(--muted)">${months(v.months)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const span = byDeliverable ? 3 : 2;
   container.innerHTML = `
     <div style="margin-bottom:12px">
-      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700">${projName}</div>
-      <div style="font-size:12px;color:var(--muted)">${fromMonth} → ${toMonth} · ${totalHrs.toFixed(1)} total hours logged</div>
+      <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:700">${escapeHtml(projName)}</div>
+      <div style="font-size:12px;color:var(--muted)">${fromMonth} → ${toMonth} · ${totalHrs.toFixed(1)} total hours logged${byDeliverable?' · broken down per deliverable':''}</div>
     </div>
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="background:var(--surface2)">
-          <th style="text-align:left;padding:10px 12px;border:1px solid var(--border)">Team Member</th>
-          <th style="text-align:left;padding:10px 12px;border:1px solid var(--border)">Title</th>
-          <th style="text-align:center;padding:10px 12px;border:1px solid var(--border)">Hours Logged</th>
-          <th style="text-align:center;padding:10px 12px;border:1px solid var(--border)">% of Project</th>
-          <th style="text-align:center;padding:10px 12px;border:1px solid var(--border)">Months Active</th>
-        </tr>
-      </thead>
+      <thead><tr style="background:var(--surface2)">${head}</tr></thead>
       <tbody>
-        ${entries.map(([pid,{hours,months}])=>{
-          const p = team.find(x=>String(x.id)===String(pid));
-          const pct = totalHrs > 0 ? ((hours/totalHrs)*100).toFixed(1) : '0.0';
-          return `<tr>
-            <td style="padding:9px 12px;border:1px solid var(--border)">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="avatar" style="background:${p?p.c.bg:'#eee'};color:${p?p.c.fg:'#666'};width:24px;height:24px;font-size:9px;flex-shrink:0">${p?initials(p.name):'?'}</div>
-                ${p?p.name:'Unknown'}
-              </div>
-            </td>
-            <td style="padding:9px 12px;border:1px solid var(--border);color:var(--muted)">${p?p.title||'':''}</td>
-            <td style="padding:9px 12px;border:1px solid var(--border);text-align:center;font-weight:600">${hours.toFixed(1)}</td>
-            <td style="padding:9px 12px;border:1px solid var(--border);text-align:center">${pct}%</td>
-            <td style="padding:9px 12px;border:1px solid var(--border);text-align:center;font-size:11px;color:var(--muted)">${[...new Set(months)].sort().map(m=>fmtMonthYear(new Date(m+'-15'))).join(', ')}</td>
-          </tr>`;
-        }).join('')}
+        ${body}
         <tr style="background:var(--surface2);font-weight:700">
-          <td colspan="2" style="padding:9px 12px;border:1px solid var(--border)">Total</td>
-          <td style="padding:9px 12px;border:1px solid var(--border);text-align:center">${totalHrs.toFixed(1)}</td>
-          <td style="padding:9px 12px;border:1px solid var(--border);text-align:center">100%</td>
-          <td style="padding:9px 12px;border:1px solid var(--border)"></td>
+          <td colspan="${span}" style="${td}">Total</td>
+          <td style="${td};text-align:center">${totalHrs.toFixed(1)}</td>
+          <td style="${td};text-align:center">100%</td>
+          <td style="${td}"></td>
         </tr>
       </tbody>
     </table></div>`;
@@ -11295,19 +11649,18 @@ async function exportHRProjectLOE() {
   const fromMonth = document.getElementById('hrProjFrom').value;
   const toMonth = document.getElementById('hrProjTo').value;
   const proj = projects.find(p=>String(p.id)===String(projId));
-  const {data: tsAll} = await sb.from('timesheets').select('*');
+  const {data: tsAll, error} = await sb.from('timesheets').select('*');
+  if(error) { showToast('Export failed — could not load timesheets'); return; }
   const relevant = (tsAll||[]).filter(s=>s.month>=fromMonth&&s.month<=toMonth);
   const projName = proj?proj.name:'';
-  const byPerson = {};
-  relevant.forEach(ts=>{
-    const matchCol=(ts.columns||[]).find(c=>c.type==='project'&&(String(c.projectId)===String(projId)||c.name===projName));
-    if(!matchCol) return;
-    const hrs=Object.values(ts.rows||{}).reduce((sum,row)=>sum+(parseFloat(row[matchCol.id])||0),0);
-    if(hrs<=0) return;
-    if(!byPerson[ts.person_id]) byPerson[ts.person_id]={hours:0};
-    byPerson[ts.person_id].hours+=hrs;
-  });
-  const totalHrs=Object.values(byPerson).reduce((s,v)=>s+v.hours,0);
+  const { byPerson, byPersonDeliv, splitInUse } = hrProjectLOEData(relevant, projId, projName);
+  const totalHrs = Object.values(byPerson).reduce((s,v)=>s+v.hours,0);
+  if(!totalHrs) { showToast('Nothing to export for this project and period'); return; }
+
+  const pct = h => totalHrs>0 ? ((h/totalHrs)*100).toFixed(1)+'%' : '0%';
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1 — the project as a whole, one row per person.
   const aoa=[
     [`Project LOE — ${projName}`,`${fromMonth} to ${toMonth}`],
     [],
@@ -11315,14 +11668,52 @@ async function exportHRProjectLOE() {
   ];
   Object.entries(byPerson).sort(([,a],[,b])=>b.hours-a.hours).forEach(([pid,{hours}])=>{
     const p=team.find(x=>String(x.id)===String(pid));
-    aoa.push([p?p.name:'Unknown',p?p.title||'':'',hours.toFixed(1),
-      totalHrs>0?((hours/totalHrs)*100).toFixed(1)+'%':'0%']);
+    aoa.push([p?p.name:'Unknown',p?p.title||'':'',Number(hours.toFixed(1)),pct(hours)]);
   });
-  aoa.push(['Total','',totalHrs.toFixed(1),'100%']);
+  aoa.push(['Total','',Number(totalHrs.toFixed(1)),'100%']);
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols']=[{wch:25},{wch:20},{wch:14},{wch:12}];
-  const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Project LOE');
+
+  /* Sheet 2 — the same hours cut per deliverable, added only when the project
+     is actually tracked that way. Both sheets total to the same number, so the
+     rollup and the detail can be handed over together without reconciling. */
+  if(splitInUse) {
+    const dAoa=[
+      [`Project LOE per deliverable — ${projName}`,`${fromMonth} to ${toMonth}`],
+      [],
+      ['Team Member','Title','Deliverable','Hours Logged','% of Project']
+    ];
+    Object.values(byPersonDeliv)
+      .sort((a,b)=>{
+        const an=(team.find(x=>String(x.id)===String(a.pid))||{}).name||'';
+        const bn=(team.find(x=>String(x.id)===String(b.pid))||{}).name||'';
+        return an.localeCompare(bn) || b.hours - a.hours;
+      })
+      .forEach(r=>{
+        const p=team.find(x=>String(x.id)===String(r.pid));
+        dAoa.push([p?p.name:'Unknown',p?p.title||'':'',r.deliv||HR_LOE_NO_DELIV,
+          Number(r.hours.toFixed(1)),pct(r.hours)]);
+      });
+    dAoa.push(['Total','','',Number(totalHrs.toFixed(1)),'100%']);
+
+    // Deliverable totals across the whole team, which is the number Admin asks for.
+    const perDeliv = {};
+    Object.values(byPersonDeliv).forEach(r=>{
+      const k = r.deliv||HR_LOE_NO_DELIV;
+      perDeliv[k] = (perDeliv[k]||0) + r.hours;
+    });
+    dAoa.push([]);
+    dAoa.push(['Deliverable totals']);
+    dAoa.push(['Deliverable','Hours Logged','% of Project']);
+    Object.entries(perDeliv).sort((a,b)=>b[1]-a[1])
+      .forEach(([k,h])=>dAoa.push([k,Number(h.toFixed(1)),pct(h)]));
+
+    const dWs=XLSX.utils.aoa_to_sheet(dAoa);
+    dWs['!cols']=[{wch:25},{wch:20},{wch:32},{wch:14},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,dWs,'Per deliverable');
+  }
+
   XLSX.writeFile(wb,`ProjectLOE_${projName.replace(/[^a-z0-9]/gi,'_')}_${fromMonth}_${toMonth}.xlsx`);
 }
 
@@ -11728,7 +12119,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-20-v82 loaded');
+  console.log('ECO Workload Tracker — build 2026-09-24-v84 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
