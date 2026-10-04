@@ -491,6 +491,34 @@ select option{background:#fff}
   .fin-main-grid { grid-template-columns:1fr; }
   .fin-dash-grid { grid-template-columns:1fr; }
 }
+
+/* ── Admin → Timesheets layout ────────────────────────────────────────
+   ONE grid for the whole page: a working column and a queue column, with a
+   single pair of vertical edges running top to bottom. Every earlier attempt
+   mixed 3:1 and 1:1 rows, so nothing lined up with anything below it, which
+   is what read as "the margins aren't aligned".
+   Left  — what you work on: the month and its table, then the tidying tools.
+   Right — what is waiting on you: approvals, then leftovers. */
+.ops-page { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:18px; align-items:start; }
+.ops-col  { display:flex; flex-direction:column; gap:18px; min-width:0; }
+
+.ops-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:16px 18px; min-width:0;
+}
+.ops-card-h    { font-size:13px; font-weight:700; margin-bottom:3px; }
+.ops-card-sub  { font-size:11px; color:var(--muted); line-height:1.55; margin-bottom:12px; }
+.ops-card-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:3px; }
+.ops-card-scroll { max-height:340px; overflow-y:auto; margin:0 -6px; padding:0 6px; }
+
+/* The right-hand group of a toolbar. margin-left:auto rather than a flex
+   spacer, so at narrow widths it wraps as one block instead of the spacer
+   stretching a lone dropdown across the full width. */
+.ops-tools-right { display:flex; align-items:center; gap:8px; margin-left:auto; flex-wrap:wrap; }
+
+@media(max-width:1250px) {
+  .ops-page { grid-template-columns:minmax(0,1fr); }
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
@@ -953,6 +981,32 @@ select option{background:#fff}
         <button class="btn btn-accent" id="opsAddPersonBtn" onclick="opsAddPersonRow()" style="font-size:12px;display:none">＋ Add Person</button>
         <button class="btn btn-primary" id="opsPeopleSaveBtn" onclick="saveOpsPeople()" style="font-size:12px;display:none">Save Changes</button>
       </div>
+
+      <!-- Departments -->
+      <details id="opsDeptPanel" style="margin-bottom:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
+        <summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700;list-style:none;display:flex;align-items:center;gap:8px">
+          🏢 Departments <span id="opsDeptCount" style="font-weight:400;color:var(--muted);font-size:12px"></span>
+        </summary>
+        <div style="padding:0 14px 14px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+            A new department works exactly like the existing ones — its own people, projects,
+            proposals, timesheets and reports. The four original departments cannot be removed.
+          </div>
+          <div id="opsDeptList" style="margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:2 1 240px">
+              <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Department name</label>
+              <input type="text" id="opsNewDeptName" placeholder="e.g. Water &amp; Sanitation" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+            </div>
+            <div style="flex:1 1 120px">
+              <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Short label</label>
+              <input type="text" id="opsNewDeptShort" placeholder="e.g. W&amp;S" maxlength="12" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+            </div>
+            <button class="btn btn-accent" onclick="addCustomDepartment()" style="font-size:12px;flex-shrink:0">＋ Add Department</button>
+          </div>
+        </div>
+      </details>
+
       <div id="opsUnassignedWarn" style="display:none;background:#fff4e5;border:1px solid #f0d080;color:#8a5a00;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;line-height:1.6"></div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
         <table id="opsPeopleTable" class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px"></table>
@@ -1002,41 +1056,56 @@ select option{background:#fff}
 
     <!-- Timesheets (reuses the HR view) -->
     <div id="opsPanelTimesheets" style="display:none">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:28px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-          <div style="font-size:13px;font-weight:700">Awaiting manager approval</div>
-          <div style="font-size:11px;color:var(--muted)">Every submitted timesheet still pending, regardless of who it's assigned to — a safety net if a manager can't get to it</div>
-        </div>
-        <div id="opsPendingApprovals"></div>
-      </div>
+      <div class="ops-page" style="margin-top:20px">
 
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-          <div style="font-size:13px;font-weight:700">Outstanding timesheets</div>
-          <select id="opsMissingMonth" onchange="renderMissingTimesheets()" style="width:auto;padding:5px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        </div>
-        <div id="opsMissingTs"></div>
-      </div>
+        <!-- What you work on -->
+        <div class="ops-col">
+          <div id="opsTsMonthHost" style="min-width:0"></div>
 
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-          <div style="font-size:13px;font-weight:700">Tidy up loose timesheet entries</div>
-          <div style="font-size:11px;color:var(--muted)">Hours logged against free-text labels instead of a project</div>
-          <div style="flex:1"></div>
-          <button class="btn btn-sm" onclick="scanLooseColumns()" style="font-size:11px">↻ Rescan</button>
-        </div>
-        <div id="opsLooseList"><div style="padding:12px;color:var(--muted);font-size:12px">Scanning…</div></div>
-      </div>
+          <div class="ops-card">
+            <div class="ops-card-head">
+              <div class="ops-card-h" style="margin-bottom:0">Tidy up loose entries</div>
+              <div class="ops-tools-right">
+                <button class="btn btn-sm" onclick="scanLooseColumns()" style="font-size:11px">↻ Rescan</button>
+              </div>
+            </div>
+            <div class="ops-card-sub">Hours logged against free text instead of a project or an activity.</div>
+            <div id="opsLooseList"><div style="padding:12px;color:var(--muted);font-size:12px">Scanning…</div></div>
+          </div>
 
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-          <div style="font-size:13px;font-weight:700">Timesheets from removed accounts</div>
-          <div style="font-size:11px;color:var(--muted)">Hours still counted in reports, from people no longer on the tracker.
-            Accounts deleted before names were recorded show only an id — use <strong>✎ Name</strong> to label them.</div>
         </div>
-        <div id="opsOrphanList"></div>
-      </div>
 
+        <!-- What is waiting on you -->
+        <div class="ops-col">
+          <div class="ops-card">
+            <div class="ops-card-h">Awaiting approval</div>
+            <div class="ops-card-sub">Every submitted timesheet still pending, whoever it's assigned to — a safety net if a manager can't get to it.</div>
+            <div id="opsPendingApprovals" class="ops-card-scroll"></div>
+          </div>
+
+          <div class="ops-card">
+            <div class="ops-card-h">Removed accounts</div>
+            <div class="ops-card-sub">Hours still counted in reports, from people no longer on the tracker.
+              Accounts deleted before names were recorded show only an id — use <strong>✎ Name</strong> to label them.</div>
+            <div id="opsOrphanList" class="ops-card-scroll"></div>
+          </div>
+
+          <div class="ops-card">
+            <div class="ops-card-h">Other activities</div>
+            <div class="ops-card-sub">Work that isn't a project — training, events, internal time.
+              Everyone picks these from one list under <strong>Other</strong>, so the LOE report can total them.</div>
+            <div id="opsActivityList" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+              <div style="flex:1 1 150px">
+                <label style="font-size:11px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Activity name</label>
+                <input type="text" id="opsNewActivity" placeholder="e.g. Events and Workshops" onkeydown="if(event.key===&apos;Enter&apos;){event.preventDefault();addTsActivity();}" style="width:100%;padding:7px 10px;font-size:13px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+              </div>
+              <button class="btn btn-accent" onclick="addTsActivity()" style="font-size:12px;flex-shrink:0">＋ Add</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
 
     <!-- Level of effort, sliced any way -->
@@ -1252,6 +1321,7 @@ select option{background:#fff}
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <select id="tsMonthSel" onchange="loadUserTimesheet()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
           <div id="tsStatusBadge"></div>
+          <button class="btn" id="tsCommentsBtn" onclick="toggleTsComments()" title="Show a note box beside each entry" style="font-size:12px">💬 Comments</button>
           <button class="btn btn-accent" id="tsExportBtn" onclick="exportMyTimesheet()" style="font-size:12px">📥 Export</button>
           <button class="btn btn-primary" id="tsSubmitBtn" onclick="confirmSubmitTimesheet()">Submit & Lock</button>
         </div>
@@ -1279,25 +1349,27 @@ select option{background:#fff}
     <div id="tsHRView" style="display:none">
 
       <!-- HR Tab Bar -->
-      <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:18px">
+      <div id="hrTabBar" style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:18px">
         <button id="hrTabMonth" onclick="hrSwitchTab('month')" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent)">Monthly View</button>
         <button id="hrTabSummary" onclick="hrSwitchTab('summary')" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">Multi-Month Summary</button>
         <button id="hrTabProject" onclick="hrSwitchTab('project')" style="padding:8px 18px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted)">Project LOE View</button>
       </div>
 
       <!-- Monthly View Panel -->
-      <div id="hrPanelMonth">
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
-          <span id="hrRangeWrap" style="display:none;align-items:center;gap:6px">
+      <div id="hrPanelMonth" class="ops-card">
+        <!-- Period picker, set off from the month it controls -->
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:14px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+          <span id="hrRangeWrap" style="display:none;align-items:center;gap:6px;flex-wrap:wrap">
             <label style="font-size:12px;color:var(--text2)">From</label>
-            <select id="hrRangeFrom" onchange="loadHRRange()" style="padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+            <select id="hrRangeFrom" onchange="loadHRRange()" style="padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
             <label style="font-size:12px;color:var(--text2)">to</label>
-            <select id="hrRangeTo" onchange="loadHRRange()" style="padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+            <select id="hrRangeTo" onchange="loadHRRange()" style="padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
             <span id="hrRangeNote" style="font-size:11px;color:var(--muted)"></span>
           </span>
-          <select id="hrMonthSel" onchange="loadHRTimesheets()" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
-          <button class="btn btn-accent" onclick="exportAllTimesheets(false)" style="font-size:12px">📥 Export All (One File)</button>
-
+          <select id="hrMonthSel" onchange="loadHRTimesheets()" style="padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></select>
+          <div class="ops-tools-right">
+            <button class="btn btn-accent" onclick="exportAllTimesheets(false)" style="font-size:12px">📥 Export All (One File)</button>
+          </div>
         </div>
         <div id="tsHRList"></div>
         <!-- Leave approval for managers -->
@@ -1434,12 +1506,12 @@ select option{background:#fff}
       <div class="field" id="opsNewStartWrap"><label>Start Date</label><input type="date" id="opsNewStart"></div>
       <div class="field"><label id="opsNewEndLabel">End / Deliverable Date</label><input type="date" id="opsNewEnd"></div>
     </div>
-    <div class="field"><label>Team members <span style="font-weight:400;color:var(--muted)">(optional — a manager is not required)</span></label>
+    <div class="field"><label>Team members <span id="opsNewMembersNote" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">Optional — a manager is not required.</span></label>
       <div id="opsNewMembers" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
     </div>
     <div class="field"><label>Notes</label>
       <textarea id="opsNewNotes" rows="2" placeholder="Scope, key milestones, special considerations..."></textarea></div>
-    <div class="info-box" style="margin-top:4px;margin-bottom:16px">
+    <div class="info-box" id="opsNewInfo" style="margin-top:4px;margin-bottom:16px">
       💡 Leave the manager as <strong>— unassigned —</strong> and it still appears on that department's page,
       where a manager can claim it. Once a manager is set, only Ibrahim can change it.
     </div>
@@ -1823,7 +1895,7 @@ select option{background:#fff}
     <div id="opsEmailSection" style="display:none;margin-bottom:18px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Notification Emails</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Where timesheet submissions, approvals and leave notifications are sent. Either box can be left blank.
+        Where timesheet submissions, approvals, finance alerts and new work notifications are sent. Either box can be left blank.
       </div>
       <div class="two-col">
         <div class="field"><label>Email 1</label><input type="email" id="opsEmail1" placeholder="admin@ecoconsult.jo"></div>
@@ -1832,13 +1904,16 @@ select option{background:#fff}
       <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" id="opsNotifyTimesheets" checked style="width:15px;height:15px;cursor:pointer">
-          <span>Timesheet submissions and approvals</span></label>
+          <span>Timesheets approved or returned</span></label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" id="opsNotifyPeople" style="width:15px;height:15px;cursor:pointer">
-          <span>New accounts and department changes</span></label>
+          <span>Budget changes and proposal outcomes</span></label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" id="opsNotifyFinance" checked style="width:15px;height:15px;cursor:pointer">
           <span>Finance — deliverables ready to invoice or pay</span></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="opsNotifyWork" checked style="width:15px;height:15px;cursor:pointer">
+          <span>New projects and proposals created by the team</span></label>
       </div>
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px;margin-top:4px">Change Password</div>
@@ -1879,17 +1954,69 @@ const OPS_USER = {id:9998, name:'Admin', title:'Operations', dept:'ADMIN', depar
 /* ── DEPARTMENTS ──────────────────────────────────────────────
    One codebase, one deployment. A department is a filter over the
    data, so every future change applies to all departments at once. */
-const DEPARTMENTS = [
-  {id:'ppa',  name:'Project Planning & Assessments'},
-  {id:'egc',  name:'Econ. Growth & Climate'},
-  {id:'iscd', name:'Institutional Sustainability & Climate Development'},
-  {id:'ops',  name:'Admin (Operations)'},
+const BUILT_IN_DEPARTMENTS = [
+  {id:'ppa',  name:'Project Planning & Assessments',                      short:'PP&A'},
+  {id:'egc',  name:'Econ. Growth & Climate',                              short:'EG&C'},
+  {id:'iscd', name:'Institutional Sustainability & Climate Development',  short:'ISCD'},
+  {id:'ops',  name:'Admin (Operations)',                                  short:'Admin'},
 ];
 const DEFAULT_DEPT = 'ppa';
+
+/* Departments Admin has added. Loaded from app_settings at startup and kept
+   separate from the built-in four, so a bad edit can never delete the
+   departments the company was built on. A custom department is otherwise
+   identical: the same filters, pages, pickers and reports read this merged
+   list, so nothing anywhere needs to know which kind it is. */
+let customDepartments = [];
+
+function allDepartments() { return BUILT_IN_DEPARTMENTS.concat(customDepartments); }
 /* Admin (Operations) is a single login, not a department staff belong to —
    same as HR. It is never offered when assigning someone a department. */
-const ASSIGNABLE_DEPARTMENTS = DEPARTMENTS.filter(d => d.id !== 'ops');
-function deptName(id){ const d=DEPARTMENTS.find(x=>x.id===id); return d?d.name:id; }
+function assignableDepartments() { return allDepartments().filter(d => d.id !== 'ops'); }
+function deptById(id) { return allDepartments().find(x => x.id === id) || null; }
+function deptName(id){ const d = deptById(id); return d ? d.name : id; }
+function isCustomDept(id) { return customDepartments.some(d => d.id === id); }
+
+/* ── APP SETTINGS ─────────────────────────────────────────────
+   Small pieces of company-wide configuration Admin owns — the extra
+   departments, the shared activity list for timesheets. One row per
+   setting in app_settings, so adding the next one needs no migration.
+   Writes check the error rather than assuming: a denied write here would
+   otherwise look exactly like a successful one. */
+let appSettings = {};
+
+async function loadAppSettings() {
+  try {
+    const { data, error } = await sb.from('app_settings').select('key,value');
+    if(error) { console.warn('settings load failed:', error.message); return; }
+    appSettings = {};
+    (data||[]).forEach(r => { appSettings[r.key] = r.value; });
+    const dp = appSettings.departments;
+    customDepartments = Array.isArray(dp)
+      ? dp.filter(d => d && d.id && d.name && !BUILT_IN_DEPARTMENTS.some(b => b.id === d.id))
+      : [];
+  } catch(e) { console.warn('settings load error:', e.message || e); }
+}
+
+async function saveAppSetting(key, value) {
+  const { error } = await sb.from('app_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() });
+  if(error) {
+    reportSaveFailure(key === 'departments' ? 'Departments' : 'Settings', error);
+    return false;
+  }
+  appSettings[key] = value;
+  return true;
+}
+
+/* The shared "Other" list for timesheets — training, events, leave handling
+   and anything else that is work but not a project. Admin decides what is on
+   it; everyone picks from the same list, which is the point: free text gave
+   twelve spellings of the same activity. */
+function tsActivities() {
+  const a = appSettings.ts_activities;
+  return Array.isArray(a) ? a.filter(x => x && x.id && x.name) : [];
+}
 
 let deptColumnMissing = false;   // true until the Supabase migration is run
 let allTeam     = [];          // every person, every department
@@ -2992,7 +3119,7 @@ function populateLoginDeptSelect() {
   if(!sel) return;
   const keep = sel.value;
   sel.innerHTML = `<option value="">— Select department —</option>` +
-    ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('') +
+    assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join('') +
     `<option value="hr">HR</option>` +
     `<option value="ops">Admin (Operations)</option>`;
   if(keep) sel.value = keep;
@@ -3205,11 +3332,18 @@ function applyGlobalChrome() {
     divider.style.display = anyPrivate ? '' : 'none';
   }
 
-  // Only the Admin department creates work; managers then assign it
-  ['projNewBtn','propNewBtn','headerNewProjBtn'].forEach(id => {
+  /* Anyone with a full seat can start a project or proposal from their own
+     Projects/Proposals page — waiting on Admin to set one up was holding the
+     work up. Admin keeps its own page and its wider powers unchanged.
+     Timesheet-only seats are excluded: they have no project pages to use. */
+  const mayCreateWork = !isTimesheetOnly() && !isHR();
+  ['projNewBtn','propNewBtn'].forEach(id => {
     const el = document.getElementById(id);
-    if(el) el.style.display = isOpsAdmin() ? '' : 'none';
+    if(el) el.style.display = mayCreateWork ? '' : 'none';
   });
+  // The duplicate in the header stays retired — New Project lives on the page.
+  const hdrNew = document.getElementById('headerNewProjBtn');
+  if(hdrNew) hdrNew.style.display = isOpsAdmin() ? '' : 'none';
 
   renderHeaderBalances();
   applyPrivacyLocks();
@@ -3286,6 +3420,7 @@ function openSettingsModal() {
       document.getElementById('opsNotifyTimesheets').checked = cfg.timesheets;
       document.getElementById('opsNotifyPeople').checked     = cfg.people;
       document.getElementById('opsNotifyFinance').checked    = cfg.finance;
+      document.getElementById('opsNotifyWork').checked       = cfg.work;
     }
   }
   // Single-seat accounts have a fixed name — password change only
@@ -3515,7 +3650,7 @@ function renderOpsAdmin() {
     if(!sel) return;
     const keep = sel.value;
     sel.innerHTML = `<option value="">All departments</option>` +
-      ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+      assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
     if(keep) sel.value = keep;
   });
   opsSwitchTab(opsCurrentTab);
@@ -3541,7 +3676,7 @@ function opsSwitchTab(tab) {
     renderOpsProjects();
     loadAuditLog().then(renderAuditLog);
   }
-  if(tab==='timesheets') mountOpsTimesheets();
+  if(tab==='timesheets') { renderOpsActivities(); mountOpsTimesheets(); }
   if(tab==='loe')        mountLoeReport();
   if(tab==='finance')    renderOpsFinance();
   if(tab==='notes')      mountOpsNotes();
@@ -3571,12 +3706,178 @@ function opsManagerOptions(selectedId, excludeId) {
     .join('');
 }
 function deptShort(id){
-  return {ppa:'PP&A', egc:'EG&C', iscd:'ISCD', ops:'Admin'}[id] || id;
+  const d = deptById(id);
+  if(d && d.short) return d.short;
+  if(d && d.name)  return d.name;
+  return id;
+}
+
+/* ── The shared "Other" activity list ────────────────────────── */
+function renderOpsActivities() {
+  const host = document.getElementById('opsActivityList');
+  if(!host) return;
+  const list = tsActivities();
+  host.innerHTML = list.length
+    ? list.map(a => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(a.name)}</div>
+        <button class="btn" onclick="renameTsActivity('${escapeAttr(a.id)}')" style="font-size:11px;padding:4px 9px">Rename</button>
+        <button class="btn" onclick="removeTsActivity('${escapeAttr(a.id)}')" style="font-size:11px;padding:4px 9px;color:var(--red)">Remove</button>
+      </div>`).join('')
+    : `<div style="font-size:12px;color:var(--muted);padding:6px 0">Nothing on the list yet — until something is added, people will only see Custom.</div>`;
+}
+
+async function addTsActivity() {
+  const el = document.getElementById('opsNewActivity');
+  const name = el && el.value ? el.value.trim() : '';
+  if(!name) { showToast('Give the activity a name'); return; }
+  if(tsActivities().some(a => a.name.toLowerCase() === name.toLowerCase())) {
+    showToast('That activity is already on the list'); return;
+  }
+  const next = tsActivities().concat([{ id:'act'+Date.now(), name }]);
+  if(!await saveAppSetting('ts_activities', next)) return;
+  if(el) el.value = '';
+  renderOpsActivities();
+  showToast(`"${name}" added — everyone can log against it now ✓`);
+}
+
+/* Renaming changes the label everywhere, including on timesheets already
+   submitted, because columns store the activity id — the same rule projects
+   and deliverables already follow. */
+async function renameTsActivity(id) {
+  const a = tsActivities().find(x => x.id === id);
+  if(!a) return;
+  const name = prompt('Activity name', a.name);
+  if(name === null || !name.trim()) return;
+  const next = tsActivities().map(x => x.id === id ? { ...x, name:name.trim() } : x);
+  if(!await saveAppSetting('ts_activities', next)) return;
+  renderOpsActivities();
+  showToast('Activity renamed ✓');
+}
+
+async function removeTsActivity(id) {
+  const a = tsActivities().find(x => x.id === id);
+  if(!a) return;
+  if(!confirm(`Remove "${a.name}" from the list?\n\nTimesheets that already use it keep their hours and their label — it just stops being offered on new columns.`)) return;
+  const next = tsActivities().filter(x => x.id !== id);
+  if(!await saveAppSetting('ts_activities', next)) return;
+  renderOpsActivities();
+  showToast('Activity removed ✓');
+}
+
+/* ── Departments Admin can add ───────────────────────────────── */
+function renderOpsDepartments() {
+  const host = document.getElementById('opsDeptList');
+  if(!host) return;
+  const count = document.getElementById('opsDeptCount');
+  const assignable = assignableDepartments();
+  if(count) count.textContent = `· ${assignable.length} active`;
+
+  host.innerHTML = allDepartments().map(d => {
+    const custom = isCustomDept(d.id);
+    const staff  = allTeam.filter(p => !isSingleSeat(p) && personDept(p) === d.id).length;
+    const work   = allProjects.filter(p => (p.department||DEFAULT_DEPT) === d.id).length;
+    const isOps  = d.id === 'ops';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(deptShort(d.id))}${isOps?' · single login, not a staff department':` · ${staff} ${staff===1?'person':'people'} · ${work} project${work===1?'':'s'}`}</div>
+      </div>
+      ${custom
+        ? `<button class="btn" onclick="renameCustomDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px">Rename</button>
+           <button class="btn" onclick="removeCustomDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px;color:var(--red)">Remove</button>`
+        : `<span style="font-size:11px;color:var(--muted);white-space:nowrap">built in</span>`}
+    </div>`;
+  }).join('');
+}
+
+/* Ids are derived from the name and never change afterwards — every person,
+   project and timesheet stores the id, so an id that moved would orphan them. */
+function deptIdFrom(name) {
+  const base = String(name).toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,12) || 'dept';
+  let id = base, n = 2;
+  while(allDepartments().some(d => d.id === id)) id = base + (n++);
+  return id;
+}
+
+async function addCustomDepartment() {
+  const nameEl  = document.getElementById('opsNewDeptName');
+  const shortEl = document.getElementById('opsNewDeptShort');
+  const name  = (nameEl ||{}).value ? nameEl.value.trim()  : '';
+  const short = (shortEl||{}).value ? shortEl.value.trim() : '';
+  if(!name) { showToast('Give the department a name'); return; }
+  if(allDepartments().some(d => d.name.toLowerCase() === name.toLowerCase())) {
+    showToast('A department with that name already exists'); return;
+  }
+  const dept = { id: deptIdFrom(name), name, short: short || name.slice(0,12) };
+  const next = customDepartments.concat([dept]);
+  if(!await saveAppSetting('departments', next)) return;
+  customDepartments = next;
+  if(nameEl) nameEl.value = ''; if(shortEl) shortEl.value = '';
+  await writeAudit('department', dept.id, 'created', null, dept.name, null);
+  refreshDepartmentUI();
+  showToast(`${dept.name} added — it now works like any other department ✓`);
+}
+
+async function renameCustomDepartment(id) {
+  const d = customDepartments.find(x => x.id === id);
+  if(!d) return;
+  const name = prompt('Department name', d.name);
+  if(name === null) return;
+  if(!name.trim()) { showToast('A department needs a name'); return; }
+  const short = prompt('Short label (used in tables and reports)', d.short || '');
+  if(short === null) return;
+  const before = d.name;
+  const next = customDepartments.map(x => x.id === id
+    ? { ...x, name: name.trim(), short: (short.trim() || name.trim().slice(0,12)) } : x);
+  if(!await saveAppSetting('departments', next)) return;
+  customDepartments = next;
+  await writeAudit('department', id, 'renamed', before, name.trim(), null);
+  refreshDepartmentUI();
+  showToast('Department renamed ✓');
+}
+
+/* Removing a department must never strand its people or its work, so it is
+   only allowed once both are empty — the alternative is rows pointing at a
+   department that no longer exists, which is how data quietly disappears. */
+async function removeCustomDepartment(id) {
+  const d = customDepartments.find(x => x.id === id);
+  if(!d) return;
+  const staff = allTeam.filter(p => !isSingleSeat(p) && personDept(p) === id);
+  const work  = allProjects.filter(p => (p.department||DEFAULT_DEPT) === id);
+  if(staff.length || work.length) {
+    showToast(`Move its ${staff.length} ${staff.length===1?'person':'people'} and ${work.length} project${work.length===1?'':'s'} elsewhere first`, 6000);
+    return;
+  }
+  if(!confirm(`Remove "${d.name}"? It has nobody and no projects in it.`)) return;
+  const next = customDepartments.filter(x => x.id !== id);
+  if(!await saveAppSetting('departments', next)) return;
+  customDepartments = next;
+  await writeAudit('department', id, 'removed', d.name, null, null);
+  refreshDepartmentUI();
+  showToast('Department removed ✓');
+}
+
+/* Every picker and filter that lists departments, redrawn in one place so a
+   new one appears everywhere at once instead of after a reload. */
+function refreshDepartmentUI() {
+  ['opsDeptFilter','opsProjDeptFilter','financeDeptFilter'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const keep = sel.value;
+    sel.innerHTML = `<option value="">All departments</option>` +
+      assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    if(keep && [...sel.options].some(o=>o.value===keep)) sel.value = keep;
+  });
+  renderOpsDepartments();
+  if(typeof renderOpsPeople === 'function') renderOpsPeople();
+  if(typeof renderOpsProjects === 'function') renderOpsProjects();
+  if(typeof fillLoeFilters === 'function') { try { fillLoeFilters(); } catch(e){} }
 }
 
 function renderOpsPeople() {
   const table  = document.getElementById('opsPeopleTable');
   if(!table) return;
+  renderOpsDepartments();
   syncOpsPeopleEditButtons();
 
   const filter = (document.getElementById('opsDeptFilter')||{}).value || '';
@@ -3624,7 +3925,7 @@ function renderOpsPeople() {
     const edit = {
       name:  `<input type="text" id="ops_name_${p.id}" value="${escapeAttr(p.name||'')}" placeholder="Full name" style="${inputStyle}">`,
       title: `<select id="ops_title_${p.id}" style="${inputStyle}">${TITLES.map(t=>`<option value="${t}"${p.title===t?' selected':''}>${t}</option>`).join('')}</select>`,
-      dept:  `<select id="ops_dept_${p.id}" style="${inputStyle}">${ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}"${personDept(p)===d.id?' selected':''}>${deptShort(d.id)}</option>`).join('')}</select>`,
+      dept:  `<select id="ops_dept_${p.id}" style="${inputStyle}">${assignableDepartments().map(d=>`<option value="${d.id}"${personDept(p)===d.id?' selected':''}>${deptShort(d.id)}</option>`).join('')}</select>`,
       mgr:   `<select id="ops_mgr_${p.id}" style="${inputStyle}">${opsManagerOptions(p.managerId, p.id)}</select>`,
       email: `<input type="email" id="ops_email_${p.id}" value="${escapeAttr(p.email||'')}" placeholder="name@ecoconsult.jo" style="${inputStyle}">`,
       role:  `<select id="ops_role_${p.id}" style="${inputStyle}"><option value="consultant"${(p.role||'consultant')==='consultant'?' selected':''}>Full</option><option value="timesheet_only"${p.role==='timesheet_only'?' selected':''}>Timesheet</option></select>`
@@ -3887,26 +4188,68 @@ async function saveOpsPeople() {
 let opsNewIsProposal = false;
 
 function openOpsNewItem(isProposal) {
+  if(isTimesheetOnly()) { showToast('Timesheet accounts cannot create projects'); return; }
   opsNewIsProposal = !!isProposal;
+
+  /* The same modal serves two very different jobs. Admin sets work up on
+     behalf of any department and usually leaves the manager open. Everyone
+     else is creating their OWN piece of work, in their own department,
+     with themselves running it — so it opens ready to go. */
+  const adminMode = isOpsAdmin();
+  const word = isProposal ? 'proposal' : 'project';
 
   const set = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
   set('opsNewItemTitle', isProposal ? 'New Proposal' : 'New Project');
   set('opsNewNameLabel', isProposal ? 'Proposal Name' : 'Project Name');
   set('opsNewEndLabel',  isProposal ? 'Submission Date' : 'End / Deliverable Date');
-  set('opsNewItemSub',   isProposal
-      ? 'Created on behalf of a department. A lead can be assigned later.'
-      : 'Created on behalf of a department. A project manager can be assigned later.');
+  set('opsNewItemSub',   adminMode
+      ? (isProposal
+          ? 'Created on behalf of a department. A lead can be assigned later.'
+          : 'Created on behalf of a department. A project manager can be assigned later.')
+      : `Creates the ${word} in your department with you running it. Change the ${isProposal?'lead':'manager'} below if it belongs to a colleague.`);
 
   const startWrap = document.getElementById('opsNewStartWrap');
   if(startWrap) startWrap.style.display = isProposal ? 'none' : '';
 
+  /* Department is fixed for everyone but Admin. Your Projects page only shows
+     your own department, so a free choice here would let someone create work
+     that vanishes the moment the modal closes. */
   const deptSel = document.getElementById('opsNewDept');
-  if(deptSel) deptSel.innerHTML = ASSIGNABLE_DEPARTMENTS
-    .map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  if(deptSel) {
+    if(adminMode) {
+      deptSel.innerHTML = assignableDepartments()
+        .map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+      deptSel.disabled = false;
+      deptSel.title = '';
+    } else {
+      const mine = assignableDepartments().find(d => d.id === activeDept);
+      deptSel.innerHTML = `<option value="${activeDept}">${mine ? mine.name : deptShort(activeDept)}</option>`;
+      deptSel.value = activeDept;
+      deptSel.disabled = true;
+      deptSel.title = 'New work is created in your own department';
+    }
+  }
 
   refreshOpsNewPMOptions();
-  refreshOpsNewMembers();
   if(deptSel) deptSel.onchange = () => { refreshOpsNewPMOptions(); refreshOpsNewMembers(); };
+
+  // Default the manager to whoever is creating it, unless that's Admin —
+  // Admin is not a project manager, so its default stays "unassigned".
+  const pmSel = document.getElementById('opsNewPM');
+  if(pmSel && !adminMode && currentUser) {
+    const mine = [...pmSel.options].find(o => String(o.value) === String(currentUser.id));
+    if(mine) pmSel.value = String(currentUser.id);
+  }
+  // Set after the manager is chosen — the list depends on who that is.
+  if(pmSel) pmSel.onchange = () => refreshOpsNewMembers();
+  refreshOpsNewMembers();
+
+  const info = document.getElementById('opsNewInfo');
+  if(info) info.innerHTML = adminMode
+    ? `💡 Leave the manager as <strong>— unassigned —</strong> and it still appears on that department's page,
+       where a manager can claim it. Once a manager is set, only Ibrahim can change it.`
+    : `💡 It appears on your ${isProposal?'Proposals':'Projects'} page straight away. You can add deliverables,
+       team members and the contract afterwards — nothing here is final except the department.`;
 
   ['opsNewName','opsNewClient','opsNewStart','opsNewEnd','opsNewNotes']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
@@ -3918,19 +4261,39 @@ function openOpsNewItem(isProposal) {
 
 /* People can be put on the work without anyone managing it yet — useful
    when tidying up historic hours that were never attached to a project. */
+/* The manager is put on the team automatically when the item is saved, so
+   offering them here as a tick box asks a question that has already been
+   answered — and leaves you looking at yourself, unticked, on a project you
+   are running. They are left out of the list and named above it instead.
+   Re-runs whenever the department or the manager changes, so anyone already
+   ticked stays ticked and a replaced manager comes back onto the list. */
 function refreshOpsNewMembers() {
   const host = document.getElementById('opsNewMembers');
   if(!host) return;
   const dept = (document.getElementById('opsNewDept')||{}).value || DEFAULT_DEPT;
+  const pmId = (document.getElementById('opsNewPM')||{}).value || '';
+  const wasChecked = new Set([...document.querySelectorAll('.ops-new-member:checked')].map(el=>el.value));
+
   const pool = allTeam
     .filter(p => !isSingleSeat(p) && personDept(p) === dept)
+    .filter(p => !pmId || String(p.id) !== String(pmId))
     .sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
   host.innerHTML = pool.length
     ? pool.map(p=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;cursor:pointer">
-        <input type="checkbox" class="ops-new-member" value="${p.id}" style="width:15px;height:15px;cursor:pointer">
+        <input type="checkbox" class="ops-new-member" value="${p.id}"${wasChecked.has(String(p.id))?' checked':''} style="width:15px;height:15px;cursor:pointer">
         <span>${p.name}<span style="color:var(--muted)">${p.title?' · '+p.title:''}</span></span>
       </label>`).join('')
-    : '<div style="font-size:12px;color:var(--muted)">Nobody in this department yet.</div>';
+    : `<div style="font-size:12px;color:var(--muted)">${pmId ? 'Nobody else in this department yet.' : 'Nobody in this department yet.'}</div>`;
+
+  // Say who is already on the team, so the absent name isn't a mystery.
+  const note = document.getElementById('opsNewMembersNote');
+  if(note) {
+    const pm = pmId ? personById(pmId) : null;
+    note.innerHTML = pm
+      ? `<strong>${escapeHtml(pm.name)}</strong> is already on the team as ${opsNewIsProposal ? 'lead' : 'manager'}. Add anyone else working on it.`
+      : `Optional — a manager is not required.`;
+  }
 }
 
 function refreshOpsNewPMOptions() {
@@ -3946,9 +4309,14 @@ function refreshOpsNewPMOptions() {
 }
 
 async function saveOpsNewItem() {
+  if(isTimesheetOnly()) { showToast('Timesheet accounts cannot create projects'); return; }
   const name   = (document.getElementById('opsNewName')||{}).value.trim();
   const client = (document.getElementById('opsNewClient')||{}).value.trim();
-  const dept   = (document.getElementById('opsNewDept')||{}).value || DEFAULT_DEPT;
+  // Admin may file work under any department; everyone else creates in their
+  // own, enforced here rather than trusting the disabled dropdown.
+  const dept   = isOpsAdmin()
+    ? ((document.getElementById('opsNewDept')||{}).value || DEFAULT_DEPT)
+    : activeDept;
   const pmRaw  = (document.getElementById('opsNewPM')||{}).value || '';
   const start  = (document.getElementById('opsNewStart')||{}).value;
   const end    = (document.getElementById('opsNewEnd')||{}).value;
@@ -3981,10 +4349,21 @@ async function saveOpsNewItem() {
   }
   allProjects.push(proj);
   await saveProject(proj);
+
+  /* Now that anyone can start work, the audit trail is how Admin still knows
+     what appeared and who put it there. */
+  try {
+    await writeAudit(opsNewIsProposal ? 'proposal' : 'project', proj.id, 'created',
+      null, proj.name, `in ${deptShort(dept)}`);
+  } catch(e) {}
+
   if(proj.creatorId) {
     const pm = personById(proj.creatorId);
-    if(pm) notifyAssignment(proj, pm);
+    // No point telling people they assigned themselves — that email and
+    // notification would fire on every project anyone creates for themselves.
+    if(pm && String(pm.id) !== String(currentUser && currentUser.id)) notifyAssignment(proj, pm);
   }
+  try { await notifyOpsOfNewWork(proj); } catch(e) {}
   applyDeptScope();
   closeModal('opsNewItemModal');
   renderOpsProjects();
@@ -4430,7 +4809,7 @@ function fillLoeFilters() {
   };
 
   set('loeDept', `<option value="">All departments</option>` +
-    ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join(''));
+    assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join(''));
 
   const dept = (document.getElementById('loeDept')||{}).value || '';
   const type = (document.getElementById('loeType')||{}).value || '';
@@ -4950,6 +5329,35 @@ async function notifyFinance(kind, message, projId) {
     } catch(e) {}
   }
 }
+/* ── Notify Admin that a new project or proposal exists ──────────────
+   Work no longer only comes from the Admin page, so Admin is told the
+   moment someone starts something: a bell on the Admin page and, if the
+   category is switched on in Settings, an email. Skipped when Admin is the
+   one creating it — nobody needs a mail about their own click. */
+async function notifyOpsOfNewWork(proj) {
+  if(!proj || isOpsAdmin()) return;
+  const kindWord = proj.isProposal ? 'Proposal' : 'Project';
+  const by  = currentUser ? currentUser.name : 'Someone';
+  const pm  = proj.creatorId ? personById(proj.creatorId) : null;
+  const who = pm ? pm.name : 'nobody yet';
+  const due = proj.end
+    ? ` ${proj.isProposal ? 'Submission date' : 'End date'}: ${fmtDateEU(proj.end)}.` : '';
+  const message = `${by} created a new ${kindWord.toLowerCase()} "${proj.name}"`
+    + (proj.client ? ` for ${proj.client}` : '')
+    + ` in ${deptShort(proj.department || activeDept)}.`
+    + ` ${proj.isProposal ? 'Lead' : 'Manager'}: ${who}.${due}`;
+
+  try { addNotification(9998, 'work_created', { message, projectId: proj.id, fromName: by }); } catch(e) {}
+
+  const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('work') : [];
+  const url = appUrl('admin');
+  for(const addr of to) {
+    try {
+      await sendApprovalEmail(addr, 'Admin', by, `New ${kindWord.toLowerCase()} — ${proj.name}`, message, url);
+    } catch(e) {}
+  }
+}
+
 /* Whenever Admin touches something on a PM's project — adds a contract,
    a PO, edits a stage, renames the project — the PM should hear about it
    the same way they'd hear about anything else that changed under them.
@@ -6178,38 +6586,6 @@ async function runYearEndRollover() {
    Who has not submitted for a given month, and a nudge for them.
    ══════════════════════════════════════════════════════════════ */
 
-async function renderMissingTimesheets() {
-  const host = document.getElementById('opsMissingTs');
-  const monthSel = document.getElementById('opsMissingMonth');
-  if(!host) return;
-  const month = monthSel ? monthSel.value : null;
-  if(!month) { host.innerHTML = ''; return; }
-
-  let submitted = new Set();
-  try {
-    const { data } = await sb.from('timesheets').select('person_id,submitted,month').eq('month', month);
-    (data||[]).filter(t => t.submitted).forEach(t => submitted.add(String(t.person_id)));
-  } catch(e) {}
-
-  const missing = hrStaff().filter(p => !submitted.has(String(p.id)));
-  if(!missing.length) {
-    host.innerHTML = `<div style="padding:14px;color:var(--green);font-size:12px">
-      ✓ Everyone has submitted for ${tsMonthLabel(month)}.</div>`;
-    return;
-  }
-
-  host.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <div style="font-size:12px;color:var(--text2)">
-        <strong>${missing.length}</strong> not submitted for ${tsMonthLabel(month)}</div>
-      <div style="flex:1"></div>
-      <button class="btn btn-sm btn-accent" onclick="remindMissingTimesheets('${month}')" style="font-size:11px">✉ Remind everyone</button>
-    </div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
-      ${missing.map(p => `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 11px;font-size:12px">
-        ${p.name}<span style="color:var(--muted)"> · ${deptShort(personDept(p))}</span></span>`).join('')}
-    </div>`;
-}
-
 async function remindMissingTimesheets(month) {
   let submitted = new Set();
   try {
@@ -6223,8 +6599,8 @@ async function remindMissingTimesheets(month) {
   const url = appUrl('timesheet');
   let sent = 0;
   for(const p of missing) {
-    addNotification(p.id, 'timesheet_returned', {
-      message: `Your ${tsMonthLabel(month)} timesheet has not been submitted yet.`
+    addNotification(p.id, 'timesheet_reminder', {
+      message: `Reminder: your ${tsMonthLabel(month)} timesheet has not been submitted yet.`
     });
     if(p.email) {
       try {
@@ -6398,7 +6774,7 @@ async function deleteOrphanTimesheets(personId) {
   await writeAudit('timesheet', personId, 'deleted', `${o.hours} hrs`, null, `${gone} timesheets · ${o.name}`);
   loeLoaded = false;
   await renderOrphanTimesheets();
-  renderMissingTimesheets();
+  if(typeof loadHRRange === 'function') loadHRRange();   // the table counted those hours
   showToast(`Deleted ${gone} timesheet${gone===1?'':'s'}`);
 }
 
@@ -6453,7 +6829,7 @@ function renderLooseColumns() {
       <strong>${looseColumns.length}</strong> loose ${looseColumns.length===1?'label':'labels'} ·
       <strong>${totalLoose.toLocaleString('en-US')}</strong> hours not attached to any project
     </div>
-    <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:9px">
+    <div style="max-height:460px;overflow-y:auto;border:1px solid var(--border);border-radius:9px">
       ${looseColumns.map(g => `
         <div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
           <div style="flex:1;min-width:0">
@@ -6553,33 +6929,28 @@ async function applyColumnMerge() {
 async function mountOpsTimesheets() {
   // Outstanding list + audit trail sit above the reused HR view
   await renderOpsPendingApprovals();
-  const monthSel = document.getElementById('opsMissingMonth');
-  if(monthSel && !monthSel.options.length) {
-    const opts = getTsMonthOptions();
-    monthSel.innerHTML = opts.map(o=>`<option value="${o.val}">${o.label}</option>`).join('');
-    const cur = opts.findIndex(o=>o.label.includes('upcoming'));
-    monthSel.value = opts[cur > 0 ? cur-1 : Math.max(0, opts.length-1)].val;
-  }
   populateHRRangeSelects();
-  renderMissingTimesheets();
   scanLooseColumns();
   renderOrphanTimesheets();
 
-  // The monthly view goes first — it is what the Admin opens this tab for
-  const host = document.getElementById('opsPanelTimesheets');
+  /* The monthly view is lifted out of the HR page and dropped into the left
+     column of the first row — it is what Admin opens this tab for, so it gets
+     the width, with the approvals queue reading alongside it. */
+  const host = document.getElementById('opsTsMonthHost');
   const hrView = document.getElementById('tsHRView');
   if(!host || !hrView) return;
-  if(hrView.parentElement !== host || host.firstElementChild !== hrView) {
-    host.insertBefore(hrView, host.firstChild);
-  }
+  if(hrView.parentElement !== host) host.appendChild(hrView);
   hrView.style.display = '';
   const leavePending = document.getElementById('leavePendingPanel');
   if(leavePending) leavePending.style.display = 'none';   // approvals aren't the admin's job
   hrSwitchTab('month');
-  // Multi-Month and Project LOE are covered properly by the LOE Report tab
+  // Multi-Month and Project LOE are covered properly by the LOE Report tab,
+  // which leaves a tab bar with one tab on it — so it goes too.
   ['hrTabSummary','hrTabProject'].forEach(id => {
     const b = document.getElementById(id); if(b) b.style.display = 'none';
   });
+  const tabBar = document.getElementById('hrTabBar');
+  if(tabBar) tabBar.style.display = 'none';
   populateHRSummaryControls();
   populateHRProjectControls();
   // Admin gets a month range; HR keeps the single-month picker
@@ -6924,7 +7295,7 @@ function fillHRDeptSelect(selId) {
   if(!sel) return;
   const keep = sel.value;
   sel.innerHTML = `<option value="">All departments</option>` +
-    ASSIGNABLE_DEPARTMENTS.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
   if(keep) sel.value = keep;
 }
 function fillHRPersonSelect(selId, deptId) {
@@ -7169,12 +7540,13 @@ function getOpsNotifyConfig() {
   const raw = (row && row.email) ? row.email : '';
   const [addrPart, flagPart] = raw.split('|');
   const emails = [...new Set((addrPart || '').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean))];
-  const flags = (flagPart || 'TF').toUpperCase();
+  const flags = (flagPart || 'TFW').toUpperCase();
   return {
     emails,
     timesheets: flags.includes('T'),
     people:     flags.includes('P'),
-    finance:    flags.includes('F')
+    finance:    flags.includes('F'),
+    work:       flags.includes('W')    // a project or proposal was created
   };   // leave is HR's business, never the Admin's
 }
 
@@ -7188,6 +7560,7 @@ async function saveOpsNotifyConfig() {
   if((document.getElementById('opsNotifyTimesheets')||{}).checked) flags += 'T';
   if((document.getElementById('opsNotifyPeople')||{}).checked)     flags += 'P';
   if((document.getElementById('opsNotifyFinance')||{}).checked)    flags += 'F';
+  if((document.getElementById('opsNotifyWork')||{}).checked)       flags += 'W';
   const value = emails.join(',') + '|' + flags;
 
   const { error } = await sb.from('team').upsert({
@@ -7208,6 +7581,7 @@ function opsNotifyRecipients(kind) {
   if(kind === 'timesheet' && !cfg.timesheets) return [];
   if(kind === 'people'    && !cfg.people)     return [];
   if(kind === 'finance'   && !cfg.finance)    return [];
+  if(kind === 'work'      && !cfg.work)       return [];
   return cfg.emails;
 }
 
@@ -7687,6 +8061,8 @@ function renderMyWork() {
       else if(n.type==='assigned_pm'){icon='📌';msg=n.data.message||'You were assigned to a project';color='var(--green)';}
       else if(n.type==='admin_project_change'){icon='🛠️';msg=n.data.message||'Admin made a change on one of your projects';color='var(--blue)';}
       else if(n.type==='profile_changed'){icon='👤';msg=n.data.message||'Your account was updated';color='var(--blue)';}
+      else if(n.type==='work_created'){icon='🆕';msg=n.data.message||'A new project or proposal was created';color='var(--green)';}
+      else if(n.type==='timesheet_reminder'){icon='⏰';msg=n.data.message||'Your timesheet is still outstanding';color='var(--orange)';}
       // Anything without its own branch still shows whatever text it carries,
       // so a new notification type can never render as a blank row.
       if(!msg) msg = (n.data && (n.data.message || n.data.text)) || 'Update';
@@ -9070,6 +9446,9 @@ function renderTimesheetView() {
     ['hrTabSummary','hrTabProject'].forEach(id => {
       const b = document.getElementById(id); if(b) b.style.display = '';
     });
+    // Admin hides the tab bar for its single-tab view; HR needs all three back
+    const tabBar = document.getElementById('hrTabBar');
+    if(tabBar) tabBar.style.display = 'flex';
     const rw = document.getElementById('hrRangeWrap'); if(rw) rw.style.display = 'none';
     const ms2 = document.getElementById('hrMonthSel'); if(ms2) ms2.style.display = '';
     // The Admin page reparents this node; put it back where it belongs
@@ -9135,7 +9514,7 @@ async function loadUserTimesheet() {
   // Always build tsData — whether we got data or not
   tsData = fetched || {
     id, person_id: personId, month,
-    columns: [], rows: {},
+    columns: [], rows: {}, notes: {},
     submitted: false, locked: false
   };
 
@@ -9293,17 +9672,32 @@ function populateTsColDropdown() {
   ).filter(tsProjectSelectable);
 
   const mkOpts = list => list.map(p =>
-    `<option value="proj_${p.id}">${p.name||'Unnamed'}</option>`).join('');
+    `<option value="proj_${p.id}">${escapeHtml(p.name||'Unnamed')}</option>`).join('');
+  const grp = (label, list) => list.length
+    ? `<optgroup label="── ${label} ──">${mkOpts(list)}</optgroup>` : '';
+  const isProp = p => !!p.isProposal;
 
-  let inner = `<option value="">＋ Add project column…</option>`;
-  if(myProjects.length) {
-    inner += `<optgroup label="── My Projects ──">${mkOpts(myProjects)}</optgroup>`;
+  /* Projects and proposals are different work and get their own groups —
+     scanning one mixed list of everything in the company was the slow part. */
+  let inner = `<option value="">＋ Add column…</option>`;
+  inner += grp('My Projects',   myProjects.filter(p => !isProp(p)));
+  inner += grp('My Proposals',  myProjects.filter(isProp));
+  inner += grp('All Projects',  otherProjects.filter(p => !isProp(p)));
+  inner += grp('All Proposals', otherProjects.filter(isProp));
+
+  /* Other: the list Admin maintains, so everyone logs training, events and
+     the like under one agreed name. Already-added ones drop off. */
+  const usedActs = new Set((tsData.columns||[]).filter(c => c.activityId).map(c => String(c.activityId)));
+  const acts = tsActivities().filter(a => !usedActs.has(String(a.id)));
+  if(acts.length) {
+    inner += `<optgroup label="── Other ──">` +
+      acts.map(a => `<option value="act_${escapeAttr(a.id)}">${escapeHtml(a.name)}</option>`).join('') +
+      `</optgroup>`;
   }
-  if(otherProjects.length) {
-    inner += `<optgroup label="── All Projects ──">${mkOpts(otherProjects)}</optgroup>`;
-  }
-  inner += `<optgroup label="── Other ──">
-    <option value="other">Other (custom)…</option>
+
+  // Custom: anything the list doesn't cover, typed in by hand.
+  inner += `<optgroup label="── Custom ──">
+    <option value="other">Something else — type it in…</option>
   </optgroup>`;
 
   sel.innerHTML = inner;
@@ -9325,6 +9719,13 @@ function tsAddColumn() {
     const delivId=(dsel && dsel.style.display!=='none') ? dsel.value : '';
     const deliv=delivId ? (proj.deliverables||[]).find(d=>String(d.id)===String(delivId)) : null;
     if(deliv){ col.deliverableId=String(deliv.id); col.deliverableName=deliv.name; }
+  } else if(val.startsWith('act_')) {
+    const actId=val.replace('act_','');
+    const act=tsActivities().find(a=>String(a.id)===String(actId));
+    if(!act){showToast('That activity is no longer on the list');return;}
+    // activityId is what the label follows, so an Admin rename reaches
+    // every timesheet that already uses it — same rule as projects.
+    col={id:'col'+Date.now(),name:act.name,type:'activity',activityId:String(act.id)};
   } else if(val==='other') {
     const custom=document.getElementById('tsOtherName').value.trim();
     if(!custom){showToast('Please enter a label');return;}
@@ -9352,6 +9753,10 @@ function tsAddColumn() {
    saved record keeps its original text untouched as a historical trace. */
 function tsColProjectLabel(col) {
   if(!col) return '';
+  if(col.activityId) {
+    const a = tsActivities().find(x => String(x.id) === String(col.activityId));
+    if(a && a.name) return a.name;
+  }
   if(col.projectId) {
     const proj = (typeof allProjects !== 'undefined' ? allProjects : [])
       .find(p => String(p.id) === String(col.projectId));
@@ -9399,9 +9804,12 @@ function renderTsMatrix() {
       <th style="${thStyle};text-align:left;min-width:110px;left:0;z-index:6">Date</th>
       ${cols.map(c=>{
         const sub = tsColDelivLabel(c);
-        return `<th style="${thStyle};min-width:120px">
+        /* A full project title is longer than any sensible column, so the
+           label wraps onto a second and third line instead of stretching the
+           column across the screen and pushing the rest of the month off it. */
+        return `<th style="${thStyle};min-width:120px;max-width:200px">
         <div style="display:flex;align-items:flex-start;justify-content:center;gap:2px">
-          <div style="white-space:normal;line-height:1.35">
+          <div style="white-space:normal;overflow-wrap:anywhere;line-height:1.3;max-width:170px">
             ${escapeHtml(tsColProjectLabel(c))}
             ${sub?`<div style="font-weight:600;font-size:10px;color:var(--muted);margin-top:1px">↳ ${escapeHtml(sub)}</div>`:''}
           </div>
@@ -9463,14 +9871,25 @@ function renderTsMatrix() {
                       : c.type === 'business' ? 'var(--lv-business)' : 'var(--lv-annual)';
         const leaveBorderColor = c.type === 'sick' ? 'var(--lv-sick-ink)'
                       : c.type === 'business' ? 'var(--lv-business-ink)' : 'var(--lv-annual-ink)';
+        const note = tsNoteFor(dateStr, c.id);
         if(locked || isLeaveCol) {
-          return `<td style="${tdStyle};${isLeaveCol && val && !isWeekend ? `background:${leaveBg};border-color:${leaveBorderColor};font-weight:600;` : ''}color:${val ? 'var(--text)' : 'var(--muted)'}">${val || '—'}</td>`;
+          // A locked sheet still has to show what was written, or the note
+          // would only exist until the month was submitted.
+          const ro = note ? `<div style="font-size:10px;color:var(--text2);margin-top:3px;text-align:left;white-space:normal;line-height:1.35">💬 ${escapeHtml(note)}</div>` : '';
+          return `<td style="${tdStyle};${isLeaveCol && val && !isWeekend ? `background:${leaveBg};border-color:${leaveBorderColor};font-weight:600;` : ''}color:${val ? 'var(--text)' : 'var(--muted)'}">${val || '—'}${ro}</td>`;
         }
-        return `<td style="${tdStyle}"><input type="number" min="0" max="24" step="0.5" value="${val}"
+        const dot = `<span id="ts-dot-${dateStr}-${c.id}" title="${escapeAttr(note)}" style="display:${note?'':'none'};position:absolute;top:2px;right:4px;font-size:9px;color:var(--green);pointer-events:none">●</span>`;
+        const box = tsShowComments
+          ? `<input type="text" value="${escapeAttr(note)}" placeholder="note…" maxlength="300"
+              style="width:100%;margin-top:3px;padding:3px 5px;border:1px solid var(--border);border-radius:5px;
+              background:${isWeekend ? '#f0ede8' : 'var(--surface)'};font-size:11px;color:var(--text2)"
+              oninput="updateTsNote('${dateStr}','${c.id}',this.value)">`
+          : '';
+        return `<td style="${tdStyle};position:relative">${dot}<input type="number" min="0" max="24" step="0.5" value="${val}"
               style="width:70px;padding:4px;text-align:center;border:1px solid var(--border);border-radius:5px;
               background:${isWeekend ? '#f0ede8' : 'var(--surface)'};font-size:12px;color:var(--text)"
               oninput="updateTsCell('${dateStr}','${c.id}',this.value)"
-              ></td>`;
+              >${box}</td>`;
       }).join('')}
       ${!cols.length?`<td style="${tdStyle};color:var(--muted)">—</td>`:''}
       <td id="ts-rowtotal-${dateStr}" style="${tdStyle};font-weight:600;${totalColor}">${rowTotal>0?rowTotal:'—'}</td>
@@ -9496,7 +9915,55 @@ function renderTsMatrix() {
 
   html+=`</tbody></table>`;
   container.innerHTML=html;
+  syncTsCommentsBtn();
   sizeTsMatrixPane();
+}
+
+/* ── Per-entry comments ───────────────────────────────────────────────
+   A note against one day on one column — "site visit, Jerash", "half day,
+   handover". Off by default: with several projects open the grid is tight
+   enough already, and most days need no explanation. The switch is a personal
+   view preference, so it lives in this browser, not on the timesheet. */
+let tsShowComments = (function(){ try { return localStorage.getItem('tsShowComments') === '1'; } catch(e) { return false; } })();
+
+function tsNoteFor(dateStr, colId) {
+  return (tsData && tsData.notes && tsData.notes[dateStr] && tsData.notes[dateStr][colId]) || '';
+}
+function tsHasAnyNote(ts) {
+  const n = (ts || tsData || {}).notes || {};
+  return Object.keys(n).some(d => Object.values(n[d] || {}).some(v => String(v||'').trim()));
+}
+
+function toggleTsComments() {
+  tsShowComments = !tsShowComments;
+  try { localStorage.setItem('tsShowComments', tsShowComments ? '1' : '0'); } catch(e) {}
+  syncTsCommentsBtn();
+  renderTsMatrix();
+}
+function syncTsCommentsBtn() {
+  const b = document.getElementById('tsCommentsBtn');
+  if(!b) return;
+  b.textContent = tsShowComments ? '💬 Comments on' : '💬 Comments';
+  b.style.background = tsShowComments ? 'var(--green-bg)' : '';
+  b.style.color      = tsShowComments ? 'var(--green)'    : '';
+}
+
+/* Saved on the same debounce as the hours, so a comment can never be the one
+   thing that didn't make it. Empty text removes the entry rather than storing
+   a blank, which keeps the export and the "any comments?" check honest. */
+function updateTsNote(dateStr, colId, text) {
+  if(!tsData) return;
+  if(!tsData.notes) tsData.notes = {};
+  if(!tsData.notes[dateStr]) tsData.notes[dateStr] = {};
+  const v = String(text == null ? '' : text).slice(0, 300);
+  if(v.trim()) tsData.notes[dateStr][colId] = v;
+  else {
+    delete tsData.notes[dateStr][colId];
+    if(!Object.keys(tsData.notes[dateStr]).length) delete tsData.notes[dateStr];
+  }
+  const dot = document.getElementById('ts-dot-' + dateStr + '-' + colId);
+  if(dot) dot.style.display = v.trim() ? '' : 'none';
+  saveTsDraft();
 }
 
 /* The grid scrolls inside its own pane rather than with the page — that is the
@@ -9582,6 +10049,7 @@ async function saveTsDraft() {
       month:tsData.month,
       columns:tsData.columns,
       rows:tsData.rows,
+      notes:tsData.notes||{},
       submitted:false,
       locked:false
     });
@@ -9621,6 +10089,7 @@ async function submitUserTimesheet() {
     month:tsData.month,
     columns:tsData.columns,
     rows:tsData.rows,
+    notes:tsData.notes||{},
     submitted:true,
     locked:true,
     submitted_at:new Date().toISOString(),
@@ -9777,6 +10246,10 @@ async function exportMyTimesheet() {
     XLSX.utils.book_append_sheet(wb,
       buildTsProjectRollupSheet([tsData], () => currentUser.name), 'By project');
   }
+  if(tsHasAnyNote(tsData)) {
+    XLSX.utils.book_append_sheet(wb,
+      buildTsCommentsSheet([tsData], () => currentUser.name), 'Comments');
+  }
   XLSX.writeFile(wb, `Timesheet_${currentUser.name.replace(' ','_')}_${tsData.month}.xlsx`);
 }
 
@@ -9792,125 +10265,225 @@ async function loadHRTimesheets() {
   renderHRList(data||[], month);
 }
 
-/* Expected hours for a month: working days (Sun–Thu, minus public
-   holidays) times a full day. Gives the logged figure something to be
-   measured against, which is the point of the page. */
+/* ══════════════════════════════════════════════════════════════
+   THE TIMESHEET TABLE
+   One row per person, one month or several. This page exists to
+   answer one question — who still owes me a timesheet — so the
+   people who owe one come first, the status is a shape rather than
+   a word, and the actions are always on screen.
+   ══════════════════════════════════════════════════════════════ */
+
+let tsTableState = { months:[], rows:{}, filter:'all', dept:'', search:'', sort:'status' };
+
+function setTsTableFilter(f) { tsTableState.filter = f; renderTimesheetTable(); }
+function setTsTableSort(s)   { tsTableState.sort   = s; renderTimesheetTable(); }
+function onTsTableSearch(v)  { tsTableState.search = String(v||'').toLowerCase(); renderTimesheetTable(); }
+function onTsTableDept(v)    { tsTableState.dept   = v || ''; renderTimesheetTable(); }
+
+/* Hours a full month asks for: working days times a full day. */
 function expectedHoursForMonth(month) {
   const [y,m] = String(month).split('-').map(Number);
   const last = new Date(y, m, 0).getDate();
   return workingDaysBetween(`${month}-01`, `${month}-${String(last).padStart(2,'0')}`) * WORK_DAY_HOURS;
 }
 
-/* The timesheet table. One row per person, whether the view covers one
-   month or several — no separate card layout to fall back to. */
+/* Hours the period asks for SO FAR. Measuring a half-finished month against
+   its full total paints every single person red on the 2nd, which taught
+   everyone to ignore the colour. Against days actually elapsed, amber
+   means amber. */
+function expectedHoursToDate(months) {
+  const today = (typeof jordanTodayStr === 'function') ? jordanTodayStr()
+              : new Date().toISOString().slice(0,10);
+  let h = 0;
+  (months||[]).forEach(mo => {
+    const [y,m] = String(mo).split('-').map(Number);
+    const last  = new Date(y, m, 0).getDate();
+    const start = `${mo}-01`;
+    const full  = `${mo}-${String(last).padStart(2,'0')}`;
+    if(today < start) return;                     // month hasn't begun
+    h += workingDaysBetween(start, today < full ? today : full) * WORK_DAY_HOURS;
+  });
+  return h;
+}
+
+/* Where someone stands against the time that has actually passed. */
+function tsPace(hours, expectedSoFar) {
+  /* Two working days in, "expected so far" is 16 hours and anyone with a
+     normal week logged reads as 400% over. Below that the comparison says
+     nothing, so it isn't made. An empty cell is better than a wrong flag. */
+  if(!expectedSoFar || expectedSoFar < WORK_DAY_HOURS * 2)
+                   return { key:'none', label:'',  colour:'var(--muted)', pct:null };
+  if(!hours)       return { key:'none', label:'',  colour:'var(--muted)', pct:null };
+  const pct = Math.round(hours / expectedSoFar * 100);
+  if(pct > 125)    return { key:'over', label:'Over',        colour:'var(--red)',    pct };
+  if(pct >= 85)    return { key:'ok',   label:'On track',    colour:'var(--green)',  pct };
+  if(pct >= 60)    return { key:'low',  label:'Behind',      colour:'var(--orange)', pct };
+  return             { key:'bad',  label:'Well behind',  colour:'var(--red)',    pct };
+}
+
 function renderTimesheetTable(months, rowsByPerson) {
   const container = document.getElementById('tsHRList');
   if(!container) return;
 
-  const single = months.length === 1;
-  const expected = months.reduce((s,mo) => s + expectedHoursForMonth(mo), 0);
-  const staff = (typeof hrStaff === 'function' ? hrStaff() : team)
-    .slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  // Called with data on a reload, without it when a filter changes.
+  if(months) { tsTableState.months = months; tsTableState.rows = rowsByPerson || {}; }
+  const mths = tsTableState.months || [];
+  const rows = tsTableState.rows || {};
+  if(!mths.length) { container.innerHTML = ''; return; }
 
-  const th = (t,a) => `<th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--text2);
-    text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid var(--border);
-    text-align:${a||'left'};background:var(--surface2);white-space:nowrap">${t}</th>`;
+  const single   = mths.length === 1;
+  const expected = mths.reduce((s,mo) => s + expectedHoursForMonth(mo), 0);
+  const soFar    = expectedHoursToDate(mths);
+  const staff    = (typeof hrStaff === 'function' ? hrStaff() : team).slice();
 
-  let totalLogged = 0, submittedCount = 0, missingPeople = 0;
-
-  const body = staff.map(p => {
-    const d = rowsByPerson[String(p.id)] || { hours:0, submitted:0, sheets:[] };
-    totalLogged += d.hours;
-    submittedCount += d.submitted;
-    const missing = months.length - d.submitted;
-    if(missing > 0) missingPeople++;
-
-    // How the logged time compares with a full month's work
-    let plausibility = '<span style="color:var(--muted)">—</span>';
-    if(d.hours > 0 && expected > 0) {
-      const pct = Math.round(d.hours / expected * 100);
-      const col = pct < 60 ? 'var(--red)' : pct < 85 ? 'var(--orange)'
-                : pct > 125 ? 'var(--red)' : 'var(--green)';
-      plausibility = `<span style="color:${col};font-weight:600">${pct}%</span>`;
-    }
-
+  /* Build every row first, then filter — the counts on the chips have to
+     describe everyone, not just whoever survived the current filter. */
+  const all = staff.map(p => {
+    const d = rows[String(p.id)] || { hours:0, submitted:0, sheets:[] };
     const sheet = single ? (d.sheets[0] || null) : null;
-    const status = single
-      ? (!sheet ? '<span style="color:var(--muted)">Not started</span>'
-         : sheet.submitted ? '<span style="color:var(--green);font-weight:600">Submitted</span>'
-         : '<span style="color:var(--orange);font-weight:600">Draft</span>')
-      : (missing === 0
-         ? `<span style="color:var(--green);font-weight:600">All ${months.length}</span>`
-         : `<span style="color:var(--orange);font-weight:600">${d.submitted}/${months.length}</span>`);
+    const state = single
+      ? (!sheet ? 'none' : sheet.submitted ? 'submitted' : 'draft')
+      : (d.submitted === 0 ? 'none' : d.submitted === mths.length ? 'submitted' : 'draft');
+    return { p, d, sheet, state, pace: tsPace(d.hours, soFar) };
+  });
 
+  // Removed accounts still hold real hours and still export, so they stay.
+  const known = new Set(staff.map(p => String(p.id)));
+  const orphans = Object.keys(rows).filter(id => !known.has(String(id))).map(id => {
+    const d = rows[id];
+    const named = (d.sheets||[]).find(s => s.person_name);
+    return { id, d, label: named ? `${named.person_name} (removed)`
+      : (typeof removedPersonName === 'function' ? removedPersonName(id) : `Removed account · id ${id}`) };
+  });
+
+  const totalLogged = all.reduce((s,r)=>s+r.d.hours, 0) + orphans.reduce((s,o)=>s+o.d.hours, 0);
+  const count = { all: all.length, none:0, draft:0, submitted:0 };
+  all.forEach(r => count[r.state]++);
+
+  // ── Filter, search, sort ──
+  const f = tsTableState.filter, q = tsTableState.search, dep = tsTableState.dept;
+  let shown = all
+    .filter(r => f === 'all' || r.state === f)
+    .filter(r => !dep || personDept(r.p) === dep)
+    .filter(r => !q   || String(r.p.name||'').toLowerCase().includes(q));
+
+  const ORDER = { submitted:0, draft:1, none:2 };   // rows with something in them first
+  shown.sort((a,b) => {
+    if(tsTableState.sort === 'name')  return (a.p.name||'').localeCompare(b.p.name||'');
+    if(tsTableState.sort === 'hours') return b.d.hours - a.d.hours;
+    return (ORDER[a.state] - ORDER[b.state]) || (a.p.name||'').localeCompare(b.p.name||'');
+  });
+
+  // ── Pieces ──
+  const pill = state => {
+    const m = { none:      ['Not started', 'var(--muted)',  'transparent'],
+                draft:     ['Draft',       'var(--orange)', 'rgba(230,145,40,0.12)'],
+                submitted: ['Submitted',   'var(--green)',  'var(--green-bg)'] }[state];
+    const label = !single && state === 'draft' ? 'Part' : m[0];
+    return `<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;
+      background:${m[2]};color:${m[1]};font-size:11px;font-weight:600;white-space:nowrap">
+      <span style="width:6px;height:6px;border-radius:50%;background:${m[1]};flex-shrink:0"></span>${label}</span>`;
+  };
+
+  /* A bar says "a third of the way" faster than the number does. It is
+     capped at 100% so an over-logged month cannot run off the column. */
+  const bar = (hours) => {
+    const pct = expected ? Math.min(100, Math.round(hours / expected * 100)) : 0;
+    const col = hours === 0 ? 'var(--border)' : tsPace(hours, soFar).colour;
+    return `<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+      <span style="font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap">${hours ? hours.toLocaleString('en-US') : '—'}</span>
+      <div style="width:70px;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;flex-shrink:0">
+        <div style="width:${pct}%;height:100%;background:${col}"></div></div></div>`;
+  };
+
+  const chip = (key, label, n, colour) => {
+    const on = f === key;
+    return `<button onclick="setTsTableFilter('${key}')" style="padding:4px 11px;border-radius:999px;cursor:pointer;
+      border:1px solid ${on ? colour : 'var(--border)'};background:${on ? colour : 'var(--surface)'};
+      color:${on ? '#fff' : 'var(--text2)'};font-size:11px;font-weight:600;white-space:nowrap">
+      ${label} <span style="opacity:0.75">${n}</span></button>`;
+  };
+
+  const th = (t,a,sortKey) => {
+    const active = sortKey && tsTableState.sort === sortKey;
+    const click  = sortKey ? ` onclick="setTsTableSort('${sortKey}')" style="cursor:pointer;` : ' style="';
+    return `<th${click}padding:9px 12px;font-size:11px;font-weight:700;
+      color:${active?'var(--text)':'var(--text2)'};text-transform:uppercase;letter-spacing:0.4px;
+      border-bottom:1px solid var(--border);text-align:${a||'left'};background:var(--surface2);
+      white-space:nowrap;position:sticky;top:0;z-index:2">${t}${active?' ↓':''}</th>`;
+  };
+
+  const body = shown.map(({p,d,sheet,state,pace}) => {
     const actions = single && sheet
-      ? `${sheet.submitted ? `<button class="btn btn-sm btn-accent" style="font-size:11px" onclick="hrExportOne(${p.id},'${months[0]}')">Export</button>` : ''}
-         ${sheet.locked ? `<button class="btn btn-sm" style="font-size:11px;margin-left:4px" onclick="hrUnlockTimesheet(${p.id},'${months[0]}')">Unlock</button>` : ''}`
+      ? `${sheet.submitted ? `<button class="btn btn-sm btn-accent" style="font-size:11px" onclick="hrExportOne(${p.id},'${mths[0]}')">Export</button>` : ''}
+         ${sheet.locked ? `<button class="btn btn-sm" style="font-size:11px;margin-left:4px" onclick="hrUnlockTimesheet(${p.id},'${mths[0]}')">Unlock</button>` : ''}`
       : '';
-
-    return `<tr>
-      <td style="padding:8px 12px;font-weight:500;white-space:nowrap">${p.name}</td>
-      <td style="padding:8px 12px;color:var(--text2);white-space:nowrap">${deptShort(personDept(p))}</td>
-      <td style="padding:8px 12px;text-align:center;white-space:nowrap">${status}</td>
-      <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap">${d.hours ? d.hours.toLocaleString('en-US') : '<span style="color:var(--muted)">—</span>'}</td>
-      <td style="padding:8px 12px;text-align:right;color:var(--muted);white-space:nowrap">${expected.toLocaleString('en-US')}</td>
-      <td style="padding:8px 12px;text-align:center;white-space:nowrap">${plausibility}</td>
+    const multiNote = single ? '' :
+      `<div style="font-size:10px;color:var(--muted)">${d.submitted} of ${mths.length} months</div>`;
+    return `<tr style="border-bottom:1px solid var(--border)${state==='none'?';color:var(--text2)':''}">
+      <td style="padding:8px 12px;font-weight:500;white-space:nowrap">${escapeHtml(p.name)}${multiNote}</td>
+      <td style="padding:8px 12px;color:var(--text2);white-space:nowrap;width:1%">${escapeHtml(deptShort(personDept(p)))}</td>
+      <td style="padding:8px 12px;white-space:nowrap;width:1%">${pill(state)}</td>
+      <td style="padding:8px 12px;text-align:right">${bar(d.hours)}</td>
+      <td style="padding:8px 12px;white-space:nowrap;color:${pace.colour};font-weight:600;font-size:12px"
+          title="${pace.pct===null?'':pace.pct+'% of the '+soFar+' h expected by today'}">${pace.label}</td>
       <td style="padding:6px 12px;text-align:right;white-space:nowrap">${actions}</td>
     </tr>`;
   }).join('');
 
-  // Timesheets from people who have since been removed still hold real
-  // hours and still appear in the export, so they belong here too.
-  const known = new Set(staff.map(p => String(p.id)));
-  const orphanRows = Object.keys(rowsByPerson)
-    .filter(id => !known.has(String(id)))
-    .map(id => {
-      const d = rowsByPerson[id];
-      totalLogged += d.hours;
-      submittedCount += d.submitted;
-      const name = (d.sheets||[]).find(s => s.person_name)?.person_name;
-      const label = name ? `${name} (removed)`
-        : (typeof removedPersonName === 'function' ? removedPersonName(id) : `Removed account · id ${id}`);
-      return `<tr>
-        <td style="padding:8px 12px;font-weight:500;white-space:nowrap;color:var(--text2)">${label}</td>
-        <td style="padding:8px 12px;color:var(--muted);white-space:nowrap">—</td>
-        <td style="padding:8px 12px;text-align:center;white-space:nowrap">
-          <span style="color:var(--muted)">${d.submitted}/${months.length}</span></td>
-        <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums">${d.hours ? d.hours.toLocaleString('en-US') : '—'}</td>
-        <td style="padding:8px 12px;text-align:right;color:var(--muted)">—</td>
-        <td style="padding:8px 12px;text-align:center;color:var(--muted)">—</td>
-        <td></td>
-      </tr>`;
-    }).join('');
+  const showOrphans = f === 'all' && !q && !dep;
+  const orphanRows = (showOrphans ? orphans : []).map(o => `<tr style="border-bottom:1px solid var(--border);opacity:0.65">
+      <td style="padding:8px 12px;font-weight:500;white-space:nowrap;color:var(--text2)">${escapeHtml(o.label)}</td>
+      <td style="padding:8px 12px;color:var(--muted)">—</td>
+      <td style="padding:8px 12px;white-space:nowrap"><span style="font-size:11px;color:var(--muted)">removed account</span></td>
+      <td style="padding:8px 12px;text-align:right;font-variant-numeric:tabular-nums">${o.d.hours ? o.d.hours.toLocaleString('en-US') : '—'}</td>
+      <td style="padding:8px 12px;color:var(--muted)">—</td><td></td>
+    </tr>`).join('');
 
-  const period = single ? tsMonthLabel(months[0])
-    : `${tsMonthLabel(months[0])} → ${tsMonthLabel(months[months.length-1])}`;
-  const chase = missingPeople
-    ? `<span style="color:var(--orange);font-weight:600">${missingPeople} ${missingPeople===1?'person has':'people have'} not submitted</span>`
-    : '<span style="color:var(--green);font-weight:600">everyone has submitted</span>';
+  const period = single ? tsMonthLabel(mths[0])
+    : `${tsMonthLabel(mths[0])} → ${tsMonthLabel(mths[mths.length-1])}`;
+  const deptOpts = `<option value="">All departments</option>` +
+    assignableDepartments().map(d=>`<option value="${d.id}"${dep===d.id?' selected':''}>${escapeHtml(d.name)}</option>`).join('');
 
+  const emptyMsg = count.all === 0 ? 'Nobody on the tracker yet.'
+    : (q || dep || f !== 'all') ? 'Nobody matches these filters.' : 'Nothing logged for this period.';
+
+  const ctl = 'padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)';
   container.innerHTML = `
-    <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:700">${period}</div>
-      <div style="font-size:12px;color:var(--muted)">
-        ${totalLogged.toLocaleString('en-US')} hours logged · ${chase}</div>
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;line-height:1.2">${period}</div>
+      <div style="font-size:14px;color:var(--text);font-weight:500">${expected.toLocaleString('en-US')} h expected for the full period</div>
     </div>
-    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
-      <table class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">
+
+    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:12px">
+      ${chip('all','All',count.all,'var(--text2)')}
+      ${chip('none','Not started',count.none,'#9a8f80')}
+      ${chip('draft','Draft',count.draft,'var(--orange)')}
+      ${chip('submitted','Submitted',count.submitted,'var(--green)')}
+      <div class="ops-tools-right">
+        ${single && (count.none + count.draft) ? `<button class="btn btn-sm btn-accent" style="font-size:11px"
+          title="Everyone who has not submitted — drafts included" onclick="remindMissingTimesheets('${mths[0]}')">✉ Remind ${count.none + count.draft}</button>` : ''}
+        <select onchange="onTsTableDept(this.value)" style="${ctl};width:170px">${deptOpts}</select>
+        <input type="text" value="${escapeAttr(tsTableState.search)}" oninput="onTsTableSearch(this.value)" placeholder="Search name…"
+          style="${ctl};width:140px">
+      </div>
+    </div>
+
+    <div style="overflow:auto;max-height:460px;border:1px solid var(--border);border-radius:10px">
+      <table class="adm-table" style="width:100%;border-collapse:collapse;font-size:13px;min-width:660px">
+        <colgroup><col><col style="width:1%"><col style="width:1%">
+          <col style="width:150px"><col style="width:1%"><col style="width:1%"></colgroup>
         <thead><tr>
-          ${th('Name')}${th('Dept')}${th('Submitted','center')}${th('Logged','right')}
-          ${th('Expected','right')}${th('Of expected','center')}${th('','right')}
+          ${th('Name','left','name')}${th('Dept')}${th('Status','left','status')}
+          ${th('Hours logged','right','hours')}${th('Pace')}${th('','right')}
         </tr></thead>
-        <tbody>${body}${orphanRows}</tbody>
+        <tbody>${body || `<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--muted);font-size:13px">${emptyMsg}</td></tr>`}${orphanRows}</tbody>
       </table>
     </div>
-    ${orphanRows ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">
-      Rows in grey belong to accounts that have been removed. Their hours still count and still
-      export — clear them under <strong>Timesheets from removed accounts</strong> below.</div>` : ''}
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
-      <strong>Expected</strong> is working days in the period times 8 hours, with weekends and public
-      holidays removed. <strong>Of expected</strong> flags anything well under or over — useful for
-      spotting a half-filled timesheet or hours logged twice.
+    <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
+      <strong>${totalLogged.toLocaleString('en-US')} h</strong> logged so far${soFar && soFar < expected ? `, against ${soFar.toLocaleString('en-US')} h expected by today` : ''}.
+      <strong>Pace</strong> measures each person against the working days that have actually passed, so a
+      half-finished month doesn't read as everyone being behind. Click a heading to re-sort${orphans.length ? '; faded rows are removed accounts whose hours still count' : ''}.
     </div>`;
 }
 
@@ -10007,6 +10580,10 @@ async function exportAllTimesheets(individual) {
         XLSX.utils.book_append_sheet(wb,
           buildTsProjectRollupSheet(theirs, () => person.name), 'By project');
       }
+      if(theirs.some(tsHasAnyNote)) {
+        XLSX.utils.book_append_sheet(wb,
+          buildTsCommentsSheet(theirs, () => person.name), 'Comments');
+      }
       theirs.sort((a,b)=>String(a.month).localeCompare(String(b.month))).forEach(s => {
         const pLeaves = leaves.filter(l => String(l.personId) === String(s.person_id));
         XLSX.utils.book_append_sheet(wb, buildTsSheet(s, person.name, pLeaves), sheetName(person.name, s.month));
@@ -10027,6 +10604,9 @@ async function exportAllTimesheets(individual) {
   // per-project readings of the same hours sit side by side.
   if(tsUsesDeliverables(submitted)) {
     XLSX.utils.book_append_sheet(wb, buildTsProjectRollupSheet(submitted, nameFor), 'By project');
+  }
+  if(submitted.some(tsHasAnyNote)) {
+    XLSX.utils.book_append_sheet(wb, buildTsCommentsSheet(submitted, nameFor), 'Comments');
   }
   months.forEach(month => {
     const forMonth = submitted.filter(s => String(s.month) === month);
@@ -10114,6 +10694,7 @@ function buildTsSheet(ts, personName, leavesForPerson) {
   // Last row: monthly totals
 
   const monthLabel = fmtMonthYear(new Date(yr,mo-1,1));
+  const tsNotes = ts.notes || {};
   const header = ['Date','Day',...cols.map(c=>tsColLabel(c)),'Daily Total','Leave / Notes'];
 
   const aoa = [
@@ -10150,6 +10731,15 @@ function buildTsSheet(ts, personName, leavesForPerson) {
       notes.unshift('Public holiday — ' + (holidayName(dateStr) || ''));
     }
     if (dow === 5 || dow === 6) notes.push('Weekend');
+
+    /* Whatever was typed against an individual entry rides in the same column,
+       tagged with the project it belongs to — the grid cell itself has to stay
+       a number so the totals still add up in Excel. */
+    const dayNotes = tsNotes[dateStr] || {};
+    cols.forEach(c => {
+      const txt = String(dayNotes[c.id] || '').trim();
+      if(txt) notes.push(`${tsColLabel(c)}: ${txt}`);
+    });
 
     aoa.push([dateStr, dayNames[dow], ...colVals, total, notes.join(' · ')]);
   }
@@ -10327,16 +10917,46 @@ function buildTsSheet(ts, personName, leavesForPerson) {
     {wch:11},   // Date
     {wch:5},    // Day
     ...cols.map(()=>({wch:12})),
-    {wch:10},   // Daily Total
-    {wch:24}    // Leave / Notes
+    {wch:10},                                 // Daily Total
+    {wch: tsHasAnyNote(ts) ? 52 : 24}         // Leave / Notes — wider once entries carry comments
   ];
   // Give the header room for the wrapped project names
   ws['!rows'] = [];
   ws['!rows'][3] = { hpt: 46 };
 
-  // Freeze top 4 rows
-  ws['!freeze']={xSplit:0,ySplit:4};
+  /* No freeze pane: the writer this app uses (xlsx-js-style) silently drops
+     ws['!freeze'], so the line that used to sit here never did anything.
+     Excel's own View → Freeze Panes is one click on an open sheet. */
+  return ws;
+}
 
+/* A sheet of just the comments: one row per note, so they can be filtered,
+   sorted and read on their own instead of being hunted down the Notes column.
+   Only built when there is something to put on it. */
+function buildTsCommentsSheet(sheets, nameFor) {
+  const aoa = [['Entry comments'], [], ['Person','Date','Day','Project / Activity','Hours','Comment']];
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  (sheets||[]).forEach(ts => {
+    const cols = ts.columns || [];
+    const notes = ts.notes || {};
+    Object.keys(notes).sort().forEach(dateStr => {
+      cols.forEach(c => {
+        const txt = String((notes[dateStr]||{})[c.id] || '').trim();
+        if(!txt) return;
+        const hrs = parseFloat((ts.rows||{})[dateStr] ? ts.rows[dateStr][c.id] : 0) || 0;
+        const d = new Date(dateStr + 'T00:00:00');
+        aoa.push([nameFor(ts), fmtDateEU(dateStr), dayNames[d.getDay()],
+                  tsColLabel(c), hrs || null, txt]);
+      });
+    });
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const ref = (r,c) => XLSX.utils.encode_cell({r,c});
+  for(let c=0;c<6;c++){ const a=ref(2,c); if(ws[a]) ws[a].s={font:{bold:true,name:'Calibri',sz:11}}; }
+  if(ws[ref(0,0)]) ws[ref(0,0)].s = { font:{bold:true, sz:14, name:'Calibri'} };
+  ws['!cols'] = [{wch:22},{wch:13},{wch:6},{wch:30},{wch:8},{wch:62}];
+  // Filter by person or project, sort by hours — this one the writer honours.
+  if(aoa.length > 3) ws['!autofilter'] = { ref: `A3:F${aoa.length}` };
   return ws;
 }
 
@@ -10380,6 +11000,15 @@ function buildTsProjectRollupSheet(sheets, nameFor) {
   const r2 = n => Math.round(n*100)/100;
   aoa.push(['','','','Total', r2(grand)]);
 
+  /* Leave, training and anything typed in under Custom are real logged hours
+     but are not project hours, so they are not in the totals above. Stating
+     the gap here stops this sheet looking like it disagrees with the grid. */
+  let nonProject = 0;
+  (sheets||[]).forEach(s2 => (s2.columns||[]).filter(c => c.type !== 'project').forEach(c => {
+    nonProject += Object.values(s2.rows||{}).reduce((t,row)=>t+(parseFloat(row[c.id])||0),0);
+  }));
+  if(nonProject) aoa.push(['','','','Leave, activities and custom columns (not project work)', r2(nonProject)]);
+
   aoa.push([]);
   aoa.push(['Per deliverable — whole team']);
   const delivHead = aoa.length;
@@ -10411,7 +11040,7 @@ function buildTsProjectRollupSheet(sheets, nameFor) {
   for(let r=delivHead+1; r<=projHead-3; r++){ const a = ref(r,3); if(ws[a]) ws[a].z = '0.0%'; }
   for(let r=projHead+1;  r<aoa.length;   r++){ const a = ref(r,2); if(ws[a]) ws[a].z = '0.0%'; }
   ws['!cols'] = [{wch:24},{wch:10},{wch:30},{wch:30},{wch:10}];
-  ws['!freeze'] = {xSplit:0, ySplit:3};
+  if(delivHead > 4) ws['!autofilter'] = { ref: `A3:E${delivHead-2}` };
   return ws;
 }
 
@@ -11760,9 +12389,26 @@ async function loadAllData() {
     sb.from('public_holidays').select('*').order('holiday_date'),
     sb.from('contracts').select('*').order('id'),
     sb.from('milestones').select('*').order('id'),
-    sb.from('subcontractor_pos').select('*').order('id')
+    sb.from('subcontractor_pos').select('*').order('id'),
+    sb.from('app_settings').select('key,value')
   ]);
   const got = i => settled[i].status === 'fulfilled' ? settled[i].value : { data:null, error:settled[i].reason };
+
+  /* Settings first: the extra departments have to exist before anything is
+     rendered with a department name on it. */
+  try {
+    const setRes = got(10);
+    if(setRes.data) {
+      appSettings = {};
+      setRes.data.forEach(r => { appSettings[r.key] = r.value; });
+      const dp = appSettings.departments;
+      customDepartments = Array.isArray(dp)
+        ? dp.filter(d => d && d.id && d.name && !BUILT_IN_DEPARTMENTS.some(b => b.id === d.id))
+        : [];
+    } else if(setRes.error) {
+      console.warn('settings load failed:', setRes.error.message || setRes.error);
+    }
+  } catch(e) { console.warn('settings error:', e); }
 
   // Each result handled individually — one failure never blocks the others
   try {
@@ -12024,6 +12670,14 @@ function subscribeRealtime() {
     .on('postgres_changes', {event:'*', schema:'public', table:'subcontractor_pos'}, async () => {
       await reloadFinanceData(); renderProjects(); renderOpsFinance();
     })
+    .on('postgres_changes', {event:'*', schema:'public', table:'app_settings'}, async () => {
+      /* A department or an activity Admin just added reaches everyone who is
+         already signed in, rather than waiting for them to reload. */
+      await loadAppSettings();
+      if(typeof refreshDepartmentUI === 'function') { try { refreshDepartmentUI(); } catch(e){} }
+      if(typeof renderOpsActivities === 'function') { try { renderOpsActivities(); } catch(e){} }
+      if(typeof populateTsColDropdown === 'function') { try { populateTsColDropdown(); } catch(e){} }
+    })
     .on('postgres_changes', {event:'*', schema:'public', table:'timesheets'}, async () => {
       // So a newly submitted timesheet shows up for its manager (and for
       // Admin's override list) without anyone having to navigate away and back.
@@ -12119,7 +12773,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-09-24-v84 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-04-v93 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
