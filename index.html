@@ -611,7 +611,7 @@ select option{background:#fff}
       <div class="field"><label>Project Name</label><input type="text" id="epName"></div>
       <div class="field"><label>Client</label><input type="text" id="epClient"></div>
     </div>
-    <div class="two-col">
+    <div class="two-col" id="epDatesRow">
       <div class="field"><label>Start Date</label><input type="date" id="epStart"></div>
       <div class="field"><label>End Date</label><input type="date" id="epEnd"></div>
     </div>
@@ -709,6 +709,9 @@ select option{background:#fff}
   <div class="tab" onclick="switchTab('notes',this)" data-view="notes" title="Private — only you can see this"><span class="tab-lock"></span>📝 My Notes</div>
   <div class="tab" onclick="switchTab('leaves',this)" data-view="leaves">🏖 Public Holidays</div>
       <div class="tab" onclick="switchTab('timesheet',this)" data-view="timesheet" title="Private — only you, your manager and Admin can see this"><span class="tab-lock"></span>🕐 My Timesheet</div>
+  <!-- Shown only to staff who hold operations-admin rights. The shared Admin
+       login doesn't need it: that seat opens straight onto this page. -->
+  <div class="tab" onclick="switchTab('admin',this)" data-view="admin" id="opsAdminTab" style="display:none">⚙️ Operations</div>
 </div>
 
 <div class="main">
@@ -972,26 +975,12 @@ select option{background:#fff}
 
     <!-- People & Departments -->
     <div id="opsPanelPeople">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-        <select id="opsDeptFilter" onchange="renderOpsPeople()" style="width:auto;min-width:auto;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
-        <input type="text" id="opsPeopleSearch" oninput="renderOpsPeople()" placeholder="Search name…" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:180px">
-        <div style="flex:1"></div>
-        <button class="btn" onclick="repairProjectDepartments()" title="Move every project into its project manager's department" style="font-size:12px">⇄ Sync Projects</button>
-        <button class="btn" id="opsPeopleEditBtn" onclick="toggleOpsPeopleEdit()" style="font-size:12px">✎ Edit</button>
-        <button class="btn btn-accent" id="opsAddPersonBtn" onclick="opsAddPersonRow()" style="font-size:12px;display:none">＋ Add Person</button>
-        <button class="btn btn-primary" id="opsPeopleSaveBtn" onclick="saveOpsPeople()" style="font-size:12px;display:none">Save Changes</button>
-      </div>
-
       <!-- Departments -->
       <details id="opsDeptPanel" style="margin-bottom:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
         <summary style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700;list-style:none;display:flex;align-items:center;gap:8px">
           🏢 Departments <span id="opsDeptCount" style="font-weight:400;color:var(--muted);font-size:12px"></span>
         </summary>
         <div style="padding:0 14px 14px">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-            A new department works exactly like the existing ones — its own people, projects,
-            proposals, timesheets and reports. The four original departments cannot be removed.
-          </div>
           <div id="opsDeptList" style="margin-bottom:12px"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
             <div style="flex:2 1 240px">
@@ -1006,6 +995,16 @@ select option{background:#fff}
           </div>
         </div>
       </details>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <select id="opsDeptFilter" onchange="renderOpsPeople()" style="width:auto;min-width:auto;flex:0 0 auto;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+        <input type="text" id="opsPeopleSearch" oninput="renderOpsPeople()" placeholder="Search name…" style="padding:7px 12px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);width:180px">
+        <div style="flex:1"></div>
+        <button class="btn" onclick="repairProjectDepartments()" title="Move every project into its project manager's department" style="font-size:12px">⇄ Sync Projects</button>
+        <button class="btn" id="opsPeopleEditBtn" onclick="toggleOpsPeopleEdit()" style="font-size:12px">✎ Edit</button>
+        <button class="btn btn-accent" id="opsAddPersonBtn" onclick="opsAddPersonRow()" style="font-size:12px;display:none">＋ Add Person</button>
+        <button class="btn btn-primary" id="opsPeopleSaveBtn" onclick="saveOpsPeople()" style="font-size:12px;display:none">Save Changes</button>
+      </div>
 
       <div id="opsUnassignedWarn" style="display:none;background:#fff4e5;border:1px solid #f0d080;color:#8a5a00;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;line-height:1.6"></div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">
@@ -1504,7 +1503,7 @@ select option{background:#fff}
     </div>
     <div class="two-col">
       <div class="field" id="opsNewStartWrap"><label>Start Date</label><input type="date" id="opsNewStart"></div>
-      <div class="field"><label id="opsNewEndLabel">End / Deliverable Date</label><input type="date" id="opsNewEnd"></div>
+      <div class="field" id="opsNewEndWrap"><label id="opsNewEndLabel">End / Deliverable Date</label><input type="date" id="opsNewEnd"></div>
     </div>
     <div class="field"><label>Team members <span id="opsNewMembersNote" style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">Optional — a manager is not required.</span></label>
       <div id="opsNewMembers" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
@@ -1546,10 +1545,10 @@ select option{background:#fff}
 <div class="overlay" id="mergeColModal">
   <div class="modal" style="width:520px">
     <button class="modal-close" onclick="closeModal('mergeColModal')">×</button>
-    <h2>Move hours into a project</h2>
+    <h2>Move hours into…</h2>
     <p class="modal-sub" id="mergeColSubtitle"></p>
 
-    <div class="field"><label>Move these hours into</label>
+    <div class="field"><label>Move these hours into…</label>
       <select id="mergeColTarget"></select></div>
 
     <div id="mergeColPeople" style="font-size:12px;color:var(--text2);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.7"></div>
@@ -1895,26 +1894,12 @@ select option{background:#fff}
     <div id="opsEmailSection" style="display:none;margin-bottom:18px">
       <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Notification Emails</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Where timesheet submissions, approvals, finance alerts and new work notifications are sent. Either box can be left blank.
+        <strong>These are your own settings</strong> — each admin chooses what reaches their inbox,
+        so one of you can take everything and another only timesheets. Mail goes to your work email;
+        nobody is emailed about their own action.
       </div>
-      <div class="two-col">
-        <div class="field"><label>Email 1</label><input type="email" id="opsEmail1" placeholder="admin@ecoconsult.jo"></div>
-        <div class="field"><label>Email 2</label><input type="email" id="opsEmail2" placeholder="operations@ecoconsult.jo"></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="opsNotifyTimesheets" checked style="width:15px;height:15px;cursor:pointer">
-          <span>Timesheets approved or returned</span></label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="opsNotifyPeople" style="width:15px;height:15px;cursor:pointer">
-          <span>Budget changes and proposal outcomes</span></label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="opsNotifyFinance" checked style="width:15px;height:15px;cursor:pointer">
-          <span>Finance — deliverables ready to invoice or pay</span></label>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-          <input type="checkbox" id="opsNotifyWork" checked style="width:15px;height:15px;cursor:pointer">
-          <span>New projects and proposals created by the team</span></label>
-      </div>
+      <div id="opsNotifyWho" style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.7"></div>
+      <div id="opsNotifyKinds" style="display:flex;flex-direction:column;gap:7px;margin-top:4px"></div>
     </div>
     <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:10px;margin-top:4px">Change Password</div>
     <div id="adminPasswordNote" style="display:none" class="info-box">As admin, enter your current admin password to change it.</div>
@@ -1969,10 +1954,30 @@ const DEFAULT_DEPT = 'ppa';
    list, so nothing anywhere needs to know which kind it is. */
 let customDepartments = [];
 
-function allDepartments() { return BUILT_IN_DEPARTMENTS.concat(customDepartments); }
-/* Admin (Operations) is a single login, not a department staff belong to —
-   same as HR. It is never offered when assigning someone a department. */
-function assignableDepartments() { return allDepartments().filter(d => d.id !== 'ops'); }
+/* Renamed built-ins. Only the LABEL is stored here — "ppa" stays "ppa"
+   forever, so every person, project and timesheet pointing at it is
+   untouched by a rename. Kept apart from the custom list so a built-in can
+   always be put back to its original name by clearing the override. */
+let deptOverrides = {};
+
+function allDepartments() {
+  const base = BUILT_IN_DEPARTMENTS.map(d => {
+    const o = deptOverrides[d.id];
+    return o ? { ...d, name: o.name || d.name, short: o.short || d.short } : d;
+  });
+  return base.concat(customDepartments);
+}
+function assignableDepartments() { return allDepartments(); }
+
+/* The Admin department is a department like any other — its own people, their
+   own timesheets, their own manager. What makes it different is the work:
+   budgeting, finance and logistics sit ACROSS every project rather than
+   inside one. So its staff are offered every project in the company when they
+   add a timesheet column, and they file new work into whichever department it
+   belongs to rather than their own. */
+const ADMIN_DEPT = 'ops';
+function isAdminDept(id)      { return String(id) === ADMIN_DEPT; }
+function inAdminDepartment()  { return !!currentUser && personDept(currentUser) === ADMIN_DEPT; }
 function deptById(id) { return allDepartments().find(x => x.id === id) || null; }
 function deptName(id){ const d = deptById(id); return d ? d.name : id; }
 function isCustomDept(id) { return customDepartments.some(d => d.id === id); }
@@ -1995,6 +2000,8 @@ async function loadAppSettings() {
     customDepartments = Array.isArray(dp)
       ? dp.filter(d => d && d.id && d.name && !BUILT_IN_DEPARTMENTS.some(b => b.id === d.id))
       : [];
+    const ov = appSettings.dept_overrides;
+    deptOverrides = (ov && typeof ov === 'object' && !Array.isArray(ov)) ? ov : {};
   } catch(e) { console.warn('settings load error:', e.message || e); }
 }
 
@@ -2040,7 +2047,7 @@ const SINGLE_SEAT_IDS = [9998, 9999];   // Admin (Operations) and HR
 function isSingleSeat(p){ return SINGLE_SEAT_IDS.includes(p.id); }
 
 function applyDeptScope() {
-  if (isHR() || isOpsAdmin()) {        // both span every department
+  if (isHR() || isOpsSeat()) {         // both span every department
     team     = allTeam.filter(p => !isSingleSeat(p));
     projects = allProjects.slice();
     return;
@@ -2053,7 +2060,20 @@ function applyDeptScope() {
 
 function isAdmin()   { return currentUser && currentUser.id === 1; } // Admin = Ibrahim (id 1)
 function isHR()            { return currentUser && currentUser.id === 9999; }
-function isOpsAdmin()      { return currentUser && currentUser.id === 9998; }
+
+/* Two different questions that used to be one.
+
+   isOpsSeat()  — are we signed in as the SHARED Admin login (9998)? That seat
+                  is a role, not a person: it has no timesheet, no leave
+                  balance and no place in any roster.
+   isOpsAdmin() — does whoever is signed in HAVE admin powers? True for the
+                  shared seat, and true for any real person ticked as an
+                  operations admin in Admin → People.
+
+   The second group are ordinary staff: they keep their own department, their
+   own timesheet and their own manager, and simply gain the Admin page. */
+function isOpsSeat()       { return currentUser && currentUser.id === 9998; }
+function isOpsAdmin()      { return isOpsSeat() || !!(currentUser && currentUser.opsAdmin); }
 function isTimesheetOnly() { return currentUser && currentUser.role === 'timesheet_only'; }
 function isPartner()     { return currentUser && currentUser.title === 'Director'; }
 function canEditProject(proj) {
@@ -2466,20 +2486,9 @@ function renderMonthly() {
           })
         ).join('') : '';
 
-        // Proposals sit on the calendar on their submission date, so a
-        // deadline is visible without opening the Proposals tab.
-        const proposalPins = !isOther ? visibleProjects
-          .filter(p => p.isProposal && !p.archived && p.end === dateStr)
-          .map(p => {
-            const done = !!p.proposalSubmitted;
-            const lead = personById(p.creatorId);
-            return `<div class="deliv-pin" style="background:${done?'var(--lv-sick)':'var(--lv-business)'};border-color:${done?'var(--lv-sick-ink)':'var(--lv-business-ink)'}"
-              title="Proposal ${done?'submitted':'due'}: ${p.name}${lead?' — '+lead.name:''}"
-              onclick="event.stopPropagation();switchTab('proposals', document.querySelector('[data-view=\'proposals\']'))">
-              <span style="font-size:9px;flex-shrink:0">${done?'✅':'📄'}</span>
-              <span class="deliv-pin-text">${p.name}</span>
-            </div>`;
-          }).join('') : '';
+        /* Proposals no longer carry a submission date, so there is nothing to
+           pin them to. They live on the Proposals tab. */
+        const proposalPins = '';
 
         let dayClass=`cal-day${isOther?' other-month':''}${isT?' today':''}`;
         let dayStyle='';
@@ -2902,8 +2911,11 @@ function openEditProject(id) {
   document.getElementById('editProjSubtitle').textContent = 'Editing: ' + proj.name;
   document.getElementById('epName').value = proj.name;
   document.getElementById('epClient').value = proj.client;
-  document.getElementById('epStart').value = proj.start;
-  document.getElementById('epEnd').value = proj.end;
+  document.getElementById('epStart').value = proj.start || '';
+  document.getElementById('epEnd').value = proj.end || '';
+  // Proposals have no dates to edit.
+  const epDates = document.getElementById('epDatesRow');
+  if(epDates) epDates.style.display = proj.isProposal ? 'none' : '';
   document.getElementById('epNotes').value = proj.notes||'';
   // Budget is a proposal concept now — actual projects track money through
   // the Contracts/VOs system instead, so a project never shows this field.
@@ -2937,11 +2949,18 @@ function saveEditProject() {
   const client = document.getElementById('epClient').value.trim();
   const start = document.getElementById('epStart').value;
   const end = document.getElementById('epEnd').value;
-  if(!name||!start||!end) { showToast('Please fill in name, start and end date'); return; }
-  if(end <= start) { showToast('⚠ End date must be after start date'); return; }
-  const outOfRange = (proj.deliverables||[]).filter(d=>d.date<start||d.date>end);
-  if(outOfRange.length) showToast(`⚠ ${outOfRange.length} deliverable(s) fall outside this date range — update them too`, 5000);
-  proj.name=name; proj.client=client; proj.start=start; proj.end=end;
+  if(!name) { showToast('Please give it a name'); return; }
+  if(proj.isProposal) {
+    // Proposals have no dates — the fields are hidden and anything left in
+    // them from a previously edited project is ignored rather than saved.
+    proj.name=name; proj.client=client; proj.start=null; proj.end=null;
+  } else {
+    if(!start||!end) { showToast('Please fill in the start and end date'); return; }
+    if(end <= start) { showToast('⚠ End date must be after start date'); return; }
+    const outOfRange = (proj.deliverables||[]).filter(d=>d.date<start||d.date>end);
+    if(outOfRange.length) showToast(`⚠ ${outOfRange.length} deliverable(s) fall outside this date range — update them too`, 5000);
+    proj.name=name; proj.client=client; proj.start=start; proj.end=end;
+  }
   proj.notes=document.getElementById('epNotes').value.trim();
 
   // Budget is proposal-only now — only read it if this is a proposal and
@@ -3118,16 +3137,19 @@ function populateLoginDeptSelect() {
   const sel = document.getElementById('loginDeptSelect');
   if(!sel) return;
   const keep = sel.value;
+  // Admin (Operations) comes from the department list now — it is a real
+  // department with real staff. HR is still a single shared account.
   sel.innerHTML = `<option value="">— Select department —</option>` +
-    assignableDepartments().map(d=>`<option value="${d.id}">${d.name}</option>`).join('') +
-    `<option value="hr">HR</option>` +
-    `<option value="ops">Admin (Operations)</option>`;
+    assignableDepartments().map(d=>`<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('') +
+    `<option value="hr">HR</option>`;
   if(keep) sel.value = keep;
 }
 
-/* HR and Admin (Operations) are single shared accounts, so there is
-   nobody to choose between — go straight to the password field. */
-const SINGLE_SEAT_DEPTS = { hr: 9999, ops: 9998 };
+/* HR is a single shared account, so there is nobody to choose between —
+   go straight to the password field. Admin (Operations) used to be here too,
+   but it now has its own staff, so it needs the name list like any department;
+   the shared Admin login appears as one of the names in it. */
+const SINGLE_SEAT_DEPTS = { hr: 9999 };
 
 function onLoginDeptChange() {
   const nameSel = document.getElementById('loginSelect');
@@ -3165,15 +3187,21 @@ function populateLoginSelect() {
   const deptEl = document.getElementById('loginDeptSelect');
   const dept   = deptEl ? deptEl.value : '';
   // HR is its own login group — a single shared account spanning all departments
-  let pool = dept === 'hr'  ? [HR_USER]
-           : dept === 'ops' ? [OPS_USER]
-           : (allTeam.length ? allTeam : team)
-               .filter(p => personDept(p) === dept && !isSingleSeat(p));
+  let pool = dept === 'hr'
+    ? [HR_USER]
+    : (allTeam.length ? allTeam : team)
+        .filter(p => personDept(p) === dept && !isSingleSeat(p));
+  // The shared Admin login still exists and is still used, so it sits at the
+  // bottom of its own department's list rather than replacing the people in it.
+  if(isAdminDept(dept)) pool = pool.concat([OPS_USER]);
   // Deduplicate by ID in case Supabase has duplicates
   const seen = new Set();
   pool = pool.filter(p=>{ if(seen.has(p.id)) return false; seen.add(p.id); return true; });
   sel.innerHTML = `<option value="">— Who are you? —</option>` +
-    pool.map(p=>`<option value="${p.id}">${p.name}${isAdminUser(p)?' (Admin)':p.role==='timesheet_only'?' (Timesheet)':''}</option>`).join('');
+    pool.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}${
+      p.id===9998 ? ' — shared Operations login'
+      : isAdminUser(p) ? ' (Admin)'
+      : p.role==='timesheet_only' ? ' (Timesheet)' : ''}</option>`).join('');
 }
 
 function isAdminUser(p) { return p.id === 1; } // Admin = Ibrahim (id 1)
@@ -3229,7 +3257,7 @@ function applyLogin() {
   av.style.background=currentUser.c.bg;
   av.style.color=currentUser.c.fg;
   av.textContent=initials(currentUser.name);
-  const badge = isHR() ? ' 👤' : isOpsAdmin() ? ' ⚙️' : '';
+  const badge = isHR() ? ' 👤' : isOpsSeat() ? ' ⚙️' : '';
   document.getElementById('userPillName').textContent=currentUser.name + badge;
 
   if(deptColumnMissing) {
@@ -3244,8 +3272,8 @@ function applyLogin() {
   // HR sees only timesheet tab, no header action buttons
   const allTabs = document.querySelectorAll('#mainTabs .tab');
   const hrBtnsToHide = ['headerFindCapBtn','headerNewProjBtn','headerLegend','logThisWeekBtn'];
-  if(isOpsAdmin()) {
-    // Operations Admin: a standalone page, not a workload-tracker view
+  if(isOpsSeat()) {
+    // The shared Admin login: a standalone page, not a workload-tracker view
     allTabs.forEach(t => t.style.display = 'none');
     hrBtnsToHide.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
     const summaryRow = document.querySelector('.summary-row');
@@ -3278,6 +3306,10 @@ function applyLogin() {
   } else {
     allTabs.forEach(t=>t.style.display='');
     hrBtnsToHide.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=''; });
+    // Everything above turned every tab on, including the one most people
+    // should never see.
+    const opsTab = document.getElementById('opsAdminTab');
+    if(opsTab) opsTab.style.display = isOpsAdmin() ? '' : 'none';
     document.getElementById('userMenuSettings').style.display='';
     // Request Leave now has its own button beside the name, so it comes
     // out of the dropdown to avoid two routes to the same thing.
@@ -3319,7 +3351,7 @@ function applyGlobalChrome() {
   // ones. Without this an `order` left behind by a previous session can
   // float the divider to the far left.
   const GROUP = { leaves:0, weekly:1, monthly:1, projects:1, proposals:1, finder:1,
-                  mywork:3, notes:3, timesheet:3, admin:1 };
+                  mywork:3, notes:3, timesheet:3, admin:4 };
   document.querySelectorAll('#mainTabs .tab').forEach(t => {
     t.style.order = String(GROUP[t.getAttribute('data-view')] ?? 1);
   });
@@ -3332,11 +3364,11 @@ function applyGlobalChrome() {
     divider.style.display = anyPrivate ? '' : 'none';
   }
 
-  /* Anyone with a full seat can start a project or proposal from their own
-     Projects/Proposals page — waiting on Admin to set one up was holding the
-     work up. Admin keeps its own page and its wider powers unchanged.
-     Timesheet-only seats are excluded: they have no project pages to use. */
-  const mayCreateWork = !isTimesheetOnly() && !isHR();
+  /* Creating projects and proposals is an Admin job again — it is how the
+     numbering stays clean and nothing appears without Operations knowing.
+     That now includes anyone ticked as an Ops admin, not just the shared
+     login, so it is no longer a bottleneck of one account. */
+  const mayCreateWork = isOpsAdmin();
   ['projNewBtn','propNewBtn'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = mayCreateWork ? '' : 'none';
@@ -3399,7 +3431,7 @@ function openSettingsModal() {
   document.getElementById('userMenu').style.display='none';
   const adminMode = isAdmin();
   document.getElementById('settingsSubtitle').textContent = adminMode ? 'Administrator — '+currentUser.name
-    : isOpsAdmin() ? 'Operations Admin' : 'Logged in as '+currentUser.name;
+    : isOpsSeat() ? 'Operations Admin' : 'Logged in as '+currentUser.name;
   // People management lives on the Admin (Operations) page, not here
   document.getElementById('adminTeamSection').style.display = 'none';
   const hrSec = document.getElementById('hrEmailSection');
@@ -3415,17 +3447,29 @@ function openSettingsModal() {
     opsSec.style.display = isOpsAdmin() ? 'block' : 'none';
     if(isOpsAdmin()) {
       const cfg = getOpsNotifyConfig();
-      document.getElementById('opsEmail1').value = cfg.emails[0] || '';
-      document.getElementById('opsEmail2').value = cfg.emails[1] || '';
-      document.getElementById('opsNotifyTimesheets').checked = cfg.timesheets;
-      document.getElementById('opsNotifyPeople').checked     = cfg.people;
-      document.getElementById('opsNotifyFinance').checked    = cfg.finance;
-      document.getElementById('opsNotifyWork').checked       = cfg.work;
+      const who = document.getElementById('opsNotifyWho');
+      if(who) {
+        const admins = (allTeam||[]).filter(p => p.opsAdmin);
+        const withMail = admins.filter(p => p.email);
+        who.innerHTML = !admins.length
+          ? `<span style="color:var(--orange)">Nobody has Ops admin access yet, so these are going to the fallback address${cfg.emails.length===1?'':'es'}: <strong>${cfg.emails.join(', ')||'none set'}</strong>.</span>`
+          : `<strong>Other admins</strong> (each with their own settings): `
+            + (withMail.filter(p=>String(p.id)!==String(currentUser.id))
+                 .map(p=>escapeHtml(p.name)).join(', ') || '<span style="color:var(--muted)">none yet</span>')
+            + (admins.length !== withMail.length
+               ? `<br><span style="color:var(--orange)">No work email saved, so they will not be emailed: ${admins.filter(p=>!p.email).map(p=>escapeHtml(p.name)).join(', ')}</span>` : '');
+      }
+      const mine = isOpsSeat() ? seatNotifyPrefs() : personNotifyPrefs(currentUser);
+      const kinds = document.getElementById('opsNotifyKinds');
+      if(kinds) kinds.innerHTML = NOTIFY_KINDS.map(k =>
+        `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+           <input type="checkbox" id="notify_${k.key}"${mine[k.key]?' checked':''} style="width:15px;height:15px;cursor:pointer">
+           <span>${k.label}</span></label>`).join('');
     }
   }
   // Single-seat accounts have a fixed name — password change only
   document.getElementById('regularNameSection').style.display =
-    (isOpsAdmin() || isHR()) ? 'none' : 'block';
+    (isOpsSeat() || isHR()) ? 'none' : 'block';
   document.getElementById('settingsName').value = currentUser.name;
   document.getElementById('settingsCurrentPin').value='';
   document.getElementById('settingsNewPin').value='';
@@ -3485,7 +3529,7 @@ async function saveSettings() {
     team.forEach(p=>saveTeamMember(p));
     applyDeptScope();          // a person may have just moved department
     populateLoginSelect();
-  } else if(isOpsAdmin()) {
+  } else if(isOpsSeat()) {
     const ok = await saveOpsNotifyConfig();
     if(!ok) return;
   } else if(isHR()) {
@@ -3498,6 +3542,8 @@ async function saveSettings() {
     currentUser.name = newName;
     saveTeamMember(currentUser);
     saveNames();
+    // An admin on their own account also has notification choices on this form
+    if(isOpsAdmin()) { const ok = await saveMyNotifyPrefs(); if(!ok) return; }
   }
   if(currentPin||newPin||confirmPin) {
     if(newPin.length<4) { showToast('New password must be at least 4 characters'); return; }
@@ -3522,7 +3568,7 @@ async function saveSettings() {
       // Save to Supabase — authoritative.
       // Single-seat accounts (HR, Admin) may have no row yet, so upsert.
       let pwErr;
-      if(isHR() || isOpsAdmin()) {
+      if(isHR() || isOpsSeat()) {
         ({ error: pwErr } = await sb.from('team').upsert({
           id: currentUser.id, name: currentUser.name, title: currentUser.title||'',
           dept: currentUser.dept||'', password: newPin,
@@ -3644,6 +3690,14 @@ let opsNewRows = [];          // people added but not yet saved
 let opsCurrentTab = 'people';
 
 function renderOpsAdmin() {
+  /* My Notes is a duplicate here for anyone who reaches this page from their
+     own account — they already have the tab in the main menu. The shared
+     Admin login has no main menu, so for that one seat this is the only way
+     in and it stays. */
+  const notesTab = document.getElementById('opsTabNotes');
+  if(notesTab) notesTab.style.display = isOpsSeat() ? '' : 'none';
+  if(!isOpsSeat() && opsCurrentTab === 'notes') opsCurrentTab = 'people';
+
   // Department filters
   ['opsDeptFilter','opsProjDeptFilter','financeDeptFilter'].forEach(id=>{
     const sel = document.getElementById(id);
@@ -3770,22 +3824,24 @@ function renderOpsDepartments() {
   if(!host) return;
   const count = document.getElementById('opsDeptCount');
   const assignable = assignableDepartments();
-  if(count) count.textContent = `· ${assignable.length} active`;
+  if(count) count.textContent = `· ${assignable.length}`;
 
-  host.innerHTML = allDepartments().map(d => {
+  host.innerHTML = assignable.map(d => {
     const custom = isCustomDept(d.id);
     const staff  = allTeam.filter(p => !isSingleSeat(p) && personDept(p) === d.id).length;
     const work   = allProjects.filter(p => (p.department||DEFAULT_DEPT) === d.id).length;
-    const isOps  = d.id === 'ops';
+    const note   = isAdminDept(d.id)
+      ? ` · ${staff} ${staff===1?'person':'people'} · works across every project`
+      : ` · ${staff} ${staff===1?'person':'people'} · ${work} project${work===1?'':'s'}`;
     return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(d.name)}</div>
-        <div style="font-size:11px;color:var(--muted)">${escapeHtml(deptShort(d.id))}${isOps?' · single login, not a staff department':` · ${staff} ${staff===1?'person':'people'} · ${work} project${work===1?'':'s'}`}</div>
+        <div style="font-size:11px;color:var(--muted)">${escapeHtml(deptShort(d.id))}${note}</div>
       </div>
+      <button class="btn" onclick="renameDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px">Rename</button>
       ${custom
-        ? `<button class="btn" onclick="renameCustomDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px">Rename</button>
-           <button class="btn" onclick="removeCustomDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px;color:var(--red)">Remove</button>`
-        : `<span style="font-size:11px;color:var(--muted);white-space:nowrap">built in</span>`}
+        ? `<button class="btn" onclick="removeCustomDepartment('${escapeAttr(d.id)}')" style="font-size:11px;padding:4px 9px;color:var(--red)">Remove</button>`
+        : `<span style="font-size:11px;color:var(--muted);white-space:nowrap" title="The four original departments can be renamed but not removed — existing records point at them">built in</span>`}
     </div>`;
   }).join('');
 }
@@ -3818,22 +3874,41 @@ async function addCustomDepartment() {
   showToast(`${dept.name} added — it now works like any other department ✓`);
 }
 
-async function renameCustomDepartment(id) {
-  const d = customDepartments.find(x => x.id === id);
+/* Renaming is safe for any department, built-in or not: the id is what every
+   record stores, and it is never touched. Only the label people read changes,
+   and it changes everywhere at once — pickers, filters, tables, exports and
+   the LOE report all read the same list. */
+async function renameDepartment(id) {
+  const d = deptById(id);
   if(!d) return;
-  const name = prompt('Department name', d.name);
+  const builtIn = !isCustomDept(id);
+  const original = BUILT_IN_DEPARTMENTS.find(b => b.id === id);
+
+  const name = prompt(builtIn
+    ? 'Department name\n\nLeave it blank to go back to "' + original.name + '".'
+    : 'Department name', d.name);
   if(name === null) return;
-  if(!name.trim()) { showToast('A department needs a name'); return; }
-  const short = prompt('Short label (used in tables and reports)', d.short || '');
+  if(!builtIn && !name.trim()) { showToast('A department needs a name'); return; }
+  const short = prompt('Short label (used in tables, reports and exports)', d.short || '');
   if(short === null) return;
   const before = d.name;
-  const next = customDepartments.map(x => x.id === id
-    ? { ...x, name: name.trim(), short: (short.trim() || name.trim().slice(0,12)) } : x);
-  if(!await saveAppSetting('departments', next)) return;
-  customDepartments = next;
-  await writeAudit('department', id, 'renamed', before, name.trim(), null);
+
+  if(builtIn) {
+    const next = { ...deptOverrides };
+    if(!name.trim()) delete next[id];          // cleared → back to the original
+    else next[id] = { name: name.trim(), short: short.trim() || name.trim().slice(0,12) };
+    if(!await saveAppSetting('dept_overrides', next)) return;
+    deptOverrides = next;
+    await writeAudit('department', id, 'renamed', before, name.trim() || original.name, 'built-in label');
+  } else {
+    const next = customDepartments.map(x => x.id === id
+      ? { ...x, name: name.trim(), short: (short.trim() || name.trim().slice(0,12)) } : x);
+    if(!await saveAppSetting('departments', next)) return;
+    customDepartments = next;
+    await writeAudit('department', id, 'renamed', before, name.trim(), null);
+  }
   refreshDepartmentUI();
-  showToast('Department renamed ✓');
+  showToast(name.trim() ? 'Department renamed ✓' : 'Name reset ✓');
 }
 
 /* Removing a department must never strand its people or its work, so it is
@@ -3874,9 +3949,26 @@ function refreshDepartmentUI() {
   if(typeof fillLoeFilters === 'function') { try { fillLoeFilters(); } catch(e){} }
 }
 
+/* Everything typed into the table lives in the DOM until Save Changes reads
+   it. Any re-render while editing therefore throws it away — which is what
+   happened when a second new person was added, and equally when the search
+   box, the department filter or a background refresh redrew the table. The
+   values are read back into their objects first, so a redraw preserves them. */
+function captureOpsPeopleEdits() {
+  if(!opsPeopleEditMode) return;
+  if(!document.getElementById('opsPeopleTable')) return;
+  allTeam.filter(p => !isSingleSeat(p)).forEach(p => {
+    if(document.getElementById('ops_name_'+p.id)) readOpsRow(p);
+  });
+  opsNewRows.forEach(r => {
+    if(document.getElementById('ops_name_'+r.id)) readOpsRow(r);
+  });
+}
+
 function renderOpsPeople() {
   const table  = document.getElementById('opsPeopleTable');
   if(!table) return;
+  captureOpsPeopleEdits();
   renderOpsDepartments();
   syncOpsPeopleEditButtons();
 
@@ -3895,11 +3987,11 @@ function renderOpsPeople() {
   const th = (label, align) => `<th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:${align||'left'};background:var(--surface2)">${label}</th>`;
 
   const head = `<colgroup>
-      <col style="width:186px"><col style="width:148px"><col style="width:88px">
-      <col style="width:164px"><col><col style="width:102px"><col style="width:52px">
+      <col style="width:176px"><col style="width:140px"><col style="width:84px"><col style="width:136px">
+      <col style="width:152px"><col><col style="width:116px"><col style="width:52px">
     </colgroup>
     <thead><tr>
-      ${th('Name')}${th('Title')}${th('Dept','center')}${th('Reports to')}
+      ${th('Name')}${th('Title')}${th('Dept','center')}${th('Recruitment date','center')}${th('Reports to')}
       ${th('Work email')}${th('Access','center')}${th('')}
     </tr></thead>`;
 
@@ -3915,20 +4007,26 @@ function renderOpsPeople() {
       name:  `<span style="font-weight:500;color:var(--text)">${p.name || '—'}</span>`,
       title: p.title || '—',
       dept:  deptShort(personDept(p)),
+      joined: p.joinedDate ? fmtDateEU(p.joinedDate)
+              : '<span style="color:var(--muted)" title="Without this, they appear to owe timesheets for months before they arrived">—</span>',
       mgr:   mgr ? mgr.name : '<span style="color:var(--muted)">— none —</span>',
       email: p.email || '<span style="color:var(--muted)">—</span>',
-      role:  (p.role === 'timesheet_only')
+      role:  ((p.role === 'timesheet_only')
                ? '<span style="background:var(--surface2);color:var(--text2);font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Timesheet</span>'
-               : '<span style="background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Full</span>'
+               : '<span style="background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Full</span>')
+             + (p.opsAdmin ? ' <span title="Also runs Operations — keeps their own timesheet" style="background:#efe6fa;color:#6b3fa0;font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Ops</span>' : '')
     };
 
     const edit = {
       name:  `<input type="text" id="ops_name_${p.id}" value="${escapeAttr(p.name||'')}" placeholder="Full name" style="${inputStyle}">`,
       title: `<select id="ops_title_${p.id}" style="${inputStyle}">${TITLES.map(t=>`<option value="${t}"${p.title===t?' selected':''}>${t}</option>`).join('')}</select>`,
       dept:  `<select id="ops_dept_${p.id}" style="${inputStyle}">${assignableDepartments().map(d=>`<option value="${d.id}"${personDept(p)===d.id?' selected':''}>${deptShort(d.id)}</option>`).join('')}</select>`,
+      joined: `<input type="date" id="ops_joined_${p.id}" value="${escapeAttr(p.joinedDate||'')}" title="The day they started. Months before this are not counted against them." style="${inputStyle}">`,
       mgr:   `<select id="ops_mgr_${p.id}" style="${inputStyle}">${opsManagerOptions(p.managerId, p.id)}</select>`,
       email: `<input type="email" id="ops_email_${p.id}" value="${escapeAttr(p.email||'')}" placeholder="name@ecoconsult.jo" style="${inputStyle}">`,
       role:  `<select id="ops_role_${p.id}" style="${inputStyle}"><option value="consultant"${(p.role||'consultant')==='consultant'?' selected':''}>Full</option><option value="timesheet_only"${p.role==='timesheet_only'?' selected':''}>Timesheet</option></select>`
+             + `<label title="Gives this person the Operations page on top of their normal account — they keep their own timesheet, department and manager" style="display:flex;align-items:center;justify-content:center;gap:5px;margin-top:4px;font-size:10px;color:var(--text2);cursor:pointer;white-space:nowrap">
+                  <input type="checkbox" id="ops_admin_${p.id}"${p.opsAdmin?' checked':''}${p.role==='timesheet_only'?' disabled':''} style="width:13px;height:13px;cursor:pointer">Ops admin</label>`
     };
 
     const v = opsPeopleEditMode ? edit : read;
@@ -3940,6 +4038,7 @@ function renderOpsPeople() {
       <td style="padding:${cellPad};white-space:nowrap">${v.name}</td>
       <td style="${td}">${v.title}</td>
       <td style="${td};text-align:center">${v.dept}</td>
+      <td style="${td};text-align:center">${v.joined}</td>
       <td style="${td}">${v.mgr}</td>
       <td style="${td};overflow:hidden;text-overflow:ellipsis">${v.email}</td>
       <td style="${td};text-align:center">${v.role}</td>
@@ -3948,7 +4047,7 @@ function renderOpsPeople() {
   }).join('');
 
   table.style.tableLayout = 'fixed';
-  table.innerHTML = head + `<tbody>${body || `<tr><td colspan="7" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Nobody matches these filters.</td></tr>`}</tbody>`;
+  table.innerHTML = head + `<tbody>${body || `<tr><td colspan="8" style="padding:22px;text-align:center;color:var(--muted);font-size:13px">Nobody matches these filters.</td></tr>`}</tbody>`;
 
   const unassigned = allTeam.filter(p => !isSingleSeat(p) && !p.managerId);
   const warn = document.getElementById('opsUnassignedWarn');
@@ -3984,6 +4083,7 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 function escapeHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function opsAddPersonRow() {
+  captureOpsPeopleEdits();          // keep whatever is already half-typed
   opsPeopleEditMode = true;
   // Added at the front so it is visible immediately, next to Save Changes
   const filter = (document.getElementById('opsDeptFilter')||{}).value || '';
@@ -3997,6 +4097,7 @@ function opsAddPersonRow() {
 }
 
 function opsDropNewRow(tmpId) {
+  captureOpsPeopleEdits();
   opsNewRows = opsNewRows.filter(r => String(r.id) !== String(tmpId));
   renderOpsPeople();
 }
@@ -4053,6 +4154,11 @@ async function notifyPersonOfProfileChange(person, before, after) {
   }
   if(before.email !== after.email) lines.push(`Email: ${before.email||'—'} → ${after.email||'—'}`);
   if(before.role !== after.role) lines.push(`Access level: ${before.role||'member'} → ${after.role||'member'}`);
+  if(!!before.opsAdmin !== !!after.opsAdmin) {
+    lines.push(after.opsAdmin
+      ? 'Operations admin: you now have the Operations page as well as your normal account'
+      : 'Operations admin: removed — your normal account is unchanged');
+  }
   if(!lines.length) return;
   const message = `${currentUser.name} updated your account:\n\n${lines.join('\n')}`;
   try { addNotification(person.id, 'profile_changed', { message }); } catch(e) {}
@@ -4078,12 +4184,17 @@ function readOpsRow(p) {
   const g = id => document.getElementById(id);
   const name = g('ops_name_'+p.id), title = g('ops_title_'+p.id), dept = g('ops_dept_'+p.id);
   const mgr  = g('ops_mgr_'+p.id),  email = g('ops_email_'+p.id), role = g('ops_role_'+p.id);
-  if(name && name.value.trim()) p.name = name.value.trim();
+  const joined = g('ops_joined_'+p.id);
+  if(joined) p.joinedDate = joined.value || null;
+  if(name) p.name = name.value.trim();
   if(title) p.title = title.value;
   if(dept)  p.department = dept.value;
   if(mgr)   p.managerId = mgr.value ? parseInt(mgr.value) : null;
   if(email) p.email = email.value.trim();
   if(role)  p.role = role.value;
+  const ops = g('ops_admin_'+p.id);
+  // A timesheet-only seat has no pages to administer, so the two never combine.
+  if(ops)   p.opsAdmin = ops.checked && p.role !== 'timesheet_only';
   return p;
 }
 
@@ -4120,13 +4231,16 @@ async function saveOpsPeople() {
   const changed = [];
   allTeam.filter(p=>!isSingleSeat(p)).forEach(p=>{
     if(document.getElementById('ops_name_'+p.id)) {
-      const before = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role };
+      const before = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role, opsAdmin:!!p.opsAdmin };
       readOpsRow(p);
-      const after = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role };
+      const after = { name:p.name, title:p.title, department:p.department, managerId:p.managerId, email:p.email, role:p.role, opsAdmin:!!p.opsAdmin };
       if(JSON.stringify(before) !== JSON.stringify(after)) changed.push({ person:p, before, after });
       touched.push(p);
     }
   });
+
+  const blank = touched.find(p => !p.name || !p.name.trim());
+  if(blank) { showToast('Everyone needs a name — one row has been left blank'); renderOpsPeople(); return; }
 
   // 2. New people
   const created = [];
@@ -4141,6 +4255,8 @@ async function saveOpsPeople() {
     created.push({
       id: realId, name: row.name, title: row.title, dept: 'ESIA',
       role: row.role, email: row.email, managerId: row.managerId,
+      opsAdmin: !!row.opsAdmin,
+      joinedDate: row.joinedDate || null,
       department: row.department,
       c: PALETTE[(allTeam.length + created.length) % PALETTE.length]
     });
@@ -4150,7 +4266,9 @@ async function saveOpsPeople() {
   // 3. Persist
   for(const p of touched.concat(created)) await saveTeamMember(p);
   for(const p of created) {
-    await sb.from('team').update({ password:'1234', must_change_password:true }).eq('id', p.id);
+    const { error } = await sb.from('team')
+      .update({ password:'1234', must_change_password:true }).eq('id', p.id);
+    if(error) showToast(`⚠ ${p.name} was created but their password was not set — they cannot sign in yet`, 8000);
   }
 
   // 4. Tell people what changed — a silent edit to someone's role, department
@@ -4195,21 +4313,25 @@ function openOpsNewItem(isProposal) {
      behalf of any department and usually leaves the manager open. Everyone
      else is creating their OWN piece of work, in their own department,
      with themselves running it — so it opens ready to go. */
-  const adminMode = isOpsAdmin();
+  const adminMode = isOpsAdmin() || inAdminDepartment();
   const word = isProposal ? 'proposal' : 'project';
 
   const set = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
   set('opsNewItemTitle', isProposal ? 'New Proposal' : 'New Project');
   set('opsNewNameLabel', isProposal ? 'Proposal Name' : 'Project Name');
-  set('opsNewEndLabel',  isProposal ? 'Submission Date' : 'End / Deliverable Date');
+  set('opsNewEndLabel',  'End / Deliverable Date');
   set('opsNewItemSub',   adminMode
       ? (isProposal
           ? 'Created on behalf of a department. A lead can be assigned later.'
           : 'Created on behalf of a department. A project manager can be assigned later.')
       : `Creates the ${word} in your department with you running it. Change the ${isProposal?'lead':'manager'} below if it belongs to a colleague.`);
 
+  /* A proposal is a name, a client and a team. It has no dates of its own —
+     when it is won it becomes a project and gets them then. */
   const startWrap = document.getElementById('opsNewStartWrap');
   if(startWrap) startWrap.style.display = isProposal ? 'none' : '';
+  const endWrap = document.getElementById('opsNewEndWrap');
+  if(endWrap) endWrap.style.display = isProposal ? 'none' : '';
 
   /* Department is fixed for everyone but Admin. Your Projects page only shows
      your own department, so a free choice here would let someone create work
@@ -4314,7 +4436,7 @@ async function saveOpsNewItem() {
   const client = (document.getElementById('opsNewClient')||{}).value.trim();
   // Admin may file work under any department; everyone else creates in their
   // own, enforced here rather than trusting the disabled dropdown.
-  const dept   = isOpsAdmin()
+  const dept   = (isOpsAdmin() || inAdminDepartment())
     ? ((document.getElementById('opsNewDept')||{}).value || DEFAULT_DEPT)
     : activeDept;
   const pmRaw  = (document.getElementById('opsNewPM')||{}).value || '';
@@ -4323,15 +4445,18 @@ async function saveOpsNewItem() {
   const notes  = (document.getElementById('opsNewNotes')||{}).value.trim();
 
   if(!name) { showToast(opsNewIsProposal ? 'Give the proposal a name' : 'Give the project a name'); return; }
-  if(!end)  { showToast(opsNewIsProposal ? 'Set a submission date' : 'Set an end date'); return; }
-  const startDate = opsNewIsProposal ? (start || ymd(jordanNow())) : start;
-  if(!startDate) { showToast('Set a start date'); return; }
-  if(new Date(end) < new Date(startDate)) { showToast('The end date cannot be before the start date'); return; }
+  let startDate = null, endDate = null;
+  if(!opsNewIsProposal) {
+    if(!end)   { showToast('Set an end date'); return; }
+    if(!start) { showToast('Set a start date'); return; }
+    if(new Date(end) < new Date(start)) { showToast('The end date cannot be before the start date'); return; }
+    startDate = start; endDate = end;
+  }
 
   const proj = {
     id: Date.now(),
     name, client,
-    start: startDate, end,
+    start: startDate, end: endDate,
     creatorId: pmRaw ? parseInt(pmRaw) : null,   // null = nobody assigned yet
     notes,
     deliverables: [],
@@ -4392,7 +4517,7 @@ async function notifyAssignment(proj, who) {
   if(!who) return;
   const role = proj.isProposal ? 'proposal lead' : 'project manager';
   const by = currentUser ? currentUser.name : 'The admin';
-  const due = proj.end ? ` The ${proj.isProposal ? 'submission date' : 'end date'} is ${fmtDateEU(proj.end)}.` : '';
+  const due = (!proj.isProposal && proj.end) ? ` The end date is ${fmtDateEU(proj.end)}.` : '';
   const line = `${by} assigned you as ${role} for "${proj.name}".${due}`;
 
   try { addNotification(who.id, 'assigned_pm', { message: line, projectId: proj.id, fromName: by }); } catch(e) {}
@@ -4492,13 +4617,10 @@ function renderOpsProjStats() {
   const proposals = inScope.filter(p => p.isProposal);
   const projects_ = inScope.filter(p => !p.isProposal);
   const openProps = proposals.filter(p => !p.archived);
-  const soon = openProps.filter(p => {
-    if(p.proposalSubmitted) return false;
-    if(!p.end) return false;
-    const d = Math.ceil((new Date(p.end+'T12:00:00') - jordanNow()) / 86400000);
-    return d >= 0 && d <= 14;
-  });
-  const overdue = openProps.filter(p => !p.proposalSubmitted && p.end && new Date(p.end+'T12:00:00') < jordanNow());
+  // Proposals have no dates, so "due soon" and "overdue" no longer exist.
+  // What is worth counting is how many are still being worked on.
+  const inPrep = openProps.filter(p => !p.proposalSubmitted);
+  const awaiting = openProps.filter(p => p.proposalSubmitted);
 
   // Projects running past their end date — separate from the proposal counts
   const lateProjects = projects_.filter(p => !p.archived && p.end && new Date(p.end+'T12:00:00') < jordanNow());
@@ -4518,12 +4640,11 @@ function renderOpsProjStats() {
            'Active projects whose end date has passed')
     + card('Open proposals', openProps.length, '#6b3fa0',
            'Proposals not yet won, lost or archived')
-    + card('Proposals due ≤ 14 days', soon.length,
-           soon.length ? 'var(--orange)' : 'var(--text)',
-           'Open proposals with a submission date within the next two weeks')
-    + card('Proposals overdue', overdue.length,
-           overdue.length ? 'var(--red)' : 'var(--text)',
-           'Open proposals whose submission date has already passed')
+    + card('In preparation', inPrep.length,
+           inPrep.length ? 'var(--orange)' : 'var(--text)',
+           'Open proposals not yet sent to the client')
+    + card('Awaiting outcome', awaiting.length, '#6b3fa0',
+           'Submitted to the client, waiting on a decision')
     + card('Pipeline value', pipeline ? fmtMoney(pipeline) : '—', '#6b3fa0',
            'Total budget across open proposals')
     + card('Completed', inScope.filter(p=>p.archived).length, 'var(--muted)',
@@ -4581,10 +4702,10 @@ function renderOpsProjects() {
     const nameCell = opsProjEditMode
       ? `<input type="text" id="opsproj_${p.id}" value="${escapeAttr(p.name||'')}"
            style="width:100%;padding:5px 8px;font-size:13px;font-weight:500;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)">`
-      : `<span style="font-weight:500;color:var(--text)">${p.name||'—'}</span>`;
+      : `<span title="${escapeAttr(p.name||'')}" style="font-weight:500;color:var(--text);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.name||'—')}</span>`;
 
     return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:${opsProjEditMode?'5px':'8px'} 12px;white-space:nowrap">${nameCell}</td>
+      <td style="padding:${opsProjEditMode?'5px':'8px'} 12px;max-width:0;overflow:hidden">${nameCell}</td>
       <td style="${td};text-align:center">${p.isProposal
         ? '<span style="background:#efeafb;color:#6b3fa0;font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Proposal</span>'
         : '<span style="background:var(--surface2);color:var(--text2);font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px">Project</span>'}${p.archived?'<div style="color:var(--muted);font-size:10px;margin-top:2px">archived</div>':''}</td>
@@ -5187,18 +5308,42 @@ function renderAuditLog() {
       No changes recorded yet. If this stays empty, run step7-audit-log.sql in Supabase.</div>`;
     return;
   }
-  const label = { balance:'Leave balance', budget:'Budget', manager:'Manager', person:'Person', timesheet:'Timesheet' };
+  const label = { balance:'Leave balance', budget:'Budget', manager:'Manager', person:'Person',
+                  timesheet:'Timesheet', project:'Project', proposal:'Proposal', department:'Department' };
+
+  /* What the entry is ABOUT. Looking it up in the live list only works while
+     it still exists — delete a project and every row about it fell back to a
+     raw id, which is the least useful thing on screen. The audit row already
+     carries the name: a creation records it as the new value, a deletion as
+     the old one. So the live name is preferred, the recorded name is the
+     fallback, and the bare id is the last resort. */
+  const subjectOf = r => {
+    if(r.entity === 'balance' || r.entity === 'person') {
+      const who = personById(r.entity_id);
+      if(who && who.name) return who.name;
+      if(typeof removedNames === 'object' && removedNames[String(r.entity_id)])
+        return removedNames[String(r.entity_id)] + ' (removed)';
+    } else {
+      const live = allProjects.find(x => String(x.id) === String(r.entity_id));
+      if(live && live.name) return live.name;
+    }
+    const created = /creat/i.test(r.field || '');
+    const recorded = created ? r.after_value : (r.before_value || r.after_value);
+    if(recorded && String(recorded).trim() && String(recorded) !== '—') return String(recorded);
+    return 'id ' + r.entity_id;
+  };
+
   host.innerHTML = rows.slice(0,60).map(r => {
     const when = fmtJordanDateTime(r.changed_at);
-    const subject = r.entity === 'balance'
-      ? (personById(r.entity_id)?.name || 'Someone')
-      : ((allProjects.find(p => String(p.id) === String(r.entity_id)) || {}).name || r.entity_id);
+    const subject = subjectOf(r);
+    const gone = !allProjects.some(x => String(x.id) === String(r.entity_id))
+                 && r.entity !== 'balance' && r.entity !== 'person' && r.entity !== 'department';
     return `<div class="adm-row" style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px">
       <div style="flex:1;min-width:0">
-        <div><strong>${subject}</strong> · ${label[r.entity] || r.entity}${r.field ? ' (' + r.field + ')' : ''}</div>
+        <div><strong>${escapeHtml(subject)}</strong> · ${label[r.entity] || r.entity}${r.field ? ' (' + r.field + ')' : ''}${gone ? ' <span style="color:var(--muted);font-weight:400">· no longer exists</span>' : ''}</div>
         <div style="color:var(--muted);margin-top:2px">
-          ${r.before_value ?? '—'} → <strong style="color:var(--text)">${r.after_value ?? '—'}</strong>
-          · ${r.changed_by_name || 'Unknown'}${r.note ? ' · ' + r.note : ''}</div>
+          ${escapeHtml(r.before_value ?? '—')} → <strong style="color:var(--text)">${escapeHtml(r.after_value ?? '—')}</strong>
+          · by ${escapeHtml(r.changed_by_name || 'Unknown')}${r.note ? ' · ' + escapeHtml(r.note) : ''}</div>
       </div>
       <div style="color:var(--muted);white-space:nowrap">${when}</div>
     </div>`;
@@ -5317,7 +5462,7 @@ async function uploadFinanceFile(inputEl, pathPrefix) {
 
 /* ── Notify Finance — same instant bell + email already used for timesheets ── */
 async function notifyFinance(kind, message, projId) {
-  try { addNotification(9998, kind, { message, projectId: projId }); } catch(e) {}
+  notifyOpsInApp('finance', kind, { message, projectId: projId });
   const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('finance') : [];
   const url = appUrl('admin');
   for(const addr of to) {
@@ -5335,19 +5480,22 @@ async function notifyFinance(kind, message, projId) {
    category is switched on in Settings, an email. Skipped when Admin is the
    one creating it — nobody needs a mail about their own click. */
 async function notifyOpsOfNewWork(proj) {
-  if(!proj || isOpsAdmin()) return;
+  /* Only the shared seat is skipped. When one operations admin starts a piece
+     of work the others still need to hear about it — silence would mean a
+     project appearing with nobody told. */
+  if(!proj || isOpsSeat()) return;
   const kindWord = proj.isProposal ? 'Proposal' : 'Project';
   const by  = currentUser ? currentUser.name : 'Someone';
   const pm  = proj.creatorId ? personById(proj.creatorId) : null;
   const who = pm ? pm.name : 'nobody yet';
   const due = proj.end
-    ? ` ${proj.isProposal ? 'Submission date' : 'End date'}: ${fmtDateEU(proj.end)}.` : '';
+    ? ` End date: ${fmtDateEU(proj.end)}.` : '';
   const message = `${by} created a new ${kindWord.toLowerCase()} "${proj.name}"`
     + (proj.client ? ` for ${proj.client}` : '')
     + ` in ${deptShort(proj.department || activeDept)}.`
     + ` ${proj.isProposal ? 'Lead' : 'Manager'}: ${who}.${due}`;
 
-  try { addNotification(9998, 'work_created', { message, projectId: proj.id, fromName: by }); } catch(e) {}
+  notifyOpsInApp('work', 'work_created', { message, projectId: proj.id, fromName: by });
 
   const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('work') : [];
   const url = appUrl('admin');
@@ -5859,7 +6007,7 @@ function populateSubPOModal(projId, sub) {
   // Admin/Finance doesn't have visibility into which deliverable this maps
   // to — that's the PM's context, not theirs. Only the PM sees this field.
   const delivWrap = document.getElementById('subPODelivWrap');
-  if(delivWrap) delivWrap.style.display = isOpsAdmin() ? 'none' : '';
+  if(delivWrap) delivWrap.style.display = isOpsSeat() ? 'none' : '';
   const sel = document.getElementById('subPODeliv');
   const selectedId = sub ? sub.deliverableId : null;
   sel.innerHTML = `<option value="">— Not linked to a deliverable —</option>` +
@@ -5913,7 +6061,7 @@ async function saveSubPOItem() {
   // Admin can't set a link when adding new — they don't have that context.
   // Editing an existing PO leaves whatever link the PM already set alone,
   // even though the field is hidden from Admin's view.
-  const deliverableId = (isOpsAdmin() && !editingSubPOId) ? null : (document.getElementById('subPODeliv').value || null);
+  const deliverableId = (isOpsSeat() && !editingSubPOId) ? null : (document.getElementById('subPODeliv').value || null);
   if(!subcontractorName) { showToast('⚠ Please enter a subcontractor name'); return; }
   if(!amount || amount <= 0 || isNaN(amount)) { showToast('⚠ Please enter an amount'); return; }
   const proj = projById(addingSubPOToProjectId);
@@ -6592,7 +6740,10 @@ async function remindMissingTimesheets(month) {
     const { data } = await sb.from('timesheets').select('person_id,submitted').eq('month', month);
     (data||[]).filter(t => t.submitted).forEach(t => submitted.add(String(t.person_id)));
   } catch(e) {}
-  const missing = hrStaff().filter(p => !submitted.has(String(p.id)));
+  // Somebody who joined after this month owes nothing for it, so they are
+  // not on the chase list and never get the email.
+  const missing = hrStaff().filter(p => !submitted.has(String(p.id))
+                                     && joinedDuring(p, [month]));
   if(!missing.length) { showToast('Nobody to remind'); return; }
   if(!confirm(`Send a reminder to ${missing.length} ${missing.length===1?'person':'people'} about ${tsMonthLabel(month)}?`)) return;
 
@@ -6840,7 +6991,7 @@ function renderLooseColumns() {
             </div>
           </div>
           <button class="btn btn-sm btn-accent" style="font-size:11px;flex-shrink:0"
-            onclick="openColumnMerge('${g.label.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">Move into a project…</button>
+            onclick="openColumnMerge('${g.label.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">Move into…</button>
         </div>`).join('')}
     </div>`;
 }
@@ -6853,11 +7004,20 @@ function openColumnMerge(label) {
   document.getElementById('mergeColSubtitle').textContent =
     `"${label}" · ${g.hours} hours across ${g.sheets.length} timesheet${g.sheets.length===1?'':'s'}`;
 
+  /* Grouped exactly like the timesheet's own column picker — projects,
+     proposals, then the shared activity list — so Admin is choosing from the
+     same three things the hours could have been logged against in the first
+     place, rather than one flat list of everything. */
   const sel = document.getElementById('mergeColTarget');
-  const pool = allProjects.filter(p => !p.archived)
+  const live = allProjects.filter(p => !p.archived)
     .sort((a,b)=>(a.name||'').localeCompare(b.name||'', undefined, {numeric:true}));
-  sel.innerHTML = pool.map(p =>
-    `<option value="${p.id}">${p.name}${p.isProposal?' · proposal':''} · ${deptShort(p.department||DEFAULT_DEPT)}</option>`).join('');
+  const opt = p => `<option value="proj_${p.id}">${escapeHtml(p.name)} · ${escapeHtml(deptShort(p.department||DEFAULT_DEPT))}</option>`;
+  const grp = (label, html) => html ? `<optgroup label="── ${label} ──">${html}</optgroup>` : '';
+  sel.innerHTML =
+      grp('Projects',  live.filter(p => !p.isProposal).map(opt).join(''))
+    + grp('Proposals', live.filter(p =>  p.isProposal).map(opt).join(''))
+    + grp('Other',     tsActivities().map(a =>
+        `<option value="act_${escapeAttr(a.id)}">${escapeHtml(a.name)}</option>`).join(''));
 
   const names = [...g.people].map(id => personById(id)?.name || `id ${id}`);
   document.getElementById('mergeColPeople').innerHTML =
@@ -6869,14 +7029,21 @@ function openColumnMerge(label) {
 async function applyColumnMerge() {
   const g = looseColumns.find(x => x.label === mergingLabel);
   if(!g) return;
-  const targetId = (document.getElementById('mergeColTarget')||{}).value;
-  const target = allProjects.find(p => String(p.id) === String(targetId));
-  if(!target) { showToast('Pick a project'); return; }
+  const raw = (document.getElementById('mergeColTarget')||{}).value || '';
+  const isAct = raw.startsWith('act_');
+  const target = isAct
+    ? tsActivities().find(a => String(a.id) === raw.slice(4))
+    : allProjects.find(p => String(p.id) === raw.replace('proj_',''));
+  if(!target) { showToast('Pick where these hours belong'); return; }
+  // What an existing column on the sheet must match to be folded into
+  const sameTarget = c => isAct
+    ? String(c.activityId) === String(target.id)
+    : String(c.projectId)  === String(target.id);
 
   closeModal('mergeColModal');
   showToast('Moving hours…');
 
-  let updated = 0, merged = 0;
+  let updated = 0, merged = 0, failed = 0;
   for(const s of g.sheets) {
     try {
       const { data } = await sb.from('timesheets').select('*').eq('id', s.id).maybeSingle();
@@ -6887,7 +7054,7 @@ async function applyColumnMerge() {
       if(!loose) continue;
 
       // Is there already a column for the target project on this sheet?
-      const existing = cols.find(c => c.id !== s.colId && String(c.projectId) === String(target.id));
+      const existing = cols.find(c => c.id !== s.colId && sameTarget(c));
 
       if(existing) {
         // Fold the hours in, then drop the duplicate column
@@ -6902,16 +7069,28 @@ async function applyColumnMerge() {
         data.columns = cols.filter(c => c.id !== s.colId);
         merged++;
       } else {
-        // Point the column at the project, replacing any stale id
-        loose.projectId = String(target.id);
-        loose.type = 'project';
+        // Point the column at its new home, clearing whichever id it is not
+        if(isAct) {
+          loose.activityId = String(target.id);
+          loose.type = 'activity';
+          delete loose.projectId; delete loose.deliverableId; delete loose.deliverableName;
+        } else {
+          loose.projectId = String(target.id);
+          loose.type = 'project';
+          delete loose.activityId;
+        }
         loose.name = target.name;
         data.columns = cols;
       }
 
-      await sb.from('timesheets').update({ columns: data.columns, rows: rows }).eq('id', s.id);
+      const { error } = await sb.from('timesheets')
+        .update({ columns: data.columns, rows: rows }).eq('id', s.id);
+      if(error) { failed++; console.warn('merge write refused for', s.id, error.message); continue; }
       updated++;
-    } catch(e) { console.warn('merge failed for', s.id, e); }
+    } catch(e) { failed++; console.warn('merge failed for', s.id, e); }
+  }
+  if(failed) {
+    showToast(`⚠ ${failed} timesheet${failed===1?'':'s'} could NOT be updated — those hours are still under the old label. Try again.`, 8000);
   }
 
   // Team membership is managed on the project itself, not here — this
@@ -7172,7 +7351,7 @@ function renderLeaveBalanceStrip(personId) {
 function renderHeaderBalances() {
   const host = document.getElementById('headerBalances');
   if(!host || !currentUser) return;
-  if(isHR() || isOpsAdmin() || isTimesheetOnly()) { host.style.display='none'; return; }
+  if(isHR() || isOpsSeat() || isTimesheetOnly()) { host.style.display='none'; return; }
   host.style.display = 'flex';
   // The button always shows. Balance numbers appear only once the
   // balances table exists — never the other way around.
@@ -7550,17 +7729,38 @@ function getOpsNotifyConfig() {
   };   // leave is HR's business, never the Admin's
 }
 
+function readNotifyBoxes() {
+  const out = {};
+  NOTIFY_KINDS.forEach(k => {
+    const el = document.getElementById('notify_' + k.key);
+    out[k.key] = el ? !!el.checked : k.def;
+  });
+  return out;
+}
+
+/* An admin on their own account saves to their own row — their choices never
+   touch anyone else's. */
+async function saveMyNotifyPrefs() {
+  if(!currentUser) return true;
+  const prefs = readNotifyBoxes();
+  const { error } = await sb.from('team').update({ notify_prefs: prefs }).eq('id', currentUser.id);
+  if(error) { reportSaveFailure('Notification settings', error); return false; }
+  currentUser.notifyPrefs = prefs;
+  const row = allTeam.find(t => String(t.id) === String(currentUser.id));
+  if(row) row.notifyPrefs = prefs;
+  return true;
+}
+
 async function saveOpsNotifyConfig() {
-  const e1 = (document.getElementById('opsEmail1')||{}).value || '';
-  const e2 = (document.getElementById('opsEmail2')||{}).value || '';
-  const emails = [e1.trim(), e2.trim()].filter(Boolean);
-  const bad = emails.find(x => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
-  if(bad) { showToast(`"${bad}" is not a valid email address`); return false; }
+  // The shared seat has no row of its own to personalise, so it keeps the
+  // original flag string. Addresses come from the admins themselves now.
+  const emails = getOpsNotifyConfig().emails;
+  const b = readNotifyBoxes();
   let flags = '';
-  if((document.getElementById('opsNotifyTimesheets')||{}).checked) flags += 'T';
-  if((document.getElementById('opsNotifyPeople')||{}).checked)     flags += 'P';
-  if((document.getElementById('opsNotifyFinance')||{}).checked)    flags += 'F';
-  if((document.getElementById('opsNotifyWork')||{}).checked)       flags += 'W';
+  if(b.timesheets) flags += 'T';
+  if(b.people)     flags += 'P';
+  if(b.finance)    flags += 'F';
+  if(b.work)       flags += 'W';
   const value = emails.join(',') + '|' + flags;
 
   const { error } = await sb.from('team').upsert({
@@ -7574,15 +7774,91 @@ async function saveOpsNotifyConfig() {
 }
 
 /* Who should be copied on a given kind of event. */
-function opsNotifyRecipients(kind) {
+/* Who hears about admin events. There is no longer a list of addresses to
+   maintain: the admins ARE the list. Everyone ticked as an Ops admin gets it
+   at their own work email, so adding or removing an admin updates the
+   notifications by itself and nothing is left pointing at someone who left.
+   The two addresses configured under the old scheme are kept as a fallback,
+   so notifications never go silent before the first admin is ticked. */
+/* Each admin decides for themselves what reaches their inbox. One person can
+   take everything, another only timesheets. Stored on their own team row, so
+   it follows the person rather than the role, and an admin who is added later
+   starts from the same sensible defaults rather than inheriting whatever the
+   last person happened to switch off. */
+const NOTIFY_KINDS = [
+  { key:'timesheets', label:'Timesheets approved or returned',            def:true  },
+  { key:'finance',    label:'Finance — ready to invoice or pay',          def:true  },
+  { key:'work',       label:'New projects and proposals created',        def:true  },
+  { key:'people',     label:'Budget changes and proposal outcomes',      def:false }
+];
+
+function personNotifyPrefs(p) {
+  const base = {};
+  NOTIFY_KINDS.forEach(k => base[k.key] = k.def);
+  const saved = p && p.notifyPrefs;
+  if(saved && typeof saved === 'object') {
+    NOTIFY_KINDS.forEach(k => { if(typeof saved[k.key] === 'boolean') base[k.key] = saved[k.key]; });
+  }
+  return base;
+}
+
+/* The shared seat has no personal preferences, so it keeps reading the flags
+   that were stored against it before this was per-person. */
+function seatNotifyPrefs() {
   const cfg = getOpsNotifyConfig();
-  if(!cfg.emails.length) return [];
+  return { timesheets:cfg.timesheets, finance:cfg.finance, work:cfg.work, people:cfg.people };
+}
+
+function opsAdminEmails() {
+  const seen = new Set();
+  const list = (allTeam||[])
+    .filter(p => p.opsAdmin && p.email && String(p.email).includes('@'))
+    .map(p => String(p.email).trim().toLowerCase())
+    .filter(e => { if(seen.has(e)) return false; seen.add(e); return true; });
+  return list.length ? list : getOpsNotifyConfig().emails;
+}
+
+/* Who gets the in-app bell for an admin event. Same rule as the emails —
+   every ops admin, filtered by their own preferences, minus whoever did it —
+   except that a bell needs no email address, so an admin who has not had one
+   saved yet still sees it. Before anyone is ticked it falls to the shared
+   seat, which is where these used to go unconditionally. */
+function opsNotifyPersonIds(kind) {
+  if(kind === 'leave') return [];
+  const prefKey = kind === 'timesheet' ? 'timesheets' : kind;
+  const me = currentUser ? String(currentUser.id) : '';
+  const admins = (allTeam||[]).filter(p => p.opsAdmin);
+  if(admins.length) {
+    return admins
+      .filter(p => personNotifyPrefs(p)[prefKey] !== false)
+      .map(p => p.id)
+      .filter(id => String(id) !== me);
+  }
+  return seatNotifyPrefs()[prefKey] === false ? [] : [9998];
+}
+
+function notifyOpsInApp(kind, type, data) {
+  opsNotifyPersonIds(kind).forEach(id => { try { addNotification(id, type, data); } catch(e) {} });
+}
+
+function opsNotifyRecipients(kind) {
   if(kind === 'leave') return [];                       // leave never goes to Admin
-  if(kind === 'timesheet' && !cfg.timesheets) return [];
-  if(kind === 'people'    && !cfg.people)     return [];
-  if(kind === 'finance'   && !cfg.finance)    return [];
-  if(kind === 'work'      && !cfg.work)       return [];
-  return cfg.emails;
+  const prefKey = kind === 'timesheet' ? 'timesheets' : kind;
+  // Nobody needs an email about their own click.
+  const mine = (currentUser && currentUser.email || '').trim().toLowerCase();
+
+  const admins = (allTeam||[]).filter(p => p.opsAdmin && p.email && String(p.email).includes('@'));
+  if(admins.length) {
+    const seen = new Set();
+    return admins
+      .filter(p => personNotifyPrefs(p)[prefKey] !== false)
+      .map(p => String(p.email).trim().toLowerCase())
+      .filter(e => e !== mine && !seen.has(e) && (seen.add(e), true));
+  }
+  // Nobody ticked yet — fall back to the seat's stored addresses and flags.
+  const seat = seatNotifyPrefs();
+  if(seat[prefKey] === false) return [];
+  return getOpsNotifyConfig().emails.filter(e => e !== mine);
 }
 
 
@@ -7673,7 +7949,7 @@ async function notifyAdminOfBudgetChange(proj, before, next) {
   const money = v => (v === null || v === undefined || v === '') ? 'not set' : fmtMoney(v);
   const line = `${who} changed the budget for ${proj.isProposal ? 'proposal' : 'project'} `
              + `"${proj.name}" from ${money(before)} to ${money(next)}.`;
-  try { addNotification(9998, 'budget_changed', { message: line, projectId: proj.id }); } catch(e) {}
+  notifyOpsInApp('people', 'budget_changed', { message: line, projectId: proj.id });
   await writeAudit('budget', proj.id, proj.isProposal ? 'proposal' : 'project', before, next);
   const url = appUrl('admin');
   const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('people') : [];
@@ -7748,11 +8024,11 @@ function resetAmountCurrency(fieldId) {
 
 function proposalCard(p) {
   const pm = personById(p.creatorId);
-  const due = p.end ? fmtDateEU(p.end) : '—';
-  const daysLeft = p.end ? Math.ceil((new Date(p.end+'T12:00:00') - jordanNow()) / 86400000) : null;
-  // Once it has gone out, the date stops nagging — it waits on the client,
-  // which is not the same as being late.
+  /* Proposals carry no dates. Whether it has gone out is the only state that
+     matters, and that is a yes/no, not a deadline. */
   const submitted = !!p.proposalSubmitted;
+  const daysLeft = null;
+  const due = '—';
   const dueColour = submitted ? 'var(--green)'
                   : daysLeft === null ? 'var(--muted)'
                   : daysLeft < 0  ? 'var(--red)'
@@ -7783,8 +8059,8 @@ function proposalCard(p) {
     <div style="margin-top:12px;display:flex;gap:18px;flex-wrap:wrap;font-size:12px">
       <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">Lead</div>
         <div style="margin-top:2px">${pm ? pm.name : `<span style="color:var(--orange);font-weight:600">Unassigned</span>${canAssignPM(p) ? ` <button onclick="openAssignPM(${p.id})" style="font-size:10px;background:var(--green);border:none;border-radius:5px;padding:2px 8px;cursor:pointer;color:#fff;font-weight:600;margin-left:4px">Assign PM</button>` : ''}`}</div></div>
-      <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">Submission</div>
-        <div style="margin-top:2px;color:${dueColour};font-weight:600">${due}${dueNote}</div></div>
+      <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">Status</div>
+        <div style="margin-top:2px;color:${dueColour};font-weight:600">${submitted ? 'Submitted' : 'In preparation'}</div></div>
       ${canSeeBudget(p) ? `<div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">🔒 Budget</div>
         <div style="margin-top:2px;font-weight:600">${p.budget ? fmtMoney(p.budget) : '—'}</div></div>` : ''}
     </div>
@@ -7830,7 +8106,22 @@ async function toggleProposalSubmitted(id, value) {
 async function markProposalWon(id) {
   const p = projects.find(x => x.id === id) || allProjects.find(x => x.id === id);
   if(!p) return;
-  if(!confirm(`Mark "${p.name}" as won?\n\nIt moves into Projects with its team and dates intact.`)) return;
+  if(!confirm(`Mark "${p.name}" as won?\n\nIt moves into Projects with its team intact, and needs a start and end date.`)) return;
+
+  /* Proposals carry no dates; projects cannot work without them — the
+     workload grid, deliverable due dates and the end-date reports all read
+     them. So they are asked for once, here, at the moment it becomes real. */
+  const today = ymd(jordanNow());
+  const start = prompt(`Start date for "${p.name}"\n\nFormat: YYYY-MM-DD`, p.start || today);
+  if(start === null) return;
+  const end = prompt(`End / final deliverable date for "${p.name}"\n\nFormat: YYYY-MM-DD`, p.end || '');
+  if(end === null) return;
+  const ok = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d||'').trim()) && !isNaN(new Date(d+'T12:00:00').getTime());
+  if(!ok(start) || !ok(end)) { showToast('Both dates are needed, as YYYY-MM-DD — nothing was changed', 6000); return; }
+  if(new Date(end) < new Date(start)) { showToast('The end date cannot be before the start date — nothing was changed', 6000); return; }
+
+  p.start = String(start).trim();
+  p.end   = String(end).trim();
   p.isProposal = false;
   p.archived = false;
   await saveProject(p);
@@ -7859,8 +8150,9 @@ async function convertProjectToProposal(id) {
   if(!isAdmin()) { showToast('Only the department admin can reclassify a project'); return; }
   const p = projects.find(x => x.id === id) || allProjects.find(x => x.id === id);
   if(!p) return;
-  if(!confirm(`Move "${p.name}" into Proposals?\n\nIts team, dates and logged time all carry over.`)) return;
+  if(!confirm(`Move "${p.name}" into Proposals?\n\nIts team and logged time carry over. Proposals have no dates, so its start and end dates are cleared — it will be asked for them again if it is won.`)) return;
   p.isProposal = true;
+  p.start = null; p.end = null;
   await saveProject(p);
   applyDeptScope();
   refreshWorkLists();
@@ -7873,7 +8165,7 @@ async function notifyAdminOfProposal(p, outcome) {
   const verb = outcome === 'won' ? 'won' : 'lost';
   const line = `${p.name}${p.client ? ' · ' + p.client : ''} was marked ${verb}`
              + (lead ? ` by ${lead.name}` : '') + '.';
-  try { addNotification(9998, 'proposal_' + outcome, { text: line, projectId: p.id }); } catch(e) {}
+  notifyOpsInApp('people', 'proposal_' + outcome, { text: line, projectId: p.id });
   const to = (typeof opsNotifyRecipients === 'function') ? opsNotifyRecipients('people') : [];
   const projUrl = appUrl('admin');
   for(const addr of to) {
@@ -8775,7 +9067,7 @@ function starterNotesFor(role) {
     admin: [
       '<b>A worked example — weekly operations check</b><div><br></div>' +
       '<div><span style="background:#c5e8f7">Every Sunday</span></div>' +
-      '<ul class="nb-todo-list"><li>Proposals past their submission date — chase or archive</li>' +
+      '<ul class="nb-todo-list"><li>Proposals awaiting an outcome — chase or archive</li>' +
       '<li class="nb-done">Assign a manager to the two new starters</li>' +
       '<li>Check project names still match what finance uses</li>' +
       '<li>Review timesheets not yet submitted for last month</li></ul>' +
@@ -8833,7 +9125,7 @@ function isBrokenStarterSection(s) {
 /* Seeds the guide once, for people who have never written a note. */
 function seedStarterNotesIfEmpty() {
   if(!currentUser) return false;
-  const role = isHR() ? 'hr' : isOpsAdmin() ? 'admin' : 'member';
+  const role = isHR() ? 'hr' : isOpsSeat() ? 'admin' : 'member';
   try {
     const sections = loadNotes();
 
@@ -9475,12 +9767,18 @@ function renderTimesheetView() {
     document.getElementById('tsUserView').style.display='';
     document.getElementById('tsHRView').style.display='none';
     const sel=document.getElementById('tsMonthSel');
-    const opts=getTsMonthOptions();
+    /* Somebody who started in October has no business being offered May.
+       Months that ended before their first day are left off the list
+       entirely, so a new joiner opens a short, honest dropdown. A blank
+       recruitment date means "unknown", and leaves every month in place. */
+    const all=getTsMonthOptions();
+    const mine=all.filter(o=>joinedDuring(currentUser, [o.val]));
+    const opts=mine.length?mine:all;
     sel.innerHTML=opts.map(o=>`<option value="${o.val}">${o.label}</option>`).join('');
-    // Default to current month (index 5), not future months
+    // Default to current month, not future months
     const curMonthIdx=[...opts].reverse().findIndex(o=>!o.label.includes('upcoming'));
-    const realIdx=curMonthIdx>=0?opts.length-1-curMonthIdx:5;
-    sel.value=opts[realIdx].val;
+    const realIdx=curMonthIdx>=0?opts.length-1-curMonthIdx:0;
+    sel.value=(opts[realIdx]||opts[opts.length-1]).val;
     loadUserTimesheet();
   }
 }
@@ -9642,7 +9940,7 @@ function tsPopulateDelivSel() {
   if(otherInp) otherInp.style.display = val === 'other' ? '' : 'none';
   const hide = () => { dsel.style.display = 'none'; dsel.innerHTML = ''; };
   if(!val.startsWith('proj_')) return hide();
-  const proj = (projects||[]).find(p => String(p.id) === val.replace('proj_',''));
+  const proj = tsProjectPool().find(p => String(p.id) === val.replace('proj_',''));
   if(!proj) return hide();
   const st = tsProjColState(proj);
   if(!st.available.length) return hide();
@@ -9654,20 +9952,35 @@ function tsPopulateDelivSel() {
   dsel.style.display = '';
 }
 
+/* Everyone sees their own department's work. Admin-department staff do
+   budgeting, finance and logistics for the whole company, so for them the
+   pool is every project there is — otherwise their own department, which
+   holds no project work, would leave them nothing to log against.
+
+   Every part of adding a column must agree on this one list. When the
+   dropdown offered the whole company but the code behind the button looked
+   the choice up in the person's own department, the answer was always
+   "Project not found" and Admin staff could not add a column at all. */
+function tsProjectPool() {
+  return inAdminDepartment() ? (allProjects||[]) : (projects||[]);
+}
+
 function populateTsColDropdown() {
   if(!currentUser || !tsData) return;
   const sel = document.getElementById('tsColSel');
   if(!sel) return;
   const uid = String(currentUser.id);
 
+  const pool = tsProjectPool();
+
   // My Projects: member of or created
-  const myProjects = (projects||[]).filter(p =>
+  const myProjects = pool.filter(p =>
     (p.members||[]).some(m => String(m.personId) === uid) ||
     String(p.creatorId) === uid
   ).filter(tsProjectSelectable);
 
   // All other active projects
-  const otherProjects = (projects||[]).filter(p =>
+  const otherProjects = pool.filter(p =>
     !myProjects.find(mp => mp.id === p.id)
   ).filter(tsProjectSelectable);
 
@@ -9711,8 +10024,8 @@ function tsAddColumn() {
   let col;
   if(val.startsWith('proj_')) {
     const pidStr=val.replace('proj_','');
-    const proj=projects.find(p=>String(p.id)===pidStr);
-    if(!proj){showToast('Project not found');return;}
+    const proj=tsProjectPool().find(p=>String(p.id)===pidStr);
+    if(!proj){showToast('That project is no longer on the list');return;}
     col={id:'col'+Date.now(),name:proj.name,type:'project',projectId:pidStr};
     // Optional: one specific deliverable inside that project.
     const dsel=document.getElementById('tsDelivSel');
@@ -9791,6 +10104,13 @@ function renderTsMatrix() {
   const rows=tsData.rows||{};
   const locked=tsData.locked||tsData.submitted;
 
+  /* Days before somebody's first day are not theirs to fill in. The rows stay
+     on the sheet so the month still reads as a month, but they are closed:
+     no boxes, no red "missing" dots, nothing to submit. */
+  const startsOn = (currentUser && currentUser.joinedDate) ? String(currentUser.joinedDate) : null;
+  const startLabel = startsOn && typeof fmtDateEU === 'function' ? fmtDateEU(startsOn) : startsOn;
+  const preStartMsg = startsOn ? `You joined on ${startLabel} — earlier days are not yours to fill in` : '';
+
   /* border-collapse:collapse drops a sticky cell's own borders once it detaches
      and floats, so the header's edges are drawn with inset shadows instead —
      those travel with the cell and stay visible the whole way down the month. */
@@ -9798,7 +10118,18 @@ function renderTsMatrix() {
   const tdStyle='padding:4px 6px;border:1px solid var(--border);text-align:center;';
 
   // Build header — always show Day + Date columns, then project columns, then Total
-  let html=`<table style="border-collapse:collapse;width:100%;font-size:12px">
+  const lastDayStr = month+'-'+String(daysInMonth).padStart(2,'0');
+  let html = '';
+  if(startsOn && startsOn > month+'-01') {
+    const whole = startsOn > lastDayStr;
+    html += `<div style="margin-bottom:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;
+      background:var(--surface2);font-size:12px;color:var(--text2);line-height:1.45">
+      ${whole
+        ? `You joined on <strong>${escapeHtml(String(startLabel))}</strong>, so there is nothing to log for this month.`
+        : `Days before <strong>${escapeHtml(String(startLabel))}</strong> are closed — you were not with the company yet.`}
+    </div>`;
+  }
+  html+=`<table style="border-collapse:collapse;width:100%;font-size:12px">
     <thead><tr>
       <th style="${thStyle};text-align:left;min-width:60px">Day</th>
       <th style="${thStyle};text-align:left;min-width:110px;left:0;z-index:6">Date</th>
@@ -9825,6 +10156,7 @@ function renderTsMatrix() {
     const dow=date.getDay();
     const isWeekend=dow===5||dow===6;
     const dateStr=month+'-'+String(d).padStart(2,'0');
+    const beforeStart=!!startsOn && dateStr < startsOn;
     const displayDate=String(d).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'/'+yr;
     const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const dayLabel=dayNames[dow];
@@ -9833,7 +10165,7 @@ function renderTsMatrix() {
     const isOverday=rowTotal>8;
     const today=new Date(); today.setHours(0,0,0,0);
     const rowDate=new Date(yr,mo-1,d);
-    const isMissing=cols.length>0&&TS_WORKDAYS.includes(dow)&&rowTotal===0&&rowDate<=today&&!locked&&!isPublicHoliday(dateStr);
+    const isMissing=cols.length>0&&TS_WORKDAYS.includes(dow)&&rowTotal===0&&rowDate<=today&&!locked&&!beforeStart&&!isPublicHoliday(dateStr);
     const bgRow=isWeekend?'background:#f5f3ef':'';
     const totalColor=isOverday?'color:var(--red);font-weight:700':rowTotal>0?'color:var(--green)':'color:var(--muted)';
 
@@ -9854,18 +10186,23 @@ function renderTsMatrix() {
     const holTag     = isHoliday
       ? ` <span title="${holidayName(dateStr)}" style="font-size:10px;background:var(--lv-holiday);color:var(--lv-holiday-ink);border-radius:4px;padding:1px 5px;font-weight:600;vertical-align:middle">🎉 ${holidayName(dateStr)}</span>`
       : '';
-    const rowBg = isWeekend ? '#efe9dd'
+    const rowBg = beforeStart ? '#f2efe9'
+                : isWeekend ? '#efe9dd'
                 : isHoliday ? 'var(--lv-holiday)'
                 : isWFH ? 'var(--lv-wfh)'
                 : isBusiness ? 'var(--lv-business)' : '';
 
-    html+=`<tr style="${rowBg ? 'background:'+rowBg : ''}">
-      <td style="${tdStyle};color:${isWeekend?'var(--muted)':'var(--text2)'};">${dayLabel}</td>
+    html+=`<tr style="${rowBg ? 'background:'+rowBg : ''}"${beforeStart?` title="${escapeAttr(preStartMsg)}"`:''}>
+      <td style="${tdStyle};color:${isWeekend||beforeStart?'var(--muted)':'var(--text2)'};">${dayLabel}</td>
       <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;z-index:3;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">
-        ${isMissing?'🔴 ':''}<span style="color:${isWeekend?'var(--muted)':'var(--text)'}">${displayDate}</span>${holTag}${leaveTag}
+        ${isMissing?'🔴 ':''}<span style="color:${isWeekend||beforeStart?'var(--muted)':'var(--text)'}">${displayDate}</span>${holTag}${leaveTag}
       </td>
       ${cols.map(c=>{
         const val=rowData[c.id]||'';
+        if(beforeStart) {
+          // Closed, whatever the column is — there is nothing to log here.
+          return `<td style="${tdStyle};color:var(--muted)">—</td>`;
+        }
         const isLeaveCol = c.type === 'leave' || c.type === 'sick' || c.type === 'business';
         const leaveBg = c.type === 'sick' ? 'var(--lv-sick)'
                       : c.type === 'business' ? 'var(--lv-business)' : 'var(--lv-annual)';
@@ -9983,6 +10320,15 @@ function sizeTsMatrixPane() {
 window.addEventListener('resize', sizeTsMatrixPane);
 
 function updateTsCell(dateStr, colId, val) {
+  /* The boxes are not drawn before somebody's first day, but a sheet left
+     open while Admin set the date would still have them. Refuse the write
+     rather than let an hour land on a day they were not here for. */
+  const startsOn = (currentUser && currentUser.joinedDate) ? String(currentUser.joinedDate) : null;
+  if(startsOn && dateStr < startsOn) {
+    showToast('That day is before your recruitment date');
+    renderTsMatrix();
+    return;
+  }
   if(!tsData.rows) tsData.rows={};
   if(!tsData.rows[dateStr]) tsData.rows[dateStr]={};
   const num=parseFloat(val)||0;
@@ -10230,7 +10576,7 @@ async function notifyTimesheet(stage, person, monthLabel, total, manager, ts) {
       try { await sendApprovalEmail(r.addr, r.name, person.name,
               `Timesheet approved: ${person.name} — ${monthLabel}`, body, approvalsUrl); } catch(e) {}
     }
-    try { addNotification(9998, 'timesheet_approved', { message: body }); } catch(e) {}
+    notifyOpsInApp('timesheet', 'timesheet_approved', { message: body });
   }
 }
 
@@ -10291,6 +10637,41 @@ function expectedHoursForMonth(month) {
    its full total paints every single person red on the 2nd, which taught
    everyone to ignore the colour. Against days actually elapsed, amber
    means amber. */
+/* Was this person at the company during the period at all? Someone who
+   started in October owes nothing for September, and counting them as
+   "not started" there made the chase list wrong and the reminder emails
+   embarrassing. Nobody with a blank joining date is ever excluded — an
+   unknown date means we cannot say they were absent. */
+function joinedDuring(person, months) {
+  const j = person && person.joinedDate;
+  if(!j) return true;
+  const last = months[months.length - 1];
+  const [y,m] = String(last).split('-').map(Number);
+  const endOfPeriod = `${last}-${String(new Date(y, m, 0).getDate()).padStart(2,'0')}`;
+  return String(j) <= endOfPeriod;
+}
+
+/* The hours a period asks of ONE person: the same working days as everyone
+   else, less anything before they arrived. Without this their first month
+   reads as "Well behind" for having started on the 20th. */
+function expectedHoursForPerson(person, months, toDate) {
+  const today = (typeof jordanTodayStr === 'function') ? jordanTodayStr()
+              : new Date().toISOString().slice(0,10);
+  const j = person && person.joinedDate ? String(person.joinedDate) : null;
+  let h = 0;
+  (months||[]).forEach(mo => {
+    const [y,m] = String(mo).split('-').map(Number);
+    const last  = new Date(y, m, 0).getDate();
+    let start = `${mo}-01`;
+    let end   = `${mo}-${String(last).padStart(2,'0')}`;
+    if(j && j > start) start = j;              // they were not here before this
+    if(toDate && today < end) end = today;     // and the month is not over
+    if(start > end) return;
+    h += workingDaysBetween(start, end) * WORK_DAY_HOURS;
+  });
+  return h;
+}
+
 function expectedHoursToDate(months) {
   const today = (typeof jordanTodayStr === 'function') ? jordanTodayStr()
               : new Date().toISOString().slice(0,10);
@@ -10334,7 +10715,8 @@ function renderTimesheetTable(months, rowsByPerson) {
   const single   = mths.length === 1;
   const expected = mths.reduce((s,mo) => s + expectedHoursForMonth(mo), 0);
   const soFar    = expectedHoursToDate(mths);
-  const staff    = (typeof hrStaff === 'function' ? hrStaff() : team).slice();
+  const staff    = (typeof hrStaff === 'function' ? hrStaff() : team).slice()
+                     .filter(p => joinedDuring(p, mths));
 
   /* Build every row first, then filter — the counts on the chips have to
      describe everyone, not just whoever survived the current filter. */
@@ -10344,7 +10726,12 @@ function renderTimesheetTable(months, rowsByPerson) {
     const state = single
       ? (!sheet ? 'none' : sheet.submitted ? 'submitted' : 'draft')
       : (d.submitted === 0 ? 'none' : d.submitted === mths.length ? 'submitted' : 'draft');
-    return { p, d, sheet, state, pace: tsPace(d.hours, soFar) };
+    // Measured against their own time at the company, not the whole month.
+    const mineExpected = expectedHoursForPerson(p, mths, false);
+    const mineSoFar    = expectedHoursForPerson(p, mths, true);
+    const joinedMidway = p.joinedDate && mineExpected < expected;
+    return { p, d, sheet, state, mineExpected, joinedMidway,
+             pace: tsPace(d.hours, mineSoFar) };
   });
 
   // Removed accounts still hold real hours and still export, so they stay.
@@ -10387,9 +10774,10 @@ function renderTimesheetTable(months, rowsByPerson) {
 
   /* A bar says "a third of the way" faster than the number does. It is
      capped at 100% so an over-logged month cannot run off the column. */
-  const bar = (hours) => {
-    const pct = expected ? Math.min(100, Math.round(hours / expected * 100)) : 0;
-    const col = hours === 0 ? 'var(--border)' : tsPace(hours, soFar).colour;
+  const bar = (hours, target, paceColour) => {
+    const cap = target || expected;
+    const pct = cap ? Math.min(100, Math.round(hours / cap * 100)) : 0;
+    const col = hours === 0 ? 'var(--border)' : paceColour;
     return `<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
       <span style="font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap">${hours ? hours.toLocaleString('en-US') : '—'}</span>
       <div style="width:70px;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;flex-shrink:0">
@@ -10413,7 +10801,7 @@ function renderTimesheetTable(months, rowsByPerson) {
       white-space:nowrap;position:sticky;top:0;z-index:2">${t}${active?' ↓':''}</th>`;
   };
 
-  const body = shown.map(({p,d,sheet,state,pace}) => {
+  const body = shown.map(({p,d,sheet,state,pace,mineExpected,joinedMidway}) => {
     const actions = single && sheet
       ? `${sheet.submitted ? `<button class="btn btn-sm btn-accent" style="font-size:11px" onclick="hrExportOne(${p.id},'${mths[0]}')">Export</button>` : ''}
          ${sheet.locked ? `<button class="btn btn-sm" style="font-size:11px;margin-left:4px" onclick="hrUnlockTimesheet(${p.id},'${mths[0]}')">Unlock</button>` : ''}`
@@ -10421,10 +10809,11 @@ function renderTimesheetTable(months, rowsByPerson) {
     const multiNote = single ? '' :
       `<div style="font-size:10px;color:var(--muted)">${d.submitted} of ${mths.length} months</div>`;
     return `<tr style="border-bottom:1px solid var(--border)${state==='none'?';color:var(--text2)':''}">
-      <td style="padding:8px 12px;font-weight:500;white-space:nowrap">${escapeHtml(p.name)}${multiNote}</td>
+      <td style="padding:8px 12px;font-weight:500;white-space:nowrap">${escapeHtml(p.name)}${multiNote}${
+        joinedMidway ? `<div style="font-size:10px;color:var(--muted)">recruited ${fmtDateEU(p.joinedDate)}</div>` : ''}</td>
       <td style="padding:8px 12px;color:var(--text2);white-space:nowrap;width:1%">${escapeHtml(deptShort(personDept(p)))}</td>
       <td style="padding:8px 12px;white-space:nowrap;width:1%">${pill(state)}</td>
-      <td style="padding:8px 12px;text-align:right">${bar(d.hours)}</td>
+      <td style="padding:8px 12px;text-align:right">${bar(d.hours, mineExpected, pace.colour)}</td>
       <td style="padding:8px 12px;white-space:nowrap;color:${pace.colour};font-weight:600;font-size:12px"
           title="${pace.pct===null?'':pace.pct+'% of the '+soFar+' h expected by today'}">${pace.label}</td>
       <td style="padding:6px 12px;text-align:right;white-space:nowrap">${actions}</td>
@@ -10640,7 +11029,9 @@ function buildRangeOverviewSheet(sheets, staff, months) {
   ];
 
   const colTotals = months.map(() => 0);
-  staff.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(p => {
+  staff.slice()
+       .filter(p => typeof joinedDuring !== 'function' || joinedDuring(p, months))
+       .sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(p => {
     const vals = months.map((m,i) => {
       const v = byKey[String(p.id) + '|' + m] || 0;
       colTotals[i] += v;
@@ -11065,7 +11456,9 @@ function buildTsSummarySheet(sheets, teamArr, month) {
     header
   ];
 
-  teamArr.forEach(p=>{
+  // People who joined after this month are left off entirely, rather than
+  // listed as "Not started" for a month they were not here for.
+  teamArr.filter(p => typeof joinedDuring !== 'function' || joinedDuring(p, [month])).forEach(p=>{
     const s=sheets.find(x=>String(x.person_id)===String(p.id));
     const colTotals=colNames.map(cn=>{
       if(!s) return 0;
@@ -12405,6 +12798,8 @@ async function loadAllData() {
       customDepartments = Array.isArray(dp)
         ? dp.filter(d => d && d.id && d.name && !BUILT_IN_DEPARTMENTS.some(b => b.id === d.id))
         : [];
+      const ov = appSettings.dept_overrides;
+      deptOverrides = (ov && typeof ov === 'object' && !Array.isArray(ov)) ? ov : {};
     } else if(setRes.error) {
       console.warn('settings load failed:', setRes.error.message || setRes.error);
     }
@@ -12423,6 +12818,9 @@ async function loadAllData() {
         role: r.role || 'consultant',
         email: r.email || '',
         managerId: r.manager_id || null,
+        opsAdmin: !!r.is_ops_admin,
+        notifyPrefs: (r.notify_prefs && typeof r.notify_prefs === 'object') ? r.notify_prefs : null,
+        joinedDate: r.joined_date || null,
         department: r.department || DEFAULT_DEPT
       }));
       applyDeptScope();
@@ -12580,7 +12978,7 @@ async function loadAllData() {
 
 // ── SAVE helpers (called after each mutation) ────────────────────
 async function saveProject(projObj) {
-  await sb.from('projects').upsert({
+  const { error } = await sb.from('projects').upsert({
     id: projObj.id, name: projObj.name, client: projObj.client||'',
     start_date: projObj.start, end_date: projObj.end,
     creator_id: projObj.creatorId, notes: projObj.notes||'',
@@ -12591,6 +12989,15 @@ async function saveProject(projObj) {
     budget: (projObj.budget === '' || projObj.budget === undefined || projObj.budget === null)
               ? null : Number(projObj.budget)
   });
+  if(error) {
+    console.error('saveProject error:', error);
+    const msg = error.message || '';
+    showToast(/null value in column/i.test(msg)
+      ? '⚠ Not saved — the database still requires a start and end date. Run step16-proposals-without-dates.sql in Supabase.'
+      : '⚠ "' + (projObj.name||'Project') + '" did NOT save — ' + (msg || 'check Supabase'), 9000);
+    return false;
+  }
+  return true;
 }
 async function deleteProjectFromDB(id) {
   await sb.from('projects').delete().eq('id', id);
@@ -12618,14 +13025,21 @@ async function saveTeamMember(p) {
     id:p.id, name:p.name, title:p.title, dept:p.dept,
     ci: ci>=0 ? ci : 0, role: p.role||'consultant',
     email: p.email||'', manager_id: p.managerId||null,
+    is_ops_admin: !!p.opsAdmin,
+    joined_date: p.joinedDate || null,
     department: p.department || DEFAULT_DEPT
   });
   if(error) {
     console.error('saveTeamMember error:', error);
-    const missingCol = /column .*department/i.test(error.message || '');
-    showToast(missingCol
-      ? '⚠ Save failed — the department column does not exist yet. Run step1-departments.sql in Supabase.'
-      : '⚠ Save failed — check Supabase RLS policies', 8000);
+    const msg = error.message || '';
+    const col = (msg.match(/column ["']?([a-z_]+)["']?/i) || [])[1];
+    const step = { department:'step1-departments.sql',
+                   is_ops_admin:'step14-ops-admin-on-people.sql',
+                   notify_prefs:'step15-personal-notification-settings.sql',
+                   joined_date:'step17-recruitment-date.sql' }[col];
+    showToast(col
+      ? `⚠ Save failed — the "${col}" column does not exist yet.${step ? ' Run ' + step + ' in Supabase.' : ''}`
+      : '⚠ Save failed — ' + (msg || 'check Supabase RLS policies'), 9000);
   }
 }
 async function deleteTeamMemberFromDB(id) {
@@ -12773,7 +13187,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-04-v93 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-05-v107 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
