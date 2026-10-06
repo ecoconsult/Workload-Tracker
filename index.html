@@ -229,7 +229,7 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
    work, then the money. */
 /* The header row stays put under the navigation bar while you scroll the list,
    so you never lose which column is which. */
-#projTable thead th { position:sticky;top:var(--sticky-tabs);z-index:6;
+#projTable thead th, #propTable thead th { position:sticky;top:var(--sticky-tabs);z-index:6;
   background:var(--surface2);box-shadow:inset 0 -1px 0 var(--border); }
 
 /* Every other row is tinted. Thirty identical white lines were the reason the
@@ -271,8 +271,10 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .proj-row.is-open > td:first-child { box-shadow:inset 3px 0 0 var(--green); }
 .proj-detail > td { background:var(--surface2);border-bottom:2px solid var(--text2);
   box-shadow:inset 3px 0 0 var(--green); }
+/* Both Projects and Proposals are tables now; the card styles below are kept
+   only for the few places that still draw a card (the day modal, Capacity
+   Finder) and for anything older that references them. */
 .proj-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:start; }
-/* .proj-grid and .proj-card are the Proposals page now — Projects is a table. */
 .proj-card {background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);position:relative; }
 .proj-card-top { display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px; }
 .proj-name { font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:2px; }
@@ -887,10 +889,14 @@ select option{background:#fff}
         </div>
         <input type="text" id="propSearch" oninput="renderProposals()" placeholder="Search proposals…"
           style="width:180px;padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+        <button class="btn btn-sm" id="propExpandBtn" onclick="toggleAllPropCards()" style="font-size:11px;white-space:nowrap">Expand all</button>
       </div>
       <button class="btn btn-primary" id="propNewBtn" onclick="openOpsNewItem(true)" style="display:none">+ New Proposal</button>
     </div>
-    <div class="proj-grid" id="propGrid"></div>
+    <!-- Same shape as Projects: a row each, opening in place. -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:clip;box-shadow:var(--shadow)">
+      <table id="propTable" style="width:100%;border-collapse:collapse;font-size:12.5px"></table>
+    </div>
   </div>
 
   <div id="view-mywork" class="hidden">
@@ -8454,8 +8460,8 @@ function setPropFilter(f) {
 }
 
 function renderProposals() {
-  const grid = document.getElementById('propGrid');
-  if(!grid) return;
+  const table = document.getElementById('propTable');
+  if(!table) return;
   const uid = currentUser ? currentUser.id : null;
   const pool = projects.filter(p => p.isProposal);
   const active = pool.filter(p => !p.archived);
@@ -8476,11 +8482,45 @@ function renderProposals() {
   if(!filtered.length) {
     const msgs = { mine:'No proposals assigned to you yet.', all:'No open proposals yet.',
                    unassigned:'Nothing waiting to be assigned.', archive:'No closed proposals yet.' };
-    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:46px 20px;color:var(--muted);font-size:13px">${msgs[propFilter]||'Nothing here yet.'}</div>`;
+    table.innerHTML = `<tr><td style="padding:34px;text-align:center;color:var(--muted);font-size:13px">${msgs[propFilter]||'Nothing here yet.'}</td></tr>`;
+    syncPropExpandBtn();
     return;
   }
 
-  grid.innerHTML = sortedProjects(filtered).map(p => proposalCard(p)).join('');
+  const th = (label, align) => `<th style="text-align:${align||'left'};padding:8px 14px;font-size:10.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap">${label}</th>`;
+  const showBudget = sortedProjects(filtered).some(canSeeBudget);
+  table.innerHTML = `<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+      ${th('Proposal')}${th('Lead')}${th('Team','center')}${showBudget?th('Budget','right'):''}${th('Status','right')}
+    </tr></thead><tbody>`
+    + sortedProjects(filtered).map(p => proposalRow(p, showBudget ? 5 : 4, showBudget)).join('')
+    + `</tbody>`;
+  syncPropExpandBtn();
+}
+
+/* Proposals open and close exactly like projects — same state, same buttons. */
+let propAutoOpen = false;
+const propCardState = new Map();
+function isPropOpen(id) {
+  const v = propCardState.get(String(id));
+  return v === undefined ? !!propAutoOpen : v;
+}
+function togglePropCard(id) {
+  propCardState.set(String(id), !isPropOpen(id));
+  renderProposals();
+}
+function toggleAllPropCards() {
+  const rows = [...document.querySelectorAll('#propTable .proj-row')];
+  const anyClosed = rows.some(r => !isPropOpen(r.id.replace('propRow_','')));
+  rows.forEach(r => propCardState.set(String(r.id.replace('propRow_','')), anyClosed));
+  propAutoOpen = anyClosed;
+  renderProposals();
+}
+function syncPropExpandBtn() {
+  const btn = document.getElementById('propExpandBtn');
+  if(!btn) return;
+  const rows = [...document.querySelectorAll('#propTable .proj-row')];
+  btn.style.display = rows.length ? '' : 'none';
+  btn.textContent = rows.some(r => !isPropOpen(r.id.replace('propRow_',''))) ? 'Expand all' : 'Collapse all';
 }
 
 
@@ -8573,69 +8613,88 @@ function resetAmountCurrency(fieldId) {
   setAmountCurrency(fieldId, 'jod');
 }
 
-function proposalCard(p) {
+function proposalRow(p, COLS, showBudget) {
   const pm = personById(p.creatorId);
   /* Proposals carry no dates. Whether it has gone out is the only state that
      matters, and that is a yes/no, not a deadline. */
   const submitted = !!p.proposalSubmitted;
-  const daysLeft = null;
-  const due = '—';
-  const dueColour = submitted ? 'var(--green)'
-                  : daysLeft === null ? 'var(--muted)'
-                  : daysLeft < 0  ? 'var(--red)'
-                  : daysLeft <= 7 ? 'var(--orange)' : 'var(--text2)';
-  const dueNote = submitted ? ' · submitted'
-                  : daysLeft === null ? '' : daysLeft < 0 ? ' · overdue'
-                  : daysLeft === 0 ? ' · due today' : ` · ${daysLeft} days left`;
+  const open = isPropOpen(p.id);
+  const stateColour = p.archived ? 'var(--muted)' : submitted ? 'var(--green)' : 'var(--orange)';
+  const stateText   = p.archived ? 'Closed' : submitted ? 'Submitted' : 'In preparation';
 
   const members = (p.members||[]).map(m => {
     const person = personById(m.personId);
     if(!person) return '';
-    return `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 9px 2px 3px;font-size:11px;margin:2px 3px 2px 0">
-      <span style="width:19px;height:19px;border-radius:50%;background:${person.c.bg};color:${person.c.fg};display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">${initials(person.name)}</span>
-      ${person.name.split(' ')[0]} · ${m.allocation}%</span>`;
+    return `<span class="proj-member-pill">
+      <span class="avatar" style="width:20px;height:20px;font-size:9px;background:${person.c.bg};color:${person.c.fg}">${initials(person.name)}</span>
+      ${escapeHtml(person.name.split(' ')[0])} <span style="color:var(--muted);font-size:10px">${m.allocation}%</span></span>`;
   }).join('');
 
   const canEdit = currentUser && (String(p.creatorId) === String(currentUser.id) || isAdmin());
+  const sect = (label, cls) => `<div class="proj-sect${cls?' '+cls:''}">${label}</div>`;
 
-  return `<div class="proj-card">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-      <div style="min-width:0">
-        <div style="font-family:'Fraunces',serif;font-size:16px;font-weight:700;line-height:1.3">${p.name}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">${p.client || 'No client'}</div>
+  let out = `<tr class="adm-row proj-row${open?' is-open':''}" id="propRow_${p.id}" onclick="togglePropCard(${p.id})"
+      style="cursor:pointer">
+    <td style="padding:11px 14px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-weight:600;font-size:13px">${open?'▾':'▸'} ${escapeHtml(p.name)}</span>
+        <span style="background:#efeafb;color:#6b3fa0;font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px">Proposal</span>
+        ${open && canEdit ? `<span style="display:inline-flex;gap:5px;flex-wrap:wrap" onclick="event.stopPropagation()">
+          <button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px" onclick="openEditProject(${p.id})">✎ Edit</button>
+          ${p.archived
+            ? `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px;background:#f0ede9;color:var(--muted)" onclick="unarchiveProject(${p.id})">↩ Reopen</button>`
+            : `${submitted
+                  ? `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px;background:#f0ede9;color:var(--muted)" onclick="toggleProposalSubmitted(${p.id}, false)">↩ Not submitted</button>`
+                  : `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px" onclick="toggleProposalSubmitted(${p.id}, true)">📤 Submitted</button>`}
+               <button class="btn btn-sm btn-primary" style="font-size:10.5px;padding:2px 8px" onclick="markProposalWon(${p.id})" title="Won — move this into Projects">🏆 Won</button>
+               <button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px;background:#f0ede9;color:var(--muted)" onclick="markProposalLost(${p.id})">Lost</button>`}
+          <button class="btn btn-sm btn-danger" style="font-size:10.5px;padding:2px 8px" onclick="deleteProject(${p.id})">Remove</button>
+        </span>` : ''}
       </div>
-      <span style="background:#efeafb;color:#6b3fa0;font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px;white-space:nowrap;text-transform:uppercase;letter-spacing:0.4px">Proposal</span>
-    </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:1px;padding-left:14px">${escapeHtml(p.client || 'No client')}</div>
+    </td>
+    <td style="padding:11px 14px;color:var(--text2);white-space:nowrap">
+      ${pm
+        ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="avatar" style="background:${pm.c.bg};color:${pm.c.fg};width:19px;height:19px;font-size:8px">${initials(pm.name)}</span>${escapeHtml(pm.name)}</span>`
+        : `<span style="color:var(--orange);font-weight:600">No lead yet</span>
+           ${canAssignPM(p)?`<button onclick="event.stopPropagation();openAssignPM(${p.id})" style="font-size:10px;background:var(--green);border:none;border-radius:5px;padding:3px 9px;cursor:pointer;color:#fff;font-weight:600;margin-left:6px">Assign</button>`:''}`}
+    </td>
+    <td style="padding:11px 14px;text-align:center;color:var(--text2);white-space:nowrap">
+      ${(p.members||[]).length || '<span style="color:var(--muted)">—</span>'}
+    </td>
+    ${showBudget ? `<td style="padding:11px 14px;text-align:right;white-space:nowrap;font-weight:600">
+      ${canSeeBudget(p) ? (p.budget ? fmtMoney(p.budget) : '<span style="color:var(--muted);font-weight:400">—</span>')
+                        : '<span style="color:var(--muted);font-weight:400" title="Only the lead and Admin see a proposal budget">🔒</span>'}
+    </td>` : ''}
+    <td style="padding:11px 14px;text-align:right;white-space:nowrap;font-weight:600;color:${stateColour}">${stateText}</td>
+  </tr>`;
 
-    <div style="margin-top:12px;display:flex;gap:18px;flex-wrap:wrap;font-size:12px">
-      <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">Lead</div>
-        <div style="margin-top:2px">${pm ? pm.name : `<span style="color:var(--orange);font-weight:600">Unassigned</span>${canAssignPM(p) ? ` <button onclick="openAssignPM(${p.id})" style="font-size:10px;background:var(--green);border:none;border-radius:5px;padding:2px 8px;cursor:pointer;color:#fff;font-weight:600;margin-left:4px">Assign PM</button>` : ''}`}</div></div>
-      <div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">Status</div>
-        <div style="margin-top:2px;color:${dueColour};font-weight:600">${submitted ? 'Submitted' : 'In preparation'}</div></div>
-      ${canSeeBudget(p) ? `<div><div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">🔒 Budget</div>
-        <div style="margin-top:2px;font-weight:600">${p.budget ? fmtMoney(p.budget) : '—'}</div></div>` : ''}
-    </div>
+  if(!open) return out;
 
-    ${members ? `<div style="margin-top:12px">
-      <div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Team</div>
-      ${members}</div>` : ''}
-
-    ${p.notes ? `<div style="margin-top:12px;font-size:12px;color:var(--text2);line-height:1.6">${p.notes}</div>` : ''}
-
-    ${canEdit ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit</button>
-      ${pm && (String(p.creatorId)===String(currentUser.id) || isAdmin())
-        ? `<button class="btn btn-sm" onclick="changePM(${p.id})">Change lead</button>` : ''}
-      ${p.archived
-        ? `<button class="btn btn-sm" onclick="unarchiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">↩ Reopen</button>`
-        : `${p.proposalSubmitted
-              ? `<button class="btn btn-sm" onclick="toggleProposalSubmitted(${p.id}, false)" style="background:#f0ede9;color:var(--muted)">↩ Not submitted</button>`
-              : `<button class="btn btn-sm" onclick="toggleProposalSubmitted(${p.id}, true)">📤 Mark as Submitted</button>`}
-           <button class="btn btn-sm btn-primary" onclick="markProposalWon(${p.id})" title="Won — move this into Projects">🏆 Mark as Won</button>
-           <button class="btn btn-sm" onclick="markProposalLost(${p.id})" style="background:#f0ede9;color:var(--muted)">Lost / Archive</button>`}
-      <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id})">Remove</button>
-    </div>` : ''}
-  </div>`;
+  out += `<tr class="proj-detail" id="propDetail_${p.id}"><td colspan="${COLS}" style="padding:0 16px 16px">
+      <div class="proj-facts">
+        <div style="min-width:150px">
+          <div class="proj-fact-label">Status</div>
+          <div style="font-weight:600;color:${stateColour}">${stateText}</div>
+        </div>
+        ${canSeeBudget(p) ? `<div style="min-width:140px">
+          <div class="proj-fact-label">🔒 Budget</div>
+          <div style="font-weight:600">${p.budget ? fmtMoney(p.budget) : '—'}</div>
+        </div>` : ''}
+        <div style="flex:1;min-width:200px">
+          <div class="proj-fact-label">Team</div>
+          <div class="proj-team" style="margin:0">${members || '<span style="color:var(--muted);font-size:11px">Nobody on it yet</span>'}</div>
+        </div>
+        ${p.notes?`<div style="flex:1;min-width:200px">
+          <div class="proj-fact-label">Notes</div>
+          <div style="font-size:11.5px;color:var(--text2);line-height:1.5">${p.notes}</div>
+        </div>`:''}
+      </div>
+      ${!canEdit ? `<div style="font-size:11px;color:var(--muted);padding:10px 2px 2px">
+        Read-only — ${pm ? escapeHtml(pm.name.split(' ')[0]) + ' leads this proposal' : 'this proposal has no lead yet'}.
+      </div>` : ''}
+    </td></tr>`;
+  return out;
 }
 
 /* A won proposal becomes a project, keeping its team, dates and history. */
@@ -13899,7 +13958,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-06-v122 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-06-v123 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
