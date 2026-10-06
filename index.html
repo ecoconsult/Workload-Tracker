@@ -224,8 +224,56 @@ body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text)
 .add-row:hover{color:var(--green)}
 
 /* PROJECTS VIEW */
-.proj-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px; }
-.proj-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);position:relative; }
+/* Projects are one row each, like the Finance list. Opening one gives it the
+   whole width and it reads top to bottom: the facts on one line, then the
+   work, then the money. */
+/* The header row stays put under the navigation bar while you scroll the list,
+   so you never lose which column is which. */
+#projTable thead th { position:sticky;top:var(--sticky-tabs);z-index:6;
+  background:var(--surface2);box-shadow:inset 0 -1px 0 var(--border); }
+
+/* Every other row is tinted. Thirty identical white lines were the reason the
+   list read as one undifferentiated block. */
+.proj-row:nth-of-type(even) > td { background:#fbfaf7; }
+.proj-row:hover > td { background:#f3efe7; }
+
+/* The facts sit on their own panel, divided into cells, so the team pills are
+   anchored to something instead of floating in the middle of the page. */
+.proj-facts { display:flex;flex-wrap:wrap;align-items:stretch;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  margin:12px 0 0;font-size:12px;color:var(--text2);overflow:hidden; }
+.proj-facts > div { padding:9px 14px;border-right:1px solid var(--border); }
+.proj-facts > div:last-child { border-right:none; }
+.proj-fact-label { font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px; }
+
+/* Work on the left, money on the right — the two things a PM opens a project
+   to look at, side by side instead of one under the other. */
+.proj-work { display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start;margin-top:12px; }
+.proj-work.no-billing { grid-template-columns:1fr; }
+@media (max-width: 1000px) { .proj-work { grid-template-columns:1fr; } }
+.proj-panel { background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px; }
+/* A section label with a coloured tick in front of it, so the eye has
+   something to land on besides more grey capitals. */
+.proj-sect { font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;
+  margin:0 0 8px;display:flex;align-items:center;gap:7px; }
+.proj-sect::before { content:'';width:3px;height:12px;border-radius:2px;background:var(--green);flex-shrink:0; }
+.proj-sect.money::before { background:var(--blue); }
+/* Deliverables are a list, one under the next — they are a sequence of work,
+   and side by side they stopped reading in order. */
+.proj-deliv-list { display:flex;flex-direction:column;gap:4px; }
+
+/* Where one project ends and the next begins. A closed row is separated by a
+   hairline; the open one is lifted out with a heavier rule top and bottom and
+   a coloured edge down its left, so it reads as one block rather than
+   blending into its neighbours. */
+.proj-row > td { border-top:1px solid var(--border); }
+.proj-row.is-open > td { background:var(--surface2);border-top:2px solid var(--text2); }
+.proj-row.is-open > td:first-child { box-shadow:inset 3px 0 0 var(--green); }
+.proj-detail > td { background:var(--surface2);border-bottom:2px solid var(--text2);
+  box-shadow:inset 3px 0 0 var(--green); }
+.proj-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:start; }
+/* .proj-grid and .proj-card are the Proposals page now — Projects is a table. */
+.proj-card {background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);position:relative; }
 .proj-card-top { display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px; }
 .proj-name { font-family:'Fraunces',serif;font-size:16px;font-weight:700;margin-bottom:2px; }
 .proj-client { font-size:11px;color:var(--muted); }
@@ -624,8 +672,26 @@ select option{background:#fff}
       </div>
     </div>
     <div class="field"><label>Notes</label><textarea id="epNotes" rows="2"></textarea></div>
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px">Team Allocations</div>
+    <div class="field" id="epPMWrap">
+      <label>Project manager</label>
+      <select id="epPM" onchange="renderEpMembers()"></select>
+      <div id="epPMNote" style="font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.45"></div>
+    </div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px">Team</div>
+      <div id="epTeamTotal" style="font-size:11px;color:var(--muted)"></div>
+    </div>
     <div id="epMembersWrap"></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:8px;padding:9px 10px;border:1px dashed var(--border);border-radius:9px">
+      <select id="epAddPerson" style="flex:1;min-width:0;padding:6px 9px;font-size:12.5px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)"></select>
+      <input type="number" id="epAddAlloc" min="0" max="100" step="1" value="50"
+        style="width:62px;text-align:center;padding:6px 8px;font-size:12.5px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+      <span style="font-size:11px;color:var(--muted)">%</span>
+      <button class="btn btn-sm" id="epAddBtn" onclick="epAddMember()" style="flex-shrink:0">＋ Add</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--muted);margin-top:6px;line-height:1.45">
+      Allocation is this person's share of a full week on this project — any whole number, not just fives. Changes apply when you save.
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('editProjModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveEditProject()">Save Changes</button>
@@ -796,10 +862,17 @@ select option{background:#fff}
         </div>
         <input type="text" id="projSearch" oninput="renderProjects()" placeholder="Search projects…"
           style="width:180px;padding:5px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+        <button class="btn btn-sm" id="projExpandBtn" onclick="toggleAllProjCards()" style="font-size:11px;white-space:nowrap">Expand all</button>
       </div>
       <button class="btn btn-primary" id="projNewBtn" onclick="openOpsNewItem(false)" style="display:none">+ New Project</button>
     </div>
-    <div class="proj-grid" id="projGrid"></div>
+    <!-- One row per project, the same shape the Finance page uses. Clicking a
+         row opens the project underneath it, full width. -->
+    <!-- overflow:clip rounds the corners WITHOUT making a scroll container,
+         which is what lets the header row below stay frozen to the window. -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:clip;box-shadow:var(--shadow)">
+      <table id="projTable" style="width:100%;border-collapse:collapse;font-size:12.5px"></table>
+    </div>
   </div>
 
   <div id="view-proposals" class="hidden">
@@ -1639,28 +1712,8 @@ select option{background:#fff}
   </div>
 </div>
 
-<!-- ADD PROJECT MODAL -->
-<!-- ADD MEMBER TO PROJECT MODAL -->
-<div class="overlay" id="addProjMemberModal">
-  <div class="modal" style="width:420px">
-    <button class="modal-close" onclick="closeModal('addProjMemberModal')">×</button>
-    <h2>Assign Team Member</h2>
-    <p class="modal-sub" id="assignProjLabel"></p>
-    <div class="field"><label>Team Member</label><select id="assignPerson"></select></div>
-    <div class="field">
-      <label>Their allocation to this project (%)</label>
-      <div class="slider-row">
-        <input type="range" min="5" max="100" step="5" value="50" id="assignAlloc" oninput="document.getElementById('assignAllocVal').textContent=this.value+'%'">
-        <span class="slider-val" id="assignAllocVal">50%</span>
-      </div>
-    </div>
-    <div class="info-box" id="allocWarning" style="display:none"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('addProjMemberModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveAssignment()">Assign</button>
-    </div>
-  </div>
-</div>
+<!-- The separate "assign a member" window is gone: the team is edited inside
+     Edit Project, alongside everything else about the project. -->
 
 <!-- ADD MEMBER MODAL -->
 <div class="overlay" id="addMemberModal">
@@ -2666,14 +2719,24 @@ function renderProjects() {
   if(q) filtered = filtered.filter(p =>
     (p.name||'').toLowerCase().includes(q) || (p.client||'').toLowerCase().includes(q));
 
+  const table = document.getElementById('projTable');
+  if(!table) return;
+
   if(!filtered.length) {
     const msgs = { mine:'No projects assigned to you yet.', all:'No ongoing projects yet.',
                    unassigned:'Nothing waiting to be assigned.', archive:'No completed projects yet.' };
-    document.getElementById('projGrid').innerHTML =
-      `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:14px">${msgs[projFilter]||'No projects.'}</div>`;
+    table.innerHTML =
+      `<tr><td style="padding:34px;text-align:center;color:var(--muted);font-size:13px">${msgs[projFilter]||'No projects.'}</td></tr>`;
+    syncProjExpandBtn();
     return;
   }
-  document.getElementById('projGrid').innerHTML = sortedProjects(filtered).map(p=>{
+
+  const COLS = 5;
+  const th = (label, align) => `<th style="text-align:${align||'left'};padding:8px 14px;font-size:10.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap">${label}</th>`;
+  const ordered = sortedProjects(filtered);
+  table.innerHTML = `<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+      ${th('Project')}${th('Manager')}${th('Team','center')}${th('Deliverables','center')}${th('Next due','right')}
+    </tr></thead><tbody>` + ordered.map(p=>{
     const activeMembers = p.members.filter(m=>m.allocation>0);
     const totalAlloc = activeMembers.reduce((s,m)=>s+m.allocation,0);
     const completedDelivs = (p.deliverables||[]).filter(d=>d.completed).length;
@@ -2695,8 +2758,13 @@ function renderProjects() {
     p.members.forEach(m=>{
       if(m.allocation > 100) dataWarnings.push(`⚠ ${personById(m.personId)?.name.split(' ')[0]||'Member'} allocation exceeds 100%`);
     });
+    /* One line that opens, rather than a wall of red. Four bad dates used to
+       push the project's own name off the top of the card. */
     const warningBanner = dataWarnings.length
-      ? `<div style="background:#fff0f0;border:1px solid #f5a9a3;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--red);line-height:1.6">${dataWarnings.join('<br>')}</div>`
+      ? `<details style="background:#fff0f0;border:1px solid #f5a9a3;border-radius:8px;padding:7px 11px;margin-bottom:12px;font-size:11px;color:var(--red);line-height:1.6">
+           <summary style="cursor:pointer;font-weight:600;list-style:none">⚠ ${dataWarnings.length} thing${dataWarnings.length===1?'':'s'} to check</summary>
+           <div style="margin-top:5px;font-weight:400">${dataWarnings.join('<br>')}</div>
+         </details>`
       : '';
 
     const memberPills = p.members.map(m=>{
@@ -2746,61 +2814,140 @@ function renderProjects() {
       </div>`;
     }).join('');
 
-    return `<div class="proj-card">
-      ${warningBanner}
-      <div class="proj-card-top">
-        <div style="flex:1;min-width:0">
-          <div class="proj-name">${p.name}${(canSeeFinance(p)&&projectFinanceSnapshot(p.id).hasPending)?' <span title="Finance action pending" style="font-size:11px">💰</span>':''}</div>
-          <div class="proj-client" style="margin-bottom:6px">${p.client}</div>
-          <div style="display:flex;align-items:center;gap:6px">
-            ${pmPerson
-              ? `<div class="avatar" style="background:${pmPerson.c.bg};color:${pmPerson.c.fg};width:20px;height:20px;font-size:9px">${initials(pmPerson.name)}</div>
-                 <span style="font-size:11px;color:var(--text2);font-weight:500">${pmPerson.name}</span>
-                 <span class="pm-badge">Project Manager</span>
-                 ${String(p.creatorId)===String(currentUser.id)?`<span style="font-size:10px;color:var(--green);font-weight:600">✓ Your project</span>`:''}
-                 ${(String(p.creatorId)===String(currentUser.id) || isAdmin())?`<button onclick="event.stopPropagation();changePM(${p.id})" style="font-size:10px;background:none;border:1px solid var(--border);border-radius:5px;padding:2px 7px;cursor:pointer;color:var(--muted);margin-left:4px" onmouseenter="this.style.borderColor='var(--green)';this.style.color='var(--green)'" onmouseleave="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Change PM</button>`:''}`
-              : `<span style="font-size:11px;color:var(--orange);font-weight:600">Unassigned</span>
-                 ${canAssignPM(p)?`<button onclick="event.stopPropagation();openAssignPM(${p.id})" style="font-size:10px;background:var(--green);border:none;border-radius:5px;padding:3px 9px;cursor:pointer;color:#fff;font-weight:600;margin-left:4px">Assign PM</button>`:''}`}
+    const open = isProjCardOpen(p.id);
+    const dueLabel = earliestDate ? daysUntil(earliestDate) : '';
+    const dueColour = !earliestDate ? 'var(--muted)'
+      : dueLabel === 'Overdue' ? 'var(--red)'
+      : parseInt(dueLabel) < 14 ? 'var(--orange)' : 'var(--text2)';
+    const money = (canSeeFinance(p) && projectFinanceSnapshot(p.id).hasPending)
+      ? ' <span title="Finance action pending" style="font-size:11px">💰</span>' : '';
+
+    /* The row carries what you scan a list of projects for — who runs it, how
+       many people, how much is done, what is due next. The project itself
+       opens underneath, full width. */
+    const people = activeMembers.length || p.members.length;
+    let out = `<tr class="adm-row proj-row${open?' is-open':''}" id="projRow_${p.id}" onclick="toggleProjCard(${p.id})"
+        style="cursor:pointer">
+      <td style="padding:11px 14px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:13px">${open?'▾':'▸'} ${escapeHtml(p.name)}${money}${dataWarnings.length?` <span title="${escapeAttr(dataWarnings.length + ' thing' + (dataWarnings.length===1?'':'s') + ' to check')}" style="font-size:10px;color:var(--red)">⚠</span>`:''}</span>
+          ${statusBadge(p)}
+          ${open && isMyProject ? `<span style="display:inline-flex;gap:5px" onclick="event.stopPropagation()">
+            <button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px" onclick="openEditProject(${p.id})">✎ Edit</button>
+            ${!p.archived && (String(p.creatorId)===String(currentUser.id) || isAdmin() || isOpsAdmin())
+              ? `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px" onclick="markProjectComplete(${p.id})">✓ Complete</button>` : ''}
+            ${p.archived ? `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px;background:#f0ede9;color:var(--muted)" onclick="unarchiveProject(${p.id})">↩ Reopen</button>` : ''}
+            ${isAdmin() && !p.isProposal ? `<button class="btn btn-sm" style="font-size:10.5px;padding:2px 8px" onclick="convertProjectToProposal(${p.id})" title="Reclassify as a proposal">→ Proposal</button>` : ''}
+            <button class="btn btn-sm btn-danger" style="font-size:10.5px;padding:2px 8px" onclick="deleteProject(${p.id})">Remove</button>
+          </span>` : ''}
+        </div>
+        ${p.client?`<div style="font-size:11px;color:var(--muted);margin-top:1px;padding-left:14px">${escapeHtml(p.client)}</div>`:''}
+      </td>
+      <td style="padding:11px 14px;color:var(--text2);white-space:nowrap">
+        ${pmPerson
+          ? `<span style="display:inline-flex;align-items:center;gap:6px"><div class="avatar" style="background:${pmPerson.c.bg};color:${pmPerson.c.fg};width:19px;height:19px;font-size:8px">${initials(pmPerson.name)}</div>${escapeHtml(pmPerson.name)}</span>`
+          : `<span style="color:var(--orange);font-weight:600">No manager yet</span>
+             ${canAssignPM(p)?`<button onclick="event.stopPropagation();openAssignPM(${p.id})" style="font-size:10px;background:var(--green);border:none;border-radius:5px;padding:3px 9px;cursor:pointer;color:#fff;font-weight:600;margin-left:6px">Assign</button>`:''}`}
+      </td>
+      <td style="padding:11px 14px;text-align:center;color:var(--text2);white-space:nowrap">
+        ${people}${totalAlloc?` <span style="color:var(--muted);font-size:11px">· ${totalAlloc}%</span>`:''}
+      </td>
+      <td style="padding:11px 14px;text-align:center;white-space:nowrap">
+        ${totalDelivs
+          ? `<strong>${completedDelivs}</strong><span style="color:var(--muted)">/${totalDelivs}</span>`
+          : `<span style="color:var(--muted)">—</span>`}
+      </td>
+      <td style="padding:11px 14px;text-align:right;white-space:nowrap;font-weight:600;color:${dueColour}">
+        ${earliestDate ? dueLabel : '<span style="color:var(--muted);font-weight:400">—</span>'}
+      </td>
+    </tr>`;
+    if(!open) return out;
+
+    /* Open, the project reads top to bottom at full width: the facts on one
+       line, then the work, then the money. Two columns stranded a screenful of
+       empty space whenever one side was shorter than the other. */
+    const sect = (label, cls) => `<div class="proj-sect${cls?' '+cls:''}">${label}</div>`;
+    // Billing only exists for people who may see it; without it the work gets
+    // the full width rather than sitting next to an empty half.
+    const billing = renderProjectBilling(p, true);
+    out += `<tr class="proj-detail" id="projDetail_${p.id}"><td colspan="${COLS}"
+        style="padding:0 16px 16px">
+        ${warningBanner}
+
+        <div class="proj-facts">
+          <div style="min-width:180px">
+            <div class="proj-fact-label">Period</div>
+            <div>${fmtPeriod(p.start, p.end)}</div>
+            <div class="timeline-bar-wrap" style="margin-top:5px"><div class="timeline-bar" style="width:${prog}%"></div></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px">${prog}% elapsed</div>
           </div>
+          ${upcomingGroup.length ? `<div style="min-width:170px">
+            <div class="proj-fact-label">Next due</div>
+            <div style="font-weight:600;color:${dueColour}">${upcomingGroup.map(d=>escapeHtml(d.name)).join(' · ')}</div>
+            <div style="font-size:10.5px;color:${dueColour}">${dueLabel}</div>
+          </div>` : ''}
+          <div style="flex:1;min-width:200px">
+            <div class="proj-fact-label">Team</div>
+            <div class="proj-team" style="margin:0">${memberPills}</div>
+          </div>
+          ${p.notes?`<div style="flex:1;min-width:200px">
+            <div class="proj-fact-label">Notes</div>
+            <div style="font-size:11.5px;color:var(--text2);line-height:1.5">${p.notes}</div>
+          </div>`:''}
         </div>
-        <div class="proj-alloc-badge" style="color:var(--text);flex-shrink:0;text-align:center">
-          ${activeMembers.length + new Set((p.deliverables||[]).filter(d=>d.supportId&&!d.completed).map(d=>d.supportId)).size}/${team.length}
-          <div style="font-size:10px;color:var(--muted);font-weight:400;font-family:'DM Sans',sans-serif">members</div>
-          ${totalDelivs>0?`<div style="font-size:10px;color:var(--green);font-weight:600;margin-top:2px">${completedDelivs}/${totalDelivs} done</div>`:''}
+
+        <div class="proj-work${billing?'':' no-billing'}">
+          <div class="proj-panel">
+            ${sect('Deliverables')}
+            <div class="proj-deliv-list">
+              ${delivRows||`<div style="font-size:12px;color:var(--muted);padding:4px 0">None added yet</div>`}
+            </div>
+            ${isMyProject
+              ? `<button class="btn btn-sm" style="margin-top:8px" onclick="openAddDeliverable(${p.id})">+ Add Deliverable</button>`
+              : ''}
+          </div>
+          ${billing ? `<div class="proj-panel">${sect('Billing','money')}${billing}</div>` : ''}
         </div>
-      </div>
-      <div class="proj-meta" style="margin-top:10px">
-        <div class="proj-meta-row"><span class="proj-meta-label">Period</span><span>${fmtPeriod(p.start, p.end)}</span></div>
-        ${upcomingGroup.length ? `<div class="proj-meta-row"><span class="proj-meta-label">Next due</span><span style="font-weight:600;color:${daysUntil(earliestDate)==='Overdue'?'var(--red)':parseInt(daysUntil(earliestDate))<14?'var(--orange)':'var(--text2)'}">
-          ${upcomingGroup.map(d=>d.name).join(' · ')} &nbsp;<span style="font-weight:400;font-size:11px">${daysUntil(earliestDate)}</span>
-        </span></div>` : ''}
-      </div>
-      <div class="timeline-bar-wrap"><div class="timeline-bar" style="width:${prog}%"></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:3px;margin-bottom:10px">${prog}% of timeline elapsed</div>
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Deliverables</div>
-      ${delivRows||`<div style="font-size:12px;color:var(--muted);padding:6px 0">No deliverables added yet</div>`}
-      ${isMyProject
-        ? `<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:4px;margin-bottom:10px" onclick="openAddDeliverable(${p.id})">+ Add Deliverable</button>`
-        : `<div style="height:10px"></div>`}
-      ${p.notes?`<div style="font-size:11px;color:var(--text2);margin-bottom:10px;padding:8px;background:var(--surface2);border-radius:6px">${p.notes}</div>`:''}
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Team</div>
-      <div class="proj-team">${memberPills}</div>
-      ${renderProjectBilling(p)}
-      <div class="proj-actions">
-        ${isMyProject
-          ? `<button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit Project</button>
-             <button class="btn btn-sm" onclick="openAssignMember(${p.id})">+ Add Member</button>
-             ${!p.archived && (String(p.creatorId)===String(currentUser.id) || isAdmin() || isOpsAdmin())
-               ? `<button class="btn btn-sm" onclick="markProjectComplete(${p.id})">✓ Mark Complete</button>` : ''}
-             ${p.archived ? `<button class="btn btn-sm" onclick="unarchiveProject(${p.id})" style="background:#f0ede9;color:var(--muted)">↩ Reopen</button>` : ''}
-             ${isAdmin() && !p.isProposal ? `<button class="btn btn-sm" onclick="convertProjectToProposal(${p.id})" title="Reclassify as a proposal">→ Proposal</button>` : ''}
-             <button class="btn btn-sm btn-danger" onclick="deleteProject(${p.id})">Remove</button>`
-          : `<button class="btn btn-sm" style="opacity:0.4;cursor:pointer" onclick="showNoAccess(${p.id},${p.creatorId})">+ Add Member</button>
-             <button class="btn btn-sm btn-danger" style="opacity:0.4" onclick="showNoAccess(${p.id},${p.creatorId})">Remove</button>`
-        }
-      </div>
-    </div>`;
-  }).join('');
+        ${!isMyProject ? `<div style="font-size:11px;color:var(--muted);padding:10px 2px 2px">
+          Read-only — ${pmPerson ? escapeHtml(pmPerson.name.split(' ')[0]) + ' manages this project' : 'this project has no manager yet'}.
+        </div>` : ''}
+      </td></tr>`;
+    return out;
+  }).join('') + `</tbody>`;
+  syncProjExpandBtn();
+}
+
+/* ── Which cards are open ─────────────────────────────────────
+   Everything arrives closed, so every project starts at the same level and
+   the page is a tidy list you can scan. Opening one is a click, and that
+   choice is kept for the rest of the session. */
+let projAutoOpen = false;
+const projCardState = new Map();        // id → true/false, set by hand only
+
+function isProjCardOpen(id) {
+  const v = projCardState.get(String(id));
+  return v === undefined ? !!projAutoOpen : v;
+}
+
+function toggleProjCard(id) {
+  projCardState.set(String(id), !isProjCardOpen(id));
+  renderProjects();          // the detail is a row of its own, so redraw
+}
+
+function toggleAllProjCards() {
+  const rows = [...document.querySelectorAll('#projTable .proj-row')];
+  const anyClosed = rows.some(r => !isProjCardOpen(r.id.replace('projRow_','')));
+  rows.forEach(r => projCardState.set(String(r.id.replace('projRow_','')), anyClosed));
+  projAutoOpen = anyClosed;
+  renderProjects();
+}
+
+function syncProjExpandBtn() {
+  const btn = document.getElementById('projExpandBtn');
+  if(!btn) return;
+  const rows = [...document.querySelectorAll('#projTable .proj-row')];
+  btn.style.display = rows.length ? '' : 'none';
+  btn.textContent = rows.some(r => !isProjCardOpen(r.id.replace('projRow_',''))) ? 'Expand all' : 'Collapse all';
 }
 
 let deletingProjectId = null;
@@ -2973,23 +3120,170 @@ function openEditProject(id) {
     bw.style.display = maySee ? '' : 'none';
     if(maySee) document.getElementById('epBudget').value = (proj.budget ?? '');
   }
-  const wrap = document.getElementById('epMembersWrap');
-  // Only show members already on the project — use + Add Member to add new ones
-  const projMemberIds = new Set(proj.members.map(m=>m.personId));
-  const displayTeam = team.filter(p=>projMemberIds.has(p.id) || p.id===proj.creatorId);
-  wrap.innerHTML = displayTeam.map(p=>{
-    const existing = proj.members.find(m=>m.personId===p.id);
-    const val = existing ? existing.allocation : 0;
-    const isCreator = p.id===proj.creatorId;
-    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
-      <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px">${initials(p.name)}</div>
-      <span style="flex:1;font-size:13px;font-weight:500">${p.name}${isCreator?' <span class="pm-badge">PM</span>':''}</span>
-      <label style="font-size:11px;color:var(--muted)">Alloc:</label>
-      <input type="number" min="0" max="100" step="5" value="${val}" id="epAlloc_${p.id}" style="width:65px;text-align:center;padding:5px 8px">
-      <span style="font-size:11px;color:var(--muted)">%</span>
-    </div>`;
-  }).join('');
+  /* The team is edited here, in the same place as everything else about the
+     project — adding, changing a share and taking somebody off. It used to be
+     split across two buttons, and removing was done by setting 0% and hoping. */
+  epEditMembers = proj.members.map(m => ({ personId:m.personId, allocation:Number(m.allocation)||0 }));
+  if(proj.creatorId && !epEditMembers.find(m => String(m.personId) === String(proj.creatorId))) {
+    epEditMembers.unshift({ personId: proj.creatorId, allocation: 0 });
+  }
+
+  /* Changing who runs the project belongs here with everything else about it,
+     rather than on a button of its own on the card. */
+  const pmSel  = document.getElementById('epPM');
+  const pmNote = document.getElementById('epPMNote');
+  const mayChangePM = isAdmin() || String(proj.creatorId) === String(currentUser.id);
+  if(pmSel) {
+    const pool = (team||[]).filter(x => x.role !== 'timesheet_only').sort((a,b) => byName(a.name,b.name));
+    pmSel.innerHTML = (proj.creatorId ? '' : `<option value="">— nobody yet —</option>`)
+      + pool.map(x => `<option value="${x.id}"${String(x.id)===String(proj.creatorId)?' selected':''}>${escapeHtml(x.name)}${x.title?' · '+escapeHtml(x.title):''}</option>`).join('');
+    pmSel.disabled = !mayChangePM;
+    pmSel.style.opacity = mayChangePM ? '' : '0.6';
+  }
+  if(pmNote) pmNote.textContent = mayChangePM
+    ? 'Whoever you pick is added to the team and told about it when you save.'
+    : 'Only the current manager or Ibrahim can hand a project over.';
+
+  renderEpMembers();
   openOverlay('editProjModal');
+}
+
+/* The modal's working copy of the team. Nothing is written to the project
+   until Save, so a change can be abandoned by closing the window. */
+let epEditMembers = [];
+
+/* What this person is already committed to elsewhere, so a share can be set
+   with their other work in view rather than from memory. */
+function epLoadElsewhere(personId) {
+  return (projects||[])
+    .filter(p => !p.archived && String(p.id) !== String(editingProjectId))
+    .reduce((s,p) => s + ((p.members||[])
+      .filter(m => String(m.personId) === String(personId))
+      .reduce((t,m) => t + (Number(m.allocation)||0), 0)), 0);
+}
+
+/* The line under somebody's name. It only says "in total" when this project
+   actually adds to what they already carry — at 0% the total IS what they have
+   elsewhere, and printing the same number twice tells you nothing. */
+function epLoadLine(personId, allocation) {
+  const elsewhere = epLoadElsewhere(personId);
+  const mine = Math.max(0, Number(allocation)||0);
+  const combined = elsewhere + mine;
+  const tone = combined > 100 ? 'var(--red)' : combined > 85 ? 'var(--orange)' : 'var(--muted)';
+  if(!elsewhere && !mine) return { text:'nothing booked anywhere', tone:'var(--muted)' };
+  if(!elsewhere)          return { text:`${mine}% here · nothing else on`, tone };
+  if(!mine)               return { text:`${elsewhere}% elsewhere`, tone };
+  return { text:`${elsewhere}% elsewhere · ${combined}% in total`, tone };
+}
+
+/* Who the PM will be once this is saved — the dropdown if it has been
+   touched, otherwise whoever runs the project now. */
+function epChosenPM() {
+  const sel = document.getElementById('epPM');
+  const proj = projects.find(p => p.id === editingProjectId);
+  const v = sel && sel.value;
+  return v || (proj ? proj.creatorId : null);
+}
+
+function renderEpMembers() {
+  const proj = projects.find(p => p.id === editingProjectId);
+  const wrap = document.getElementById('epMembersWrap');
+  if(!wrap || !proj) return;
+
+  // Picking a new manager puts them on the team straight away
+  const pmId = epChosenPM();
+  if(pmId && !epEditMembers.find(m => String(m.personId) === String(pmId))) {
+    epEditMembers.unshift({ personId: isNaN(Number(pmId)) ? pmId : Number(pmId), allocation: 0 });
+  }
+
+  wrap.innerHTML = epEditMembers.map(m => {
+    const p = personById(m.personId);
+    if(!p) return '';
+    const isPM = String(p.id) === String(pmId);
+    const line = epLoadLine(p.id, m.allocation);
+    return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(p.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${escapeHtml(p.name)}${isPM?' <span class="pm-badge">PM</span>':''}</div>
+        <div id="epHint_${p.id}" style="font-size:10.5px;color:${line.tone}">${line.text}</div>
+      </div>
+      <input type="number" min="0" max="100" step="1" value="${Number(m.allocation)||0}"
+        id="epAlloc_${p.id}" onchange="epSetAlloc('${p.id}',this.value)" oninput="epSetAlloc('${p.id}',this.value)"
+        style="width:62px;text-align:center;padding:5px 8px;flex-shrink:0">
+      <span style="font-size:11px;color:var(--muted);flex-shrink:0">%</span>
+      ${isPM
+        ? `<span title="The manager stays on their own project. Hand it over using the Project manager box above." style="width:26px;text-align:center;font-size:11px;color:var(--muted);flex-shrink:0">—</span>`
+        : `<button class="btn btn-sm btn-danger" title="Take ${escapeAttr(p.name)} off this project" onclick="epRemoveMember('${p.id}')" style="flex-shrink:0;padding:2px 7px;font-size:11px">✕</button>`}
+    </div>`;
+  }).join('') || `<div style="padding:10px;color:var(--muted);font-size:12px">Nobody on this project yet.</div>`;
+
+  // Who is left to add
+  const on = new Set(epEditMembers.map(m => String(m.personId)));
+  const spare = (team||[])
+    .filter(p => p.role !== 'timesheet_only' && !on.has(String(p.id)))
+    .sort((a,b) => byName(a.name, b.name));
+  const sel = document.getElementById('epAddPerson');
+  if(sel) {
+    sel.innerHTML = spare.length
+      ? spare.map(p => `<option value="${p.id}">${escapeHtml(p.name)}${p.title?' · '+escapeHtml(p.title):''}</option>`).join('')
+      : `<option value="">Everyone is already on this project</option>`;
+    sel.disabled = !spare.length;
+  }
+  const addBtn = document.getElementById('epAddBtn');
+  if(addBtn) { addBtn.disabled = !spare.length; addBtn.style.opacity = spare.length ? '' : '0.5'; }
+
+  const tot = document.getElementById('epTeamTotal');
+  if(tot) {
+    const n = epEditMembers.length;
+    const sum = epEditMembers.reduce((s,m) => s + (Number(m.allocation)||0), 0);
+    tot.textContent = `${n} ${n===1?'person':'people'} · ${sum}% allocated`;
+  }
+}
+
+function epSetAlloc(personId, raw) {
+  const m = epEditMembers.find(x => String(x.personId) === String(personId));
+  if(!m) return;
+  let v = parseInt(raw, 10);
+  if(!isFinite(v)) v = 0;
+  m.allocation = Math.max(0, Math.min(100, v));
+  /* Only the text moves — redrawing the rows would steal the cursor mid-type.
+     The person's own line has to keep up too, or it reads as their old total. */
+  const hint = document.getElementById('epHint_' + personId);
+  if(hint) {
+    const line = epLoadLine(personId, m.allocation);
+    hint.textContent = line.text;
+    hint.style.color = line.tone;
+  }
+  const tot = document.getElementById('epTeamTotal');
+  if(tot) {
+    const n = epEditMembers.length;
+    const sum = epEditMembers.reduce((s,x) => s + (Number(x.allocation)||0), 0);
+    tot.textContent = `${n} ${n===1?'person':'people'} · ${sum}% allocated`;
+  }
+}
+
+function epAddMember() {
+  const sel = document.getElementById('epAddPerson');
+  const id = sel && sel.value;
+  if(!id) return;
+  if(epEditMembers.find(m => String(m.personId) === String(id))) return;
+  let v = parseInt((document.getElementById('epAddAlloc')||{}).value, 10);
+  if(!isFinite(v)) v = 0;
+  epEditMembers.push({ personId: isNaN(Number(id)) ? id : Number(id),
+                       allocation: Math.max(0, Math.min(100, v)) });
+  renderEpMembers();
+}
+
+function epRemoveMember(personId) {
+  const proj = projects.find(p => p.id === editingProjectId);
+  if(String(epChosenPM()) === String(personId)) return;   // never the manager
+  const p = personById(personId);
+  const assigned = proj ? (proj.deliverables||[]).filter(d => String(d.assignedTo) === String(personId)) : [];
+  if(assigned.length && !confirm(
+      `${p?p.name:'This person'} is assigned to ${assigned.length} deliverable${assigned.length===1?'':'s'} on this project.\n\n`
+    + `Taking them off leaves ${assigned.length===1?'it':'those'} unassigned. Continue?`)) return;
+  epEditMembers = epEditMembers.filter(m => String(m.personId) !== String(personId));
+  renderEpMembers();
 }
 function saveEditProject() {
   const proj = projects.find(p=>p.id===editingProjectId);
@@ -3023,21 +3317,59 @@ function saveEditProject() {
     const before = (proj.budget === undefined || proj.budget === null) ? null : Number(proj.budget);
     if(next !== before) { budgetChange = { before, next }; proj.budget = next; }
   }
-  proj.members=[];
-  team.forEach(p=>{
-    const input=document.getElementById('epAlloc_'+p.id);
-    if(!input) return;
-    const v=parseInt(input.value)||0;
-    if(v>0) proj.members.push({personId:p.id, allocation:v, role:p.id===proj.creatorId?'pm':'coordinator'});
-  });
-  if(!proj.members.find(m=>m.personId===proj.creatorId)) {
-    proj.members.unshift({personId:proj.creatorId,allocation:0,role:'pm'});
+  /* Exactly the rows shown, including anyone sitting at 0% — being on the
+     project at no allocation is a real state, and removing is now the ✕
+     rather than zeroing someone and hoping they drop off. */
+  const before = new Set((proj.members||[]).map(m => String(m.personId)));
+
+  /* A handover, if one was picked. Only the current manager or Ibrahim can do
+     it, checked here as well as on the dropdown. */
+  const wasPM = proj.creatorId;
+  const pickedPM = epChosenPM();
+  let handover = null;
+  if(pickedPM && String(pickedPM) !== String(wasPM)) {
+    if(isAdmin() || String(wasPM) === String(currentUser.id) || !wasPM) {
+      const who = personById(pickedPM);
+      if(who) { proj.creatorId = who.id; handover = who; }
+    } else {
+      showToast('Only the current manager or Ibrahim can hand a project over');
+      return;
+    }
+  }
+
+  proj.members = epEditMembers.map(m => ({
+    personId: m.personId,
+    allocation: Math.max(0, Math.min(100, Number(m.allocation)||0)),
+    role: String(m.personId) === String(proj.creatorId) ? 'pm' : 'coordinator'
+  }));
+  if(proj.creatorId && !proj.members.find(m => String(m.personId) === String(proj.creatorId))) {
+    proj.members.unshift({ personId: proj.creatorId, allocation: 0, role: 'pm' });
+  }
+  // Anybody taken off cannot stay holding this project's work
+  const now = new Set(proj.members.map(m => String(m.personId)));
+  const dropped = [...before].filter(id => !now.has(id));
+  if(dropped.length) {
+    (proj.deliverables||[]).forEach(d => {
+      if(d.assignedTo != null && dropped.includes(String(d.assignedTo))) {
+        d.assignedTo = null;
+        d.pendingApproval = false;
+      }
+    });
   }
   if(budgetChange) notifyAdminOfBudgetChange(proj, budgetChange.before, budgetChange.next);
   closeModal('editProjModal');
   saveProject(proj);
+  if(handover) {
+    if(typeof writeAudit === 'function') {
+      const prev = wasPM ? (personById(wasPM)||{}).name : null;
+      try { writeAudit('project', proj.id, 'project manager', prev || '—', handover.name, proj.name); } catch(e) {}
+    }
+    if(typeof notifyAssignment === 'function') notifyAssignment(proj, handover);
+    if(typeof applyDeptScope === 'function') applyDeptScope();
+    if(typeof refreshWorkLists === 'function') refreshWorkLists();
+  }
   renderProjects(); renderWeekly(); renderMonthly(); updateSummary();
-  showToast('Project updated ✓');
+  showToast(handover ? `${handover.name.split(' ')[0]} now manages this ✓` : 'Project updated ✓');
 }
 
 function populateFinderWeeks() {
@@ -5698,7 +6030,7 @@ function subPOTimeline(s) {
 
 /* ── Billing section, inserted into each project card. Amounts follow the
    same privacy rule already used for budgets: PM and Admin only. ── */
-function renderProjectBilling(p) {
+function renderProjectBilling(p, bare) {
   if(!canSeeFinance(p)) return '';
   if(financeTablesMissing) {
     // Never fail silently here — an empty return looks identical to the
@@ -5822,8 +6154,9 @@ function renderProjectBilling(p) {
     </div>`;
   }).join('');
 
-  return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
-    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Billing</div>
+  /* bare = the caller supplies its own heading and panel (the Projects page
+     puts this in a panel beside the deliverables). */
+  const inner = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
       ${financeMiniCard('Contracted', snap.contracted?fmtMoney(snap.contracted):'—')}
       ${financeMiniCard('Ready to Invoice', snap.readyToInvoice?fmtMoney(snap.readyToInvoice):'—', snap.readyToInvoice?'var(--orange)':null)}
@@ -5835,7 +6168,12 @@ function renderProjectBilling(p) {
     ${manage?`<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:2px;margin-bottom:10px" onclick="openAddContract(${p.id})">+ Add Contract / VO</button>`:''}
     <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Subcontractor POs</div>
     ${subPORows || `<div style="font-size:11px;color:var(--muted);padding:4px 0">None added yet</div>`}
-    ${manage?`<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:2px" onclick="openAddSubPO(${p.id})">+ Add Subcontractor PO</button>`:''}
+    ${manage?`<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:2px" onclick="openAddSubPO(${p.id})">+ Add Subcontractor PO</button>`:''}`;
+
+  if(bare) return inner;
+  return `<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+    <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">Billing</div>
+    ${inner}
   </div>`;
 }
 
@@ -8286,7 +8624,6 @@ function proposalCard(p) {
 
     ${canEdit ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" onclick="openEditProject(${p.id})">✎ Edit</button>
-      <button class="btn btn-sm" onclick="openAssignMember(${p.id})">+ Add Member</button>
       ${pm && (String(p.creatorId)===String(currentUser.id) || isAdmin())
         ? `<button class="btn btn-sm" onclick="changePM(${p.id})">Change lead</button>` : ''}
       ${p.archived
@@ -8804,33 +9141,9 @@ function saveOverrideForm() {
   if(!document.getElementById('view-finder').classList.contains('hidden')) renderFinder();
 }
 
-function openAssignMember(projId) {
-  const proj=projects.find(p=>p.id===projId);
-  if(!canEditProject(proj)){showNoAccess(proj.id,proj.creatorId);return;}
-  assigningProjectId=projId;
-  document.getElementById('assignProjLabel').textContent=`Assign to: ${proj.name}`;
-  const sel=document.getElementById('assignPerson');
-  const unassigned = team.filter(p=>p.role!=='timesheet_only' && !proj.members.find(m=>m.personId===p.id));
-  sel.innerHTML=unassigned.length
-    ? unassigned.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
-    : `<option value="">All team members already assigned</option>`;
-  document.getElementById('assignAlloc').value=50;
-  document.getElementById('assignAllocVal').textContent='50%';
-  document.getElementById('allocWarning').style.display='none';
-  openOverlay('addProjMemberModal');
-}
-function saveAssignment() {
-  const pid=parseInt(document.getElementById('assignPerson').value);
-  const alloc=parseInt(document.getElementById('assignAlloc').value);
-  const proj=projects.find(p=>p.id===assigningProjectId);
-  const existing=proj.members.find(m=>m.personId===pid);
-  if(existing) existing.allocation=alloc;
-  else proj.members.push({personId:pid,allocation:alloc,role:'coordinator'});
-  closeModal('addProjMemberModal');
-  saveProject(proj);
-  renderProjects(); renderWeekly(); renderMonthly(); updateSummary();
-  showToast('Member assigned ✓');
-}
+/* openAssignMember / saveAssignment lived here. Adding somebody to a project
+   is part of editing the project, so both are now inside Edit Project —
+   see renderEpMembers, epAddMember, epRemoveMember and saveEditProject. */
 
 let editingDeliverableProjectId=null, editingDeliverableId=null;
 function populateDelivAssign(selectId, proj, selectedId) {
@@ -13586,7 +13899,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-06-v112 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-06-v122 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
