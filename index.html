@@ -1125,9 +1125,12 @@ select option{background:#fff}
         <div style="display:flex;flex-direction:column;gap:4px">
           <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Type</label>
           <select id="loeType" onchange="onLoeFilterChange()" style="width:158px;padding:6px 9px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
-            <option value="">Projects &amp; proposals</option>
+            <option value="">Everything</option>
             <option value="project">Projects only</option>
             <option value="proposal">Proposals only</option>
+            <option value="other">Other activities only</option>
+            <option value="unbillable">Unbillable only</option>
+            <option value="billable">Billable only</option>
           </select>
         </div>
 
@@ -1470,12 +1473,16 @@ select option{background:#fff}
     </div>
     <div id="leaveBalanceStrip" style="display:flex;gap:8px;margin-top:14px"></div>
     <div id="myLeavesSection" style="margin-top:16px">
-      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Upcoming Leaves</div>
-      <div id="myLeavesList"></div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">My leave · ✎ to change, ✕ to remove</div>
+      <div id="myLeavesList" style="max-height:260px;overflow-y:auto"></div>
+    </div>
+    <div id="leaveEditNote" style="display:none;margin-top:12px;padding:8px 11px;border:1px solid #e8d49a;background:#fffbf0;border-radius:8px;font-size:11.5px;color:var(--text2);line-height:1.45">
+      Changing an existing entry. Saving replaces it — the hours it put on the timesheet move with it.
+      <button onclick="cancelLeaveEdit()" style="background:none;border:none;padding:0;margin-left:4px;color:var(--text2);text-decoration:underline;cursor:pointer;font-size:11.5px">Add a new one instead</button>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('leaveModal')">Close</button>
-      <button class="btn btn-primary" onclick="submitLeave()">Add Leave</button>
+      <button class="btn btn-primary" id="leaveSubmitBtn" onclick="submitLeave()">Add Leave</button>
     </div>
   </div>
 </div>
@@ -1557,6 +1564,8 @@ select option{background:#fff}
       💡 The hours stay exactly where they are — only the label they sit under changes.
       Submitted timesheets are updated in place, so past reports pick it up too.
       Team membership is unaffected; add people on the project itself if they should appear there.
+      Moving hours into a leave type stops them counting as project work; it does not
+      change anyone's leave balance.
     </div>
 
     <div class="modal-actions">
@@ -1862,10 +1871,10 @@ select option{background:#fff}
     <p class="modal-sub" id="issueInvoiceLabel"></p>
     <div class="field"><label>Invoice file</label><input type="file" id="issueInvoiceFile" accept=".pdf,.doc,.docx,.jpg,.png"></div>
     <div id="issueInvoiceCurrentFile" style="display:none;font-size:11px;margin:-8px 0 14px"></div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">The PM will see this attached on the project and can download it to send straight to the client.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5">Issuing it records the invoice as sent to the client — you deal with the client directly from here. The PM is told it has gone out, and can download the copy from the project.</div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('issueInvoiceModal')">Cancel</button>
-      <button class="btn btn-primary" id="issueInvoiceSaveBtn" onclick="saveIssueInvoice()">Issue Invoice</button>
+      <button class="btn btn-primary" id="issueInvoiceSaveBtn" onclick="saveIssueInvoice()">Issue &amp; Send</button>
     </div>
   </div>
 </div>
@@ -1931,7 +1940,43 @@ let tsData = null;
 const TS_WORKDAYS = [0,1,2,3,4]; // Sun=0 Mon=1 Tue=2 Wed=3 Thu=4 (Jordan workweek)
 let assigningProjectId = null;
 
-const TITLES = ['Intern','Associate','Senior Associate','Consultant','Senior Consultant','Manager','Director'];
+/* ── ONE ORDER FOR PROJECT NAMES ──────────────────────────────
+   Every list of projects anywhere reads in the same order, so the eye can
+   learn where something sits. numeric:true is the part that matters here:
+   job numbers sort as numbers, so 25-9 comes before 25-14 instead of after
+   it, and 26-… follows 25-… . sensitivity:'base' stops a capital letter
+   jumping the queue. */
+const PROJECT_COLLATOR = new Intl.Collator(undefined, {numeric:true, sensitivity:'base'});
+function byName(a, b)        { return PROJECT_COLLATOR.compare(String(a==null?'':a), String(b==null?'':b)); }
+function byProjectName(a, b) { return byName((a&&a.name)||'', (b&&b.name)||''); }
+function sortedProjects(list){ return (list||[]).slice().sort(byProjectName); }
+
+/* ── JOB TITLES ───────────────────────────────────────────────
+   Two ladders. Technical titles are the consulting track; operational
+   titles are finance, admin, logistics and the like. What gets stored is
+   still just the title string — the grouping is how somebody picks one,
+   not a second field on the person, so nothing downstream has to change.
+   Manager and Director sit on both ladders and appear under both. */
+const TECHNICAL_TITLES   = ['Intern','Analyst','Senior Analyst','Consultant','Senior Consultant','Manager','Director'];
+const OPERATIONAL_TITLES = ['Officer','Senior Officer','Specialist','Senior Specialist','Associate Manager','Manager','Director','CEO','Chairman'];
+const TITLES = [...new Set([...TECHNICAL_TITLES, ...OPERATIONAL_TITLES])];
+
+/* Titles that carry authority over other people's work, on either ladder. */
+const SENIOR_TITLES = ['Manager','Director','CEO','Chairman'];
+
+/* One grouped list, so every place that offers a title offers the same ones.
+   A title from before this change is kept at the top and stays selected —
+   otherwise opening somebody's row would quietly relabel them as an Intern. */
+function titleOptionsHtml(selected) {
+  const cur = String(selected == null ? '' : selected).trim();
+  const grp = (label, list) => `<optgroup label="${label}">` +
+    list.map(t => `<option value="${escapeAttr(t)}"${t === cur ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('') +
+    `</optgroup>`;
+  return (cur && !TITLES.includes(cur)
+            ? `<option value="${escapeAttr(cur)}" selected>${escapeHtml(cur)} — old title</option>` : '')
+       + grp('Technical', TECHNICAL_TITLES)
+       + grp('Operational', OPERATIONAL_TITLES);
+}
 
 const HR_USER = {id:9999, name:'HR', title:'HR', dept:'HR', c:{bg:'#e8f0fc',fg:'#2563b0'}};
 const OPS_USER = {id:9998, name:'Admin', title:'Operations', dept:'ADMIN', department:'ops', c:{bg:'#efe6fa',fg:'#6b3fa0'}};
@@ -2075,7 +2120,7 @@ function isHR()            { return currentUser && currentUser.id === 9999; }
 function isOpsSeat()       { return currentUser && currentUser.id === 9998; }
 function isOpsAdmin()      { return isOpsSeat() || !!(currentUser && currentUser.opsAdmin); }
 function isTimesheetOnly() { return currentUser && currentUser.role === 'timesheet_only'; }
-function isPartner()     { return currentUser && currentUser.title === 'Director'; }
+function isPartner()     { return !!currentUser && ['Director','CEO','Chairman'].includes(currentUser.title); }
 function canEditProject(proj) {
   if(!currentUser) return false;
   if(isAdmin()) return true; // Ibrahim can edit everything
@@ -2220,6 +2265,9 @@ function getEffectiveLoad(personId, weekKeyStr) {
         }
       });
     });
+    // Named lists read in one order everywhere, including these two
+    // (the capacity finder card and the day modal both show this list).
+    dayProjects.sort(byProjectName);
 
     // Check overrides for this specific day
     const dayOverrides = overrides.filter(o =>
@@ -2468,7 +2516,7 @@ function renderMonthly() {
             )
           : projects;
 
-        const deliverablePins=!isOther ? visibleProjects.flatMap(proj=>
+        const deliverablePins=!isOther ? sortedProjects(visibleProjects).flatMap(proj=>
           (proj.deliverables||[]).filter(d=>d.date===dateStr).map(d=>{
             // In 'mine' mode, additionally highlight items directly assigned to user
             const isMyTask = uid && d.assignedTo===uid;
@@ -2625,7 +2673,7 @@ function renderProjects() {
       `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:14px">${msgs[projFilter]||'No projects.'}</div>`;
     return;
   }
-  document.getElementById('projGrid').innerHTML = filtered.map(p=>{
+  document.getElementById('projGrid').innerHTML = sortedProjects(filtered).map(p=>{
     const activeMembers = p.members.filter(m=>m.allocation>0);
     const totalAlloc = activeMembers.reduce((s,m)=>s+m.allocation,0);
     const completedDelivs = (p.deliverables||[]).filter(d=>d.completed).length;
@@ -3043,7 +3091,7 @@ function renderFinder() {
       <div style="font-size:10px;color:var(--muted);margin-bottom:6px">Avg load ${avgLoad}% · Peak ${peakLoad}% · ${rangeLabel}</div>
       ${hasSpike?`<div style="font-size:10px;color:var(--orange);margin-bottom:4px">⚡ Has a busy period in this range</div>`:''}
       <div class="finder-projects">
-        ${activeProjs.size ? '📋 '+[...activeProjs.entries()].map(([n,a])=>`${n} (${a}%)`).join('<br>') : '<span style="color:var(--muted)">No active projects in range</span>'}
+        ${activeProjs.size ? '📋 '+[...activeProjs.entries()].sort((a,b)=>byName(a[0],b[0])).map(([n,a])=>`${n} (${a}%)`).join('<br>') : '<span style="color:var(--muted)">No active projects in range</span>'}
       </div>
     </div>`).join('');
 }
@@ -3478,7 +3526,7 @@ function openSettingsModal() {
     // Build manager options (managers + Ibrahim)
   const managerOptions = [
     `<option value="">— Auto —</option>`,
-    ...team.filter(p => p.id === 1 || p.title === 'Manager' || p.title === 'Director')
+    ...team.filter(p => p.id === 1 || isManagerOrAbove(p))
       .map(p => `<option value="${p.id}">${p.name}</option>`)
   ].join('');
 
@@ -3487,8 +3535,8 @@ function openSettingsModal() {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <div class="avatar" style="background:${p.c.bg};color:${p.c.fg};width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(p.name)}</div>
           <input type="text" id="adminName_${p.id}" value="${p.name}" style="flex:1;min-width:0;padding:5px 8px;font-size:13px;font-weight:500;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-          <select id="adminTitle_${p.id}" style="width:120px;padding:5px 8px;font-size:12px;flex-shrink:0${p.role==='timesheet_only'?';display:none':''}">
-            ${TITLES.map(t=>`<option value="${t}"${p.title===t?' selected':''}>${t}</option>`).join('')}
+          <select id="adminTitle_${p.id}" style="width:150px;padding:5px 8px;font-size:12px;flex-shrink:0${p.role==='timesheet_only'?';display:none':''}">
+            ${titleOptionsHtml(p.title)}
           </select>
           <select id="adminRole_${p.id}" style="width:100px;padding:5px 8px;font-size:12px;flex-shrink:0">
             <option value="consultant"${(p.role||'consultant')==='consultant'?' selected':''}>E&S Team</option>
@@ -3982,12 +4030,12 @@ function renderOpsPeople() {
     .filter(p => !filter || personDept(p) === filter)
     .filter(p => !search || (p.name||'').toLowerCase().includes(search))
     .sort((a,b) => (b.__new ? 1 : 0) - (a.__new ? 1 : 0)
-                || (a.name||'').localeCompare(b.name||'', undefined, {numeric:true, sensitivity:'base'}));
+                || byProjectName(a, b));
 
   const th = (label, align) => `<th style="padding:8px 12px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.4px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:${align||'left'};background:var(--surface2)">${label}</th>`;
 
   const head = `<colgroup>
-      <col style="width:176px"><col style="width:140px"><col style="width:84px"><col style="width:136px">
+      <col style="width:176px"><col style="width:166px"><col style="width:84px"><col style="width:136px">
       <col style="width:152px"><col><col style="width:116px"><col style="width:52px">
     </colgroup>
     <thead><tr>
@@ -4019,7 +4067,7 @@ function renderOpsPeople() {
 
     const edit = {
       name:  `<input type="text" id="ops_name_${p.id}" value="${escapeAttr(p.name||'')}" placeholder="Full name" style="${inputStyle}">`,
-      title: `<select id="ops_title_${p.id}" style="${inputStyle}">${TITLES.map(t=>`<option value="${t}"${p.title===t?' selected':''}>${t}</option>`).join('')}</select>`,
+      title: `<select id="ops_title_${p.id}" style="${inputStyle}">${titleOptionsHtml(p.title)}</select>`,
       dept:  `<select id="ops_dept_${p.id}" style="${inputStyle}">${assignableDepartments().map(d=>`<option value="${d.id}"${personDept(p)===d.id?' selected':''}>${deptShort(d.id)}</option>`).join('')}</select>`,
       joined: `<input type="date" id="ops_joined_${p.id}" value="${escapeAttr(p.joinedDate||'')}" title="The day they started. Months before this are not counted against them." style="${inputStyle}">`,
       mgr:   `<select id="ops_mgr_${p.id}" style="${inputStyle}">${opsManagerOptions(p.managerId, p.id)}</select>`,
@@ -4113,7 +4161,7 @@ function opsRemovePerson(id) {
   if(owned.length) {
     warning += `\n\n${owned.length} active ${owned.length===1?'item':'items'} will be left `
              + `without a manager and shown as unassigned:\n  · `
-             + owned.slice(0,6).map(x=>x.name).join('\n  · ')
+             + sortedProjects(owned).slice(0,6).map(x=>x.name).join('\n  · ')
              + (owned.length>6 ? `\n  · …and ${owned.length-6} more` : '');
   }
   if(reports.length) {
@@ -4507,7 +4555,7 @@ async function saveOpsNewItem() {
    qualify; Ibrahim can additionally reassign work that already has one. */
 function isManagerOrAbove(person) {
   const t = (person && person.title) || '';
-  return t === 'Manager' || t === 'Director';
+  return SENIOR_TITLES.includes(t);
 }
 
 
@@ -4666,7 +4714,7 @@ function renderOpsProjects() {
   const rows = allProjects
     .slice()
     .sort((a,b) => (b.__new ? 1 : 0) - (a.__new ? 1 : 0)
-                || (a.name||'').localeCompare(b.name||'', undefined, {numeric:true, sensitivity:'base'}))
+                || byProjectName(a, b))
     .filter(p => !filter || (p.department||DEFAULT_DEPT) === filter)
     .filter(p => !typeF  || (typeF === 'proposal' ? !!p.isProposal : !p.isProposal))
     .filter(p => archived === '' || (archived === 'archived' ? !!p.archived : !p.archived))
@@ -4905,6 +4953,13 @@ async function loadLoeData() {
             // on the timesheet at the time
             projectName: proj ? proj.name : c.name,
             isProposal: proj ? !!proj.isProposal : false,
+            /* Three kinds of line, so the Type filter can tell them apart:
+               a project, a proposal, or one of the Other activities and
+               custom labels, which have no project behind them at all. */
+            kind: proj ? (proj.isProposal ? 'proposal' : 'project') : 'other',
+            // Goodwill work on a job that had already closed. Read from the
+            // column, which recorded it when the hours were logged.
+            unbillable: !!c.unbillable,
             date: dateKey,
             month: String(dateKey).slice(0,7),
             year: String(dateKey).slice(0,4),
@@ -4939,7 +4994,7 @@ function fillLoeFilters() {
 
   const matches = (r, exclude) => {
     if(exclude !== 'dept'    && dept    && r.department !== dept) return false;
-    if(exclude !== 'type'    && type    && (type === 'proposal' ? !r.isProposal : r.isProposal)) return false;
+    if(exclude !== 'type'    && !loeRowMatchesType(r, type)) return false;
     if(exclude !== 'person'  && person  && String(r.personId) !== String(person)) return false;
     if(exclude !== 'project' && project && r.projectName !== project && String(r.projectId) !== project) return false;
     return true;
@@ -4954,7 +5009,7 @@ function fillLoeFilters() {
 
   // Project options: everything matching Dept + Type + Person (own filter excluded)
   const scopedForProjects = loeRows.filter(r => matches(r, 'project'));
-  const projNames = [...new Set(scopedForProjects.map(r => r.projectName))].sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  const projNames = [...new Set(scopedForProjects.map(r => r.projectName))].sort(byName);
   set('loeProject', `<option value="">All projects</option>` +
     projNames.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join(''));
 
@@ -4978,6 +5033,17 @@ function clearLoeFilters() {
   renderLoeReport();
 }
 
+/* The Type filter now cuts two different ways: what kind of work a line is
+   (project, proposal, or one of the Other activities), and whether it was
+   billable. One function so the report, the dropdowns and the export can
+   never disagree about what a type means. */
+function loeRowMatchesType(r, type) {
+  if(!type) return true;
+  if(type === 'unbillable') return !!r.unbillable;
+  if(type === 'billable')   return !r.unbillable;
+  return (r.kind || (r.isProposal ? 'proposal' : 'project')) === type;
+}
+
 function filteredLoeRows() {
   const v = id => (document.getElementById(id)||{}).value || '';
   const dept = v('loeDept'), person = v('loePerson'), project = v('loeProject');
@@ -4989,7 +5055,7 @@ function filteredLoeRows() {
     .filter(r => !dept    || r.department === dept)
     .filter(r => !person  || String(r.personId) === String(person))
     .filter(r => !project || r.projectName === project || String(r.projectId) === project)
-    .filter(r => !type    || (type === 'proposal' ? r.isProposal : !r.isProposal))
+    .filter(r => loeRowMatchesType(r, type))
     .filter(r => !from    || r.month >= from)
     .filter(r => !to      || r.month <= to);
 }
@@ -5030,20 +5096,22 @@ function renderLoeReport() {
   const groups = {};
   rows.forEach(r => {
     const k = keyFor(r) || '—';
-    if(!groups[k]) groups[k] = { label:dispFor(r), proj:r.projectName||'', hours:0, days:new Set(), people:new Set(), projects:new Set() };
+    if(!groups[k]) groups[k] = { label:dispFor(r), proj:r.projectName||'', hours:0, unbillable:0, days:new Set(), people:new Set(), projects:new Set() };
     groups[k].hours += r.hours;
+    if(r.unbillable) groups[k].unbillable += r.hours;
     groups[k].days.add(r.date);
     groups[k].people.add(r.personId);
     groups[k].projects.add(r.projectName);
   });
 
   const total = rows.reduce((s,r)=>s+r.hours, 0);
-  // Per deliverable, keep a project's lines together and ordered by size —
-  // scattering them by hours alone would make a project impossible to read.
+  /* Months read in date order; everything else reads by name, the same as
+     every other list of project names in the app. Per deliverable, a
+     project's own lines stay together under it. */
   const entries = Object.entries(groups)
     .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0])
-      : byDeliverable && a[1].proj !== b[1].proj ? String(a[1].proj).localeCompare(String(b[1].proj))
-      : b[1].hours - a[1].hours);
+      : byDeliverable && a[1].proj !== b[1].proj ? byName(a[1].proj, b[1].proj)
+      : byName(a[0], b[0]));
 
   // Summary cards
   const stats = document.getElementById('loeStats');
@@ -5059,8 +5127,15 @@ function renderLoeReport() {
     const periodLabel = !monthsShown.length ? '—'
       : monthsShown.length === 1 ? tsMonthLabel(monthsShown[0])
       : `${tsMonthLabel(monthsShown[0])} → ${tsMonthLabel(monthsShown[monthsShown.length-1])}`;
+    /* Goodwill work on closed projects, kept in front of the Admin rather
+       than buried in the table — this is the figure nobody could see before. */
+    const unbillable = rows.reduce((s,r)=>s+(r.unbillable ? r.hours : 0), 0);
     stats.innerHTML = card('Period', periodLabel, 'var(--text2)')
       + card('Total hours', total ? total.toLocaleString('en-US') : '—', 'var(--green)')
+      + card('Billable hours', total ? (total-unbillable).toLocaleString('en-US') : '—')
+      + card('Unbillable hours',
+             unbillable ? `${unbillable.toLocaleString('en-US')} · ${Math.round(unbillable/8*10)/10}d` : '—',
+             unbillable ? '#8a6d1f' : null)
       + card('Equivalent days', total ? (Math.round(total/8*10)/10).toLocaleString('en-US') : '—')
       + card('People', uniquePeople || '—')
       + card('Projects', uniqueProjects || '—');
@@ -5073,8 +5148,11 @@ function renderLoeReport() {
   const body = entries.map(([k,g]) => {
     const pct = total ? Math.round(g.hours / total * 100) : 0;
     const display = groupBy === 'month' ? tsMonthLabel(k) : (g.label || k);
+    const unb = g.unbillable
+      ? `<div title="Goodwill work on a completed project" style="font-weight:700;font-size:9px;letter-spacing:0.3px;text-transform:uppercase;color:#8a6d1f">${g.unbillable.toLocaleString('en-US')}h unbillable</div>`
+      : '';
     return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:7px 12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeAttr(display)}">${escapeHtml(display)}</td>
+      <td style="padding:7px 12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeAttr(display)}">${escapeHtml(display)}${unb}</td>
       <td style="padding:7px 12px;text-align:right;font-variant-numeric:tabular-nums">${g.hours.toLocaleString('en-US')}</td>
       <td style="padding:7px 12px;text-align:right;color:var(--text2)">${Math.round(g.hours/8*10)/10}</td>
       <td style="padding:7px 12px;text-align:right;color:var(--text2)">${g.people.size}</td>
@@ -5125,7 +5203,7 @@ function exportLoeReport() {
     ['Department', v('loeDept')    ? textOf('loeDept')    : 'All departments'],
     ['Person',     v('loePerson')  ? textOf('loePerson')  : 'All people'],
     ['Project',    v('loeProject') ? textOf('loeProject') : 'All projects'],
-    ['Type',       v('loeType')    ? textOf('loeType')    : 'Projects & proposals'],
+    ['Type',       v('loeType')    ? textOf('loeType')    : 'Everything'],
     ['From',       v('loeFrom')    ? textOf('loeFrom')    : 'Earliest'],
     ['To',         v('loeTo')      ? textOf('loeTo')      : 'Latest'],
     ['Grouped by', textOf('loeGroup')],
@@ -5189,8 +5267,9 @@ function exportLoeReport() {
     const agg = {};
     rows.forEach(r => {
       const k = keyFor(r) || '—';
-      if(!agg[k]) agg[k] = { proj:r.projectName||'', hours:0, people:new Set(), dates:new Set() };
+      if(!agg[k]) agg[k] = { proj:r.projectName||'', hours:0, unbillable:0, people:new Set(), dates:new Set() };
       agg[k].hours += r.hours;
+      if(r.unbillable) agg[k].unbillable += r.hours;
       agg[k].people.add(r.personId);
       agg[k].dates.add(r.date);
     });
@@ -5203,29 +5282,33 @@ function exportLoeReport() {
       ['Filters applied'],
       ...filterLines.map(l => [l[0], l[1]]),
       [],
-      [groupLabel, 'Hours', 'Days (÷8)', 'People', 'Dates logged', 'Share']
+      [groupLabel, 'Hours', 'Billable', 'Unbillable', 'Days (÷8)', 'People', 'Dates logged', 'Share']
     ];
     const headerRow = sumAoa.length - 1;
     Object.entries(agg)
       .sort((a,b) => groupBy === 'month' ? a[0].localeCompare(b[0])
-        : byDeliverable && a[1].proj !== b[1].proj ? String(a[1].proj).localeCompare(String(b[1].proj))
-        : b[1].hours - a[1].hours)
+        : byDeliverable && a[1].proj !== b[1].proj ? byName(a[1].proj, b[1].proj)
+        : byName(a[0], b[0]))
       .forEach(([k,g]) => sumAoa.push([
         groupBy === 'month' ? tsMonthLabel(k) : k,
-        g.hours, Math.round(g.hours/8*10)/10, g.people.size, g.dates.size,
+        g.hours, g.hours - g.unbillable, g.unbillable || '',
+        Math.round(g.hours/8*10)/10, g.people.size, g.dates.size,
         total ? Math.round(g.hours/total*100)/100 : 0
       ]));
-    sumAoa.push(['Total', total, Math.round(total/8*10)/10, '', '', 1]);
+    const unbillableTotal = rows.reduce((s,r)=>s+(r.unbillable ? r.hours : 0), 0);
+    sumAoa.push(['Total', total, total - unbillableTotal, unbillableTotal || '',
+                 Math.round(total/8*10)/10, '', '', 1]);
 
     const sumWs = XLSX.utils.aoa_to_sheet(sumAoa);
     style(sumWs, sumAoa, headerRow, { totalRow: sumAoa.length-1 });
     // Label the filter block and show Share as a percentage
     sumWs[ref(2,0)].s = { font:{bold:true, name:'Calibri', sz:11} };
+    const shareCol = sumAoa[headerRow].indexOf('Share');
     for(let r=headerRow+1;r<sumAoa.length;r++){
-      const a = ref(r,5);
+      const a = ref(r,shareCol);
       if(sumWs[a]) sumWs[a].z = '0%';
     }
-    sumWs['!cols'] = [{wch:34},{wch:11},{wch:11},{wch:9},{wch:13},{wch:9}];
+    sumWs['!cols'] = [{wch:34},{wch:11},{wch:11},{wch:12},{wch:11},{wch:9},{wch:13},{wch:9}];
     sumWs['!rows'] = []; sumWs['!rows'][headerRow] = { hpt: 30 };
     XLSX.utils.book_append_sheet(wb, sumWs, 'Summary');
 
@@ -5235,23 +5318,27 @@ function exportLoeReport() {
       [],
       // The Deliverable column is carried whenever any row in view has one, so
       // the raw entries can always be re-cut either way in the spreadsheet.
-      splitInUse ? ['Date','Person','Department','Project','Deliverable','Type','Hours']
-                 : ['Date','Person','Department','Project','Type','Hours']
+      splitInUse ? ['Date','Person','Department','Project','Deliverable','Type','Billing','Hours']
+                 : ['Date','Person','Department','Project','Type','Billing','Hours']
     ];
     rows.slice()
       .sort((a,b) => String(a.date).localeCompare(String(b.date)) || a.personName.localeCompare(b.personName))
-      .forEach(r => detAoa.push(splitInUse
-        ? [fmtDateEU(r.date), r.personName, deptShort(r.department), r.projectName,
-           r.deliverableName || '—', r.isProposal ? 'Proposal' : 'Project', r.hours]
-        : [fmtDateEU(r.date), r.personName, deptShort(r.department),
-           r.projectName, r.isProposal ? 'Proposal' : 'Project', r.hours]));
-    detAoa.push(splitInUse ? ['','','','','','Total', total] : ['','','','','Total', total]);
+      .forEach(r => {
+        const kind = r.kind === 'other' ? 'Other' : r.isProposal ? 'Proposal' : 'Project';
+        const billing = r.unbillable ? 'Unbillable' : 'Billable';
+        detAoa.push(splitInUse
+          ? [fmtDateEU(r.date), r.personName, deptShort(r.department), r.projectName,
+             r.deliverableName || '—', kind, billing, r.hours]
+          : [fmtDateEU(r.date), r.personName, deptShort(r.department),
+             r.projectName, kind, billing, r.hours]);
+      });
+    detAoa.push(splitInUse ? ['','','','','','','Total', total] : ['','','','','','Total', total]);
 
     const detWs = XLSX.utils.aoa_to_sheet(detAoa);
     style(detWs, detAoa, 2, { totalRow: detAoa.length-1 });
     detWs['!cols'] = splitInUse
-      ? [{wch:13},{wch:22},{wch:11},{wch:32},{wch:30},{wch:11},{wch:9}]
-      : [{wch:13},{wch:22},{wch:11},{wch:32},{wch:11},{wch:9}];
+      ? [{wch:13},{wch:22},{wch:11},{wch:32},{wch:30},{wch:11},{wch:12},{wch:9}]
+      : [{wch:13},{wch:22},{wch:11},{wch:32},{wch:11},{wch:12},{wch:9}];
     detWs['!freeze'] = {xSplit:0, ySplit:3};
     XLSX.utils.book_append_sheet(wb, detWs, 'Detail');
 
@@ -5387,6 +5474,15 @@ function canManageFinance(proj) {
   return String(proj.creatorId) === String(currentUser.id);
 }
 function isFinanceRole() { return isOpsAdmin() || isAdmin(); }
+
+/* Saying the work has actually been done is the PM's call and nobody else's.
+   Operations runs the money — raising POs, issuing invoices, recording
+   payments — but they are not on site and cannot know a deliverable is
+   finished or a subcontractor has delivered. canManageFinance is the wider
+   permission and still covers everything else on these cards. */
+function canConfirmWork(proj) {
+  return !!currentUser && !!proj && String(proj.creatorId) === String(currentUser.id);
+}
 
 function projById(id) {
   return allProjects.find(p => String(p.id) === String(id)) || null;
@@ -5569,7 +5665,7 @@ function projectFinanceSnapshot(projId) {
 
 const FINANCE_STATUS_LABEL = {
   pending: 'Not yet reached', reached: 'Reached — ready to invoice',
-  invoiced: 'Sent to PM', sent: 'Sent to client', paid: 'Paid',
+  invoiced: 'Invoiced — not yet sent', sent: 'Sent to client', paid: 'Paid',
   issued: 'Issued', ready_to_pay: 'Ready to pay'
 };
 const FINANCE_STATUS_COLOR = {
@@ -5616,6 +5712,7 @@ function renderProjectBilling(p) {
   const cs = contracts.filter(c => String(c.projectId) === String(p.id));
   const sp = subPOs.filter(s => String(s.projectId) === String(p.id));
   const manage = currentUser && canManageFinance(p);
+  const confirmWork = canConfirmWork(p);     // the PM, and only the PM
   const financeAdmin = isFinanceRole();
   const now = Date.now();
 
@@ -5629,7 +5726,9 @@ function renderProjectBilling(p) {
       const checked = m.status !== 'pending';
       return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)">
         <div style="display:flex;align-items:flex-start;gap:8px;min-width:0">
-          <input type="checkbox" ${checked?'checked':''} ${(!manage||checked)?'disabled':''} style="width:15px;height:15px;margin-top:2px;cursor:${manage&&!checked?'pointer':'default'};flex-shrink:0;accent-color:var(--green)" onchange="markMilestoneReached('${m.id}')">
+          <input type="checkbox" ${checked?'checked':''} ${(!confirmWork||checked)?'disabled':''}
+            title="${checked ? '' : confirmWork ? 'Tick once this part of the work is done' : 'Only the project manager can confirm the work is done'}"
+            style="width:15px;height:15px;margin-top:2px;cursor:${confirmWork&&!checked?'pointer':'default'};flex-shrink:0;accent-color:var(--green)" onchange="markMilestoneReached('${m.id}')">
           <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(m.description)} · ${m.percentage}% = ${fmtMoney(m.amount)}
             ${stalled?`<div style="font-size:9px;color:var(--orange);margin-top:2px">⏱ ${stalledDays}d, not yet reached</div>`:''}
             ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
@@ -5640,7 +5739,7 @@ function renderProjectBilling(p) {
           <div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[m.status]}">${FINANCE_STATUS_LABEL[m.status]}</div>
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
             ${financeAdmin && m.status==='reached' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--blue);color:#fff;border-color:var(--blue)" onclick="openIssueInvoice('${m.id}')">Issue invoice</button>` : ''}
-            ${manage && m.status==='invoiced' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markMilestoneSent('${m.id}')">Mark sent to client</button>` : ''}
+            ${financeAdmin && m.status==='invoiced' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" title="Raised before Admin took over sending — confirm it reached the client" onclick="markMilestoneSent('${m.id}')">Mark sent to client</button>` : ''}
             ${financeAdmin && m.status==='sent' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markMilestonePaid('${m.id}')">Mark paid</button>` : ''}
             ${manage ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditMilestone('${m.id}')" title="Edit">✎</button>` : ''}
           </div>
@@ -5705,7 +5804,8 @@ function renderProjectBilling(p) {
             ? `<div style="font-size:10px;font-weight:600;color:${subPOUnpaidTotal(s)?'var(--orange)':'var(--green)'}">${subPOUnpaidTotal(s)?fmtMoney(subPOUnpaidTotal(s))+' outstanding':'Fully paid'}</div>`
             : `<div style="font-size:10px;font-weight:600;color:${FINANCE_STATUS_COLOR[s.status]}">${FINANCE_STATUS_LABEL[s.status]}</div>`}
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
-            ${manage && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
+            ${confirmWork && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
+            ${!confirmWork && s.status==='issued'?`<span style="font-size:9px;color:var(--muted)" title="Only the project manager can confirm this">awaiting the PM</span>`:''}
             ${financeAdmin && !stages.length && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
             ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPO('${s.id}')" title="Edit">✎</button>`:''}
           </div>
@@ -5973,7 +6073,11 @@ async function deleteMilestoneItem() {
 async function markMilestoneReached(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
   const proj = projById(m.projectId);
-  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  if(!proj || !canConfirmWork(proj)) {
+    showToast('Only the project manager can confirm the work is done');
+    renderProjects(); renderOpsFinance();          // put the tick back
+    return;
+  }
   m.status = 'reached'; m.reachedAt = new Date().toISOString(); m.reachedBy = currentUser.id;
   await saveMilestoneRow(m);
   await writeAudit('milestone', m.id, 'status', 'pending', 'reached', proj.name);
@@ -5982,10 +6086,12 @@ async function markMilestoneReached(milestoneId) {
   renderProjects(); renderOpsFinance();
   showToast('Marked reached — Finance notified ✓');
 }
+/* Only reachable now for invoices raised before Admin took over sending them;
+   new ones go straight to 'sent' when Admin issues them. */
 async function markMilestoneSent(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
   const proj = projById(m.projectId);
-  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  if(!isFinanceRole()) { showToast('Admin sends invoices to the client'); return; }
   m.status = 'sent'; m.sentAt = new Date().toISOString();
   await saveMilestoneRow(m);
   await writeAudit('milestone', m.id, 'status', 'invoiced', 'sent', proj.name);
@@ -6110,7 +6216,7 @@ async function deleteSubPOItem() {
 async function markSubPOConfirmed(subPOId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
   const proj = projById(s.projectId);
-  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  if(!proj || !canConfirmWork(proj)) { showToast('Only the project manager can confirm the work is done'); return; }
   s.status = 'ready_to_pay'; s.confirmedAt = new Date().toISOString();
   // With stages, confirming the work makes everything still outstanding
   // payable — an advance that was never ticked is owed too, now the work
@@ -6468,7 +6574,7 @@ function renderFinanceProjectsTable(deptF) {
     .filter(p => status === '' || (status === 'archived' ? !!p.archived : !p.archived))
     .filter(p => !search || (p.name||'').toLowerCase().includes(search) || (p.client||'').toLowerCase().includes(search))
     .map(p => ({ p, pending: financePendingCount(p.id), snap: projectFinanceSnapshot(p.id) }))
-    .sort((a,b) => (b.pending - a.pending) || a.p.name.localeCompare(b.p.name));
+    .sort((a,b) => byProjectName(a.p, b.p));
 
   if(!list.length) {
     table.innerHTML = `<tr><td style="padding:16px;text-align:center;color:var(--muted);font-size:12px">No projects match</td></tr>`;
@@ -6562,7 +6668,7 @@ function openIssueInvoice(milestoneId) {
   issuingMilestoneId = milestoneId;
   issuingIsReplace = false; invoiceRemoveFile = false;
   document.getElementById('issueInvoiceTitle').textContent = 'Issue Invoice';
-  document.getElementById('issueInvoiceSaveBtn').textContent = 'Issue Invoice';
+  document.getElementById('issueInvoiceSaveBtn').textContent = 'Issue & Send';
   document.getElementById('issueInvoiceLabel').textContent = `${proj?proj.name:''} — ${m.description} · ${fmtMoney(m.amount)}`;
   document.getElementById('issueInvoiceFile').value = '';
   document.getElementById('issueInvoiceCurrentFile').style.display = 'none';
@@ -6604,7 +6710,7 @@ async function saveIssueInvoice() {
   if(fileInput.files && fileInput.files[0]) {
     const up = await uploadFinanceFile(fileInput, `invoices/${m.projectId}`);
     if(up) { fileUrl = up.url; fileName = up.name; }
-  } else if(!issuingIsReplace && !confirm('No file attached — issue the invoice without one? The PM will still be notified, but will have to prepare the document themselves.')) {
+  } else if(!issuingIsReplace && !confirm('No file attached — issue the invoice without one? It will still be recorded as sent and the PM told, but there will be no copy on the project for anyone to refer back to.')) {
     return;
   }
 
@@ -6625,21 +6731,27 @@ async function saveIssueInvoice() {
     return;
   }
 
-  m.status = 'invoiced'; m.invoicedAt = new Date().toISOString();
+  /* Admin raises the invoice AND sends it to the client — that is the whole
+     step now, so it lands on 'sent' in one move. The PM used to be handed the
+     invoice to forward on; they are told it has gone out instead. Both
+     timestamps are written so the payment clock starts today and the
+     Outstanding and overdue figures keep working as before. */
+  const stamp = new Date().toISOString();
+  const was = m.status;
+  m.status = 'sent'; m.invoicedAt = stamp; m.sentAt = stamp;
   if(fileUrl) { m.invoiceFileUrl = fileUrl; m.invoiceFileName = fileName; }
   await saveMilestoneRow(m);
-  await writeAudit('milestone', m.id, 'status', 'reached', 'invoiced', proj?proj.name:'');
+  await writeAudit('milestone', m.id, 'status', was, 'sent', proj?proj.name:'');
   if(proj && proj.creatorId) {
-    const note = fileUrl
-      ? `The invoice for "${m.description}" on "${proj.name}" (${fmtMoney(m.amount)}) is attached — download it from the project's Billing section and send it to the client.`
-      : `The invoice for "${m.description}" on "${proj.name}" (${fmtMoney(m.amount)}) is ready — please prepare it and send it to the client.`;
+    const note = `The invoice for "${m.description}" on "${proj.name}" (${fmtMoney(m.amount)}) has been issued and sent to the client by Admin.`
+      + (fileUrl ? ` A copy is in the project's Billing section.` : '');
     addNotification(proj.creatorId, 'invoice_ready_for_client', { message: note, projectId: proj.id });
     const pm = personById(proj.creatorId);
-    if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Invoice ready — ${proj.name}`, note); } catch(e) {} }
+    if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Invoice sent to client — ${proj.name}`, note); } catch(e) {} }
   }
   closeModal('issueInvoiceModal');
   renderOpsFinance(); renderProjects();
-  showToast('Invoice issued — PM notified ✓');
+  showToast('Invoice issued and sent to the client ✓');
 }
 async function markMilestonePaid(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
@@ -6859,8 +6971,10 @@ async function loadHRRange() {
    the hours exactly where they are.
    ══════════════════════════════════════════════════════════════ */
 
-let looseColumns = [];     // [{label, hours, people:Set, sheets:[{id, colId, month, personId}]}]
-let mergingLabel = null;
+let looseColumns = [];     // [{key, label, hours, people:Set, sheets:[{id, colId, month, personId}]}]
+let mergingKeys  = [];     // which loose labels the Move modal is working on
+let looseSearch  = '';
+let looseSelected = new Set();   // keys, so a label with quotes in it is safe
 
 
 /* Timesheets belonging to accounts that no longer exist. Their hours still
@@ -6962,10 +7076,23 @@ async function scanLooseColumns() {
     });
   } catch(e) { console.warn('loose scan failed', e); }
 
-  looseColumns = Object.values(groups).sort((a,b) => b.hours - a.hours);
+  // By name, so a label can be found by eye rather than by size.
+  looseColumns = Object.values(groups).sort((a,b) => byName(a.label, b.label));
+  // A short stable key per label. Labels are free text and routinely contain
+  // quotes and apostrophes, which is no way to address a row from an
+  // onclick — so everything downstream works in keys.
+  looseColumns.forEach((g,i) => { g.key = 'L'+i; });
+  looseSelected = new Set();
   renderLooseColumns();
 }
 
+function looseShown() {
+  const q = looseSearch.trim().toLowerCase();
+  return !q ? looseColumns : looseColumns.filter(g => (g.label||'').toLowerCase().includes(q));
+}
+
+/* The frame is drawn once and the rows are redrawn on their own, so typing in
+   the search box does not replace the box underneath the cursor. */
 function renderLooseColumns() {
   const host = document.getElementById('opsLooseList');
   if(!host) return;
@@ -6976,33 +7103,86 @@ function renderLooseColumns() {
   }
   const totalLoose = looseColumns.reduce((s,g)=>s+g.hours, 0);
   host.innerHTML = `
-    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">
       <strong>${looseColumns.length}</strong> loose ${looseColumns.length===1?'label':'labels'} ·
       <strong>${totalLoose.toLocaleString('en-US')}</strong> hours not attached to any project
     </div>
-    <div style="max-height:460px;overflow-y:auto;border:1px solid var(--border);border-radius:9px">
-      ${looseColumns.map(g => `
-        <div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.label}</div>
-            <div style="font-size:11px;color:var(--muted)">
-              ${g.hours} hrs · ${g.people.size} ${g.people.size===1?'person':'people'} · ${g.sheets.length} timesheet${g.sheets.length===1?'':'s'}
-              ${g.orphaned ? '· <span style="color:var(--orange);font-weight:600">its project was deleted</span>' : ''}
-            </div>
-          </div>
-          <button class="btn btn-sm btn-accent" style="font-size:11px;flex-shrink:0"
-            onclick="openColumnMerge('${g.label.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">Move into…</button>
-        </div>`).join('')}
-    </div>`;
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <input type="search" id="opsLooseSearch" placeholder="Search labels…" value="${escapeAttr(looseSearch)}"
+        oninput="looseSearch=this.value;renderLooseRows()"
+        style="flex:1;min-width:0;padding:6px 10px;font-size:12px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text)">
+      <label title="Select everything currently listed" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);white-space:nowrap;cursor:pointer">
+        <input type="checkbox" id="opsLooseAll" onchange="toggleLooseAll(this.checked)" style="cursor:pointer">All
+      </label>
+      <button class="btn btn-sm btn-accent" id="opsLooseMoveSel" style="font-size:11px;flex-shrink:0"
+        onclick="openColumnMerge()">Move selected…</button>
+    </div>
+    <div id="opsLooseRows" style="max-height:462px;overflow-y:auto;border:1px solid var(--border);border-radius:9px"></div>`;
+  renderLooseRows();
 }
 
-function openColumnMerge(label) {
-  const g = looseColumns.find(x => x.label === label);
-  if(!g) return;
-  mergingLabel = label;
+function renderLooseRows() {
+  const box = document.getElementById('opsLooseRows');
+  if(!box) return;
+  const shown = looseShown();
+  box.innerHTML = shown.length ? shown.map(g => `
+      <label class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+        <input type="checkbox" ${looseSelected.has(g.key)?'checked':''}
+          onchange="toggleLoose('${g.key}',this.checked)" style="flex-shrink:0;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.label)}</div>
+          <div style="font-size:11px;color:var(--muted)">
+            ${g.hours} hrs · ${g.people.size} ${g.people.size===1?'person':'people'} · ${g.sheets.length} timesheet${g.sheets.length===1?'':'s'}
+            ${g.orphaned ? '· <span style="color:var(--orange);font-weight:600">its project was deleted</span>' : ''}
+          </div>
+        </div>
+        <button class="btn btn-sm" style="font-size:11px;flex-shrink:0"
+          onclick="event.preventDefault();event.stopPropagation();openColumnMerge('${g.key}')">Move into…</button>
+      </label>`).join('')
+    : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">No labels match “${escapeHtml(looseSearch)}”.</div>`;
+  syncLooseToolbar();
+}
 
-  document.getElementById('mergeColSubtitle').textContent =
-    `"${label}" · ${g.hours} hours across ${g.sheets.length} timesheet${g.sheets.length===1?'':'s'}`;
+function syncLooseToolbar() {
+  const shown = looseShown();
+  const all = document.getElementById('opsLooseAll');
+  if(all) {
+    all.checked = shown.length > 0 && shown.every(g => looseSelected.has(g.key));
+    all.indeterminate = !all.checked && shown.some(g => looseSelected.has(g.key));
+  }
+  const btn = document.getElementById('opsLooseMoveSel');
+  if(btn) {
+    const n = looseSelected.size;
+    const hrs = looseColumns.filter(g => looseSelected.has(g.key)).reduce((s,g)=>s+g.hours, 0);
+    btn.textContent = n ? `Move ${n} selected (${hrs} hrs)…` : 'Move selected…';
+    btn.disabled = !n;
+    btn.style.opacity = n ? '' : '0.5';
+  }
+}
+
+function toggleLoose(key, on) {
+  on ? looseSelected.add(key) : looseSelected.delete(key);
+  syncLooseToolbar();
+}
+function toggleLooseAll(on) {
+  looseShown().forEach(g => on ? looseSelected.add(g.key) : looseSelected.delete(g.key));
+  renderLooseRows();
+}
+
+/* Called with one key from a row's own button, or with none from the toolbar,
+   in which case it works on everything ticked. */
+function openColumnMerge(key) {
+  const keys = key ? [key] : [...looseSelected];
+  const chosen = looseColumns.filter(g => keys.includes(g.key));
+  if(!chosen.length) { showToast('Tick the labels you want to move first'); return; }
+  mergingKeys = chosen.map(g => g.key);
+
+  const hours  = chosen.reduce((s,g)=>s+g.hours, 0);
+  const sheets = chosen.reduce((s,g)=>s+g.sheets.length, 0);
+  document.getElementById('mergeColSubtitle').textContent = chosen.length === 1
+    ? `"${chosen[0].label}" · ${hours} hours across ${sheets} timesheet${sheets===1?'':'s'}`
+    : `${chosen.length} labels · ${hours} hours across ${sheets} timesheet${sheets===1?'':'s'} — ` +
+      chosen.map(g=>g.label).join(', ');
 
   /* Grouped exactly like the timesheet's own column picker — projects,
      proposals, then the shared activity list — so Admin is choosing from the
@@ -7010,41 +7190,63 @@ function openColumnMerge(label) {
      place, rather than one flat list of everything. */
   const sel = document.getElementById('mergeColTarget');
   const live = allProjects.filter(p => !p.archived)
-    .sort((a,b)=>(a.name||'').localeCompare(b.name||'', undefined, {numeric:true}));
+    .sort(byProjectName);
   const opt = p => `<option value="proj_${p.id}">${escapeHtml(p.name)} · ${escapeHtml(deptShort(p.department||DEFAULT_DEPT))}</option>`;
   const grp = (label, html) => html ? `<optgroup label="── ${label} ──">${html}</optgroup>` : '';
   sel.innerHTML =
       grp('Projects',  live.filter(p => !p.isProposal).map(opt).join(''))
     + grp('Proposals', live.filter(p =>  p.isProposal).map(opt).join(''))
     + grp('Other',     tsActivities().map(a =>
-        `<option value="act_${escapeAttr(a.id)}">${escapeHtml(a.name)}</option>`).join(''));
+        `<option value="act_${escapeAttr(a.id)}">${escapeHtml(a.name)}</option>`).join(''))
+    /* Some people never used Add Leave and simply typed "annual leave" as a
+       column. Those hours are not project work and should not be pushed into
+       one — they become a proper leave column instead. */
+    + grp('Leave', MERGE_LEAVE_TYPES.map(l =>
+        `<option value="leave_${l.type}">${escapeHtml(l.name)}</option>`).join(''));
 
-  const names = [...g.people].map(id => personById(id)?.name || `id ${id}`);
+  const people = new Set();
+  chosen.forEach(g => g.people.forEach(id => people.add(id)));
+  const names = [...people].map(id => personById(id)?.name || `id ${id}`);
   document.getElementById('mergeColPeople').innerHTML =
     `<strong>Whose hours these are:</strong><br>${names.join(', ')}`;
 
   openOverlay('mergeColModal');
 }
 
+/* The leave columns the timesheet already understands. Converting into one of
+   these does NOT touch leave balances — it reclassifies hours that were typed
+   in by hand so they stop counting as project work. */
+const MERGE_LEAVE_TYPES = [
+  { type:'leave',    name:'Annual Leave'   },
+  { type:'sick',     name:'Sick Leave'     },
+  { type:'business', name:'Business Leave' }
+];
+
 async function applyColumnMerge() {
-  const g = looseColumns.find(x => x.label === mergingLabel);
-  if(!g) return;
+  const chosen = looseColumns.filter(g => mergingKeys.includes(g.key));
+  if(!chosen.length) return;
   const raw = (document.getElementById('mergeColTarget')||{}).value || '';
-  const isAct = raw.startsWith('act_');
-  const target = isAct
-    ? tsActivities().find(a => String(a.id) === raw.slice(4))
+  const isAct   = raw.startsWith('act_');
+  const isLeave = raw.startsWith('leave_');
+  const leaveDef = isLeave ? MERGE_LEAVE_TYPES.find(l => l.type === raw.slice(6)) : null;
+  const target = isLeave ? (leaveDef && { id:leaveDef.type, name:leaveDef.name })
+    : isAct ? tsActivities().find(a => String(a.id) === raw.slice(4))
     : allProjects.find(p => String(p.id) === raw.replace('proj_',''));
   if(!target) { showToast('Pick where these hours belong'); return; }
   // What an existing column on the sheet must match to be folded into
-  const sameTarget = c => isAct
-    ? String(c.activityId) === String(target.id)
-    : String(c.projectId)  === String(target.id);
+  const sameTarget = c => isLeave
+    ? c.type === leaveDef.type
+    : isAct
+      ? String(c.activityId) === String(target.id)
+      : String(c.projectId)  === String(target.id);
 
   closeModal('mergeColModal');
-  showToast('Moving hours…');
+  showToast(chosen.length === 1 ? 'Moving hours…' : `Moving ${chosen.length} labels…`);
 
+  // Every sheet touched by any of the chosen labels, in one pass
+  const work = chosen.flatMap(g => g.sheets.map(s => ({ ...s, label:g.label })));
   let updated = 0, merged = 0, failed = 0;
-  for(const s of g.sheets) {
+  for(const s of work) {
     try {
       const { data } = await sb.from('timesheets').select('*').eq('id', s.id).maybeSingle();
       if(!data) continue;
@@ -7070,7 +7272,12 @@ async function applyColumnMerge() {
         merged++;
       } else {
         // Point the column at its new home, clearing whichever id it is not
-        if(isAct) {
+        if(isLeave) {
+          loose.type = leaveDef.type;
+          delete loose.projectId; delete loose.activityId;
+          delete loose.deliverableId; delete loose.deliverableName;
+          delete loose.unbillable;
+        } else if(isAct) {
           loose.activityId = String(target.id);
           loose.type = 'activity';
           delete loose.projectId; delete loose.deliverableId; delete loose.deliverableName;
@@ -7096,12 +7303,18 @@ async function applyColumnMerge() {
   // Team membership is managed on the project itself, not here — this
   // operation only moves hours.
 
-  await writeAudit('timesheet', target.id, 'merged label',
-    g.label, target.name, `${updated} timesheets, ${g.hours} hours`);
+  const movedHours = chosen.reduce((s,g)=>s+g.hours, 0);
+  // One audit line per label, so the trail still reads label by label
+  for(const g of chosen) {
+    await writeAudit('timesheet', target.id, 'merged label',
+      g.label, target.name, `${g.sheets.length} timesheets, ${g.hours} hours`);
+  }
 
   loeLoaded = false;                 // LOE must re-read the changed sheets
   await scanLooseColumns();
-  showToast(`Moved ${g.hours} hours into ${target.name} · ${updated} timesheet${updated===1?'':'s'}`
+  showToast(`Moved ${movedHours} hours into ${target.name}`
+            + (chosen.length > 1 ? ` from ${chosen.length} labels` : '')
+            + ` · ${updated} timesheet${updated===1?'':'s'}`
             + (merged ? ` · ${merged} merged into an existing column` : ''));
 }
 
@@ -7929,7 +8142,7 @@ function renderProposals() {
     return;
   }
 
-  grid.innerHTML = filtered.map(p => proposalCard(p)).join('');
+  grid.innerHTML = sortedProjects(filtered).map(p => proposalCard(p)).join('');
 }
 
 
@@ -8232,8 +8445,10 @@ function renderMyWork() {
 
   const pendingApproval=[];
   if(iAmPM) {
-    projects.filter(p=>p.creatorId===currentUser.id).forEach(proj=>{
-      (proj.deliverables||[]).filter(d=>d.pendingApproval).forEach(d=>{
+    // Same order as every other project list, then by task within a project
+    sortedProjects(projects.filter(p=>p.creatorId===currentUser.id)).forEach(proj=>{
+      (proj.deliverables||[]).filter(d=>d.pendingApproval)
+        .slice().sort((a,b)=>byName(a.name,b.name)).forEach(d=>{
         const assignee=personById(d.assignedTo);
         pendingApproval.push({...d, projName:proj.name, projId:proj.id, assignee});
       });
@@ -8290,7 +8505,7 @@ function renderMyWork() {
     if(myWorkGroupBy === 'project') {
       const byProj = {};
       activeTasks.forEach(t => { (byProj[t.projName] = byProj[t.projName] || []).push(t); });
-      tasksHtml += Object.keys(byProj).sort((a,b)=>a.localeCompare(b)).map(projName => {
+      tasksHtml += Object.keys(byProj).sort(byName).map(projName => {
         const group = byProj[projName].slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
         return `<div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 6px">📁 ${projName}</div>` +
           group.map(taskRowHtml).join('');
@@ -8355,6 +8570,8 @@ function renderMyWork() {
       else if(n.type==='profile_changed'){icon='👤';msg=n.data.message||'Your account was updated';color='var(--blue)';}
       else if(n.type==='work_created'){icon='🆕';msg=n.data.message||'A new project or proposal was created';color='var(--green)';}
       else if(n.type==='timesheet_reminder'){icon='⏰';msg=n.data.message||'Your timesheet is still outstanding';color='var(--orange)';}
+      // Admin issues and sends the invoice; this is the PM being told it went out
+      else if(n.type==='invoice_ready_for_client'){icon='🧾';msg=n.data.message||'An invoice was sent to the client';color='var(--green)';}
       // Anything without its own branch still shows whatever text it carries,
       // so a new notification type can never render as a blank row.
       if(!msg) msg = (n.data && (n.data.message || n.data.text)) || 'Update';
@@ -8749,8 +8966,7 @@ function addMemberRow() {
     <div class="field mr-title-field" style="margin:0"><label style="font-size:11px">Title</label>
       <select class="mr-title" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
         <option value="">— Title —</option>
-        <option>Intern</option><option>Associate</option><option>Senior Associate</option>
-        <option>Consultant</option><option>Senior Consultant</option><option>Manager</option><option>Director</option>
+        ${titleOptionsHtml('')}
       </select>
     </div>
     <div class="field" style="margin:0"><label style="font-size:11px">Access</label>
@@ -9939,8 +10155,8 @@ function tsPopulateDelivSel() {
   const val = sel.value || '';
   if(otherInp) otherInp.style.display = val === 'other' ? '' : 'none';
   const hide = () => { dsel.style.display = 'none'; dsel.innerHTML = ''; };
-  if(!val.startsWith('proj_')) return hide();
-  const proj = tsProjectPool().find(p => String(p.id) === val.replace('proj_',''));
+  if(!val.startsWith('proj_') && !val.startsWith('done_')) return hide();
+  const proj = tsProjectPool().find(p => String(p.id) === val.replace(/^(proj|done)_/,''));
   if(!proj) return hide();
   const st = tsProjColState(proj);
   if(!st.available.length) return hide();
@@ -9973,18 +10189,29 @@ function populateTsColDropdown() {
 
   const pool = tsProjectPool();
 
+  /* Live work only in the first four groups — completed projects have their
+     own group at the bottom, so nobody logs billable time against a job that
+     closed months ago by picking it out of the usual list. */
+  const live = pool.filter(p => !p.archived);
+
   // My Projects: member of or created
-  const myProjects = pool.filter(p =>
+  const myProjects = live.filter(p =>
     (p.members||[]).some(m => String(m.personId) === uid) ||
     String(p.creatorId) === uid
   ).filter(tsProjectSelectable);
 
   // All other active projects
-  const otherProjects = pool.filter(p =>
+  const otherProjects = live.filter(p =>
     !myProjects.find(mp => mp.id === p.id)
   ).filter(tsProjectSelectable);
 
-  const mkOpts = list => list.map(p =>
+  /* Finished work the client has come back to. We do it to keep the
+     relationship, nobody is billed for it, and it still has to be logged
+     somewhere — so every completed project is offered at the bottom of the
+     list, and the hours are marked unbillable for the Admin's LOE. */
+  const doneProjects = pool.filter(p => p.archived).filter(tsProjectSelectable);
+
+  const mkOpts = list => sortedProjects(list).map(p =>
     `<option value="proj_${p.id}">${escapeHtml(p.name||'Unnamed')}</option>`).join('');
   const grp = (label, list) => list.length
     ? `<optgroup label="── ${label} ──">${mkOpts(list)}</optgroup>` : '';
@@ -9997,6 +10224,14 @@ function populateTsColDropdown() {
   inner += grp('My Proposals',  myProjects.filter(isProp));
   inner += grp('All Projects',  otherProjects.filter(p => !isProp(p)));
   inner += grp('All Proposals', otherProjects.filter(isProp));
+
+  // Finished work, kept apart and clearly labelled.
+  if(doneProjects.length) {
+    inner += `<optgroup label="── Completed — unbillable ──">` +
+      sortedProjects(doneProjects).map(p =>
+        `<option value="done_${p.id}">${escapeHtml(p.name||'Unnamed')}</option>`).join('') +
+      `</optgroup>`;
+  }
 
   /* Other: the list Admin maintains, so everyone logs training, events and
      the like under one agreed name. Already-added ones drop off. */
@@ -10022,11 +10257,18 @@ function tsAddColumn() {
   const sel=document.getElementById('tsColSel');
   const val=sel.value; if(!val) return;
   let col;
-  if(val.startsWith('proj_')) {
-    const pidStr=val.replace('proj_','');
+  if(val.startsWith('proj_') || val.startsWith('done_')) {
+    /* done_ is a completed project: the same column in every respect except
+       that the hours are marked unbillable, so the Admin's LOE can keep them
+       apart from work that gets charged for. The flag is written once, when
+       the column is added — finishing a project later never turns hours that
+       were billable at the time into unbillable ones. */
+    const unbillable=val.startsWith('done_');
+    const pidStr=val.replace(/^(proj|done)_/,'');
     const proj=tsProjectPool().find(p=>String(p.id)===pidStr);
     if(!proj){showToast('That project is no longer on the list');return;}
     col={id:'col'+Date.now(),name:proj.name,type:'project',projectId:pidStr};
+    if(unbillable) col.unbillable=true;
     // Optional: one specific deliverable inside that project.
     const dsel=document.getElementById('tsDelivSel');
     const delivId=(dsel && dsel.style.display!=='none') ? dsel.value : '';
@@ -10088,10 +10330,15 @@ function tsColDelivLabel(col) {
   return (d && d.name) || col.deliverableName || '';
 }
 
+/* Work done for a client after their project closed, as a goodwill job. The
+   suffix travels with the label into the exports, so the Admin never has to
+   remember which columns were which. */
+function tsColIsUnbillable(col) { return !!(col && col.unbillable); }
+
 function tsColLabel(col) {
   const base = tsColProjectLabel(col);
   const sub  = tsColDelivLabel(col);
-  return sub ? `${base} — ${sub}` : base;
+  return (sub ? `${base} — ${sub}` : base) + (tsColIsUnbillable(col) ? ' (unbillable)' : '');
 }
 
 function renderTsMatrix() {
@@ -10114,7 +10361,11 @@ function renderTsMatrix() {
   /* border-collapse:collapse drops a sticky cell's own borders once it detaches
      and floats, so the header's edges are drawn with inset shadows instead —
      those travel with the cell and stay visible the whole way down the month. */
-  const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:4;box-shadow:inset 0 -1px 0 var(--border),inset 0 1px 0 var(--border)';
+  /* --ts-head-top is set by sizeTsMatrixPane. When the page is what scrolls,
+     the header has to stop BELOW the navigation bar — pinned at 0 it slid
+     underneath it and the project names vanished exactly when they were
+     needed. When the grid is its own scroll pane, 0 is right. */
+  const thStyle='padding:8px 12px;font-size:11px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);white-space:nowrap;position:sticky;top:var(--ts-head-top,0px);z-index:12;box-shadow:inset 0 -1px 0 var(--border),inset 0 1px 0 var(--border)';
   const tdStyle='padding:4px 6px;border:1px solid var(--border);text-align:center;';
 
   // Build header — always show Day + Date columns, then project columns, then Total
@@ -10131,8 +10382,8 @@ function renderTsMatrix() {
   }
   html+=`<table style="border-collapse:collapse;width:100%;font-size:12px">
     <thead><tr>
-      <th style="${thStyle};text-align:left;min-width:60px">Day</th>
-      <th style="${thStyle};text-align:left;min-width:110px;left:0;z-index:6">Date</th>
+      <th style="${thStyle};text-align:left;min-width:60px;left:0;z-index:14">Day</th>
+      <th data-frozen="2" style="${thStyle};text-align:left;min-width:110px;z-index:14">Date</th>
       ${cols.map(c=>{
         const sub = tsColDelivLabel(c);
         /* A full project title is longer than any sensible column, so the
@@ -10143,6 +10394,7 @@ function renderTsMatrix() {
           <div style="white-space:normal;overflow-wrap:anywhere;line-height:1.3;max-width:170px">
             ${escapeHtml(tsColProjectLabel(c))}
             ${sub?`<div style="font-weight:600;font-size:10px;color:var(--muted);margin-top:1px">↳ ${escapeHtml(sub)}</div>`:''}
+            ${tsColIsUnbillable(c)?`<div title="Goodwill work on a completed project — these hours are not billed" style="display:inline-block;margin-top:3px;font-weight:700;font-size:9px;letter-spacing:0.3px;text-transform:uppercase;color:#8a6d1f;background:#fdf3d6;border:1px solid #e8d49a;border-radius:4px;padding:1px 5px">Unbillable</div>`:''}
           </div>
           ${locked?'':`<button onclick="removeTsCol('${c.id}')" title="Remove" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:11px;padding:0 2px;line-height:1.35">×</button>`}
         </div>
@@ -10193,8 +10445,8 @@ function renderTsMatrix() {
                 : isBusiness ? 'var(--lv-business)' : '';
 
     html+=`<tr style="${rowBg ? 'background:'+rowBg : ''}"${beforeStart?` title="${escapeAttr(preStartMsg)}"`:''}>
-      <td style="${tdStyle};color:${isWeekend||beforeStart?'var(--muted)':'var(--text2)'};">${dayLabel}</td>
-      <td style="${tdStyle};font-weight:600;text-align:left;position:sticky;left:0;z-index:3;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">
+      <td style="${tdStyle};color:${isWeekend||beforeStart?'var(--muted)':'var(--text2)'};position:sticky;left:0;z-index:3;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">${dayLabel}</td>
+      <td data-frozen="2" style="${tdStyle};font-weight:600;text-align:left;position:sticky;z-index:3;background:${rowBg || (isWeekend?'#f5f3ef':'var(--surface)')}">
         ${isMissing?'🔴 ':''}<span style="color:${isWeekend||beforeStart?'var(--muted)':'var(--text)'}">${displayDate}</span>${holTag}${leaveTag}
       </td>
       ${cols.map(c=>{
@@ -10303,21 +10555,82 @@ function updateTsNote(dateStr, colId, text) {
   saveTsDraft();
 }
 
-/* The grid scrolls inside its own pane rather than with the page — that is the
-   only way position:sticky can pin the header row, since sticky needs a
-   scrolling ancestor with room to travel. The pane is sized to end at the
-   bottom of the window, so the page itself stays put and the header, the Date
-   column and the add-column controls are all on screen the whole month. */
+/* Two ways to show the month, picked by whether the table actually needs to
+   scroll sideways.
+
+   Normally it does not — a few columns fit the screen — so the pane is left
+   open: the whole month is one long table, the page scrolls as it always did,
+   and the header row pins itself to the top of the window on the way down.
+   One scrollbar, full length, frozen header.
+
+   Only when there are enough columns to run off the edge does the grid become
+   its own scroll pane. Sideways scrolling needs a scroll container, and a
+   container that scrolls sideways scrolls vertically too, so in that case the
+   pane is capped at the bottom of the window and the header pins inside it.
+   The short boxed-in grid was this second case applied to everybody. */
+/* Day and Date stay put when the grid scrolls sideways. Date's offset is
+   measured off the Day column rather than assumed, so the two sit flush at
+   any zoom level or column width. */
+function syncTsFrozenCols() {
+  const pane = document.getElementById('tsMatrixScroll');
+  const tbl  = pane && pane.querySelector('table');
+  const first = tbl && tbl.querySelector('thead th');
+  if(!first) return;
+  const w = Math.round(first.getBoundingClientRect().width) + 'px';
+  tbl.querySelectorAll('[data-frozen="2"]').forEach(el => { el.style.left = w; });
+}
+
 function sizeTsMatrixPane() {
   const pane = document.getElementById('tsMatrixScroll');
   if(!pane || !pane.offsetParent) return;
-  // Distance from the top of the DOCUMENT, so the result doesn't shift as the
-  // page is scrolled — the pane must not grow every time the user scrolls.
-  const docTop = pane.getBoundingClientRect().top + window.scrollY;
-  const h = Math.max(320, Math.round(window.innerHeight - docTop - 20));
+  syncTsFrozenCols();
+
+  /* Measure with the cap OFF. A capped pane grows a vertical scrollbar, that
+     scrollbar takes ~15px off the usable width, and the table then reads as
+     too wide — which kept the cap on. The pane was deciding it needed to be
+     a short scrolling box because it already was one. */
+  pane.style.overflow  = 'visible';
+  pane.style.maxHeight = 'none';
+
+  const tbl = pane.querySelector('table');
+  // 2px of slack: sub-pixel widths should not tip a table that fits into
+  // the boxed-in treatment.
+  const needsSideways = !!tbl && tbl.scrollWidth > pane.clientWidth + 2;
+
+  /* Whatever scrolls, the project names must come to rest BELOW the navigation
+     bar. The bar is pinned at the top of the window with a higher stacking
+     order, so a header that stops at 0 slides underneath it and the names
+     disappear at exactly the moment you are scrolling down to read them. */
+  const tabs  = document.querySelector('.tabs');
+  const tabsH = tabs ? Math.round(tabs.getBoundingClientRect().height) : 0;
+  const rectTop = pane.getBoundingClientRect().top;
+
+  if(!needsSideways) {
+    // The page scrolls, so the header pins against the window itself.
+    pane.style.setProperty('--ts-head-top', tabsH + 'px');
+    return;                      // full length, one scrollbar, header pinned
+  }
+
+  pane.style.overflow = 'auto';
+  // The pane scrolls, so the header pins to the pane's own top — pushed down
+  // by however much of that top the navigation bar is currently covering.
+  pane.style.setProperty('--ts-head-top', Math.max(0, Math.round(tabsH - rectTop)) + 'px');
+  /* Measured from where the pane sits in the WINDOW right now, so scrolling
+     the page down hands the grid the space the header above it has vacated.
+     Scrolled to the top of the month, the grid is the whole window. Growing
+     downwards never moves the pane's own top, so nothing jumps under the
+     cursor. A fixed document-based height is what left it stuck short. */
+  const h = Math.max(420, Math.round(window.innerHeight - rectTop - 16));
   pane.style.maxHeight = h + 'px';
 }
 window.addEventListener('resize', sizeTsMatrixPane);
+
+/* The grid only needs re-measuring once a scroll settles, not on every pixel. */
+let tsPaneTick = null;
+window.addEventListener('scroll', () => {
+  if(tsPaneTick) return;
+  tsPaneTick = requestAnimationFrame(() => { tsPaneTick = null; sizeTsMatrixPane(); });
+}, { passive: true });
 
 function updateTsCell(dateStr, colId, val) {
   /* The boxes are not drawn before somebody's first day, but a sheet left
@@ -11407,7 +11720,7 @@ function buildTsProjectRollupSheet(sheets, nameFor) {
   Object.entries(delivTotals)
     .sort((a,b) => {
       const [ap] = a[0].split('\u0000'), [bp] = b[0].split('\u0000');
-      return ap.localeCompare(bp) || b[1] - a[1];
+      return byName(ap, bp) || b[1] - a[1];
     })
     .forEach(([k,h]) => {
       const [p,d] = k.split('\u0000');
@@ -11418,7 +11731,7 @@ function buildTsProjectRollupSheet(sheets, nameFor) {
   aoa.push(['Project as a whole']);
   const projHead = aoa.length;
   aoa.push(['Project','Hours','Share']);
-  Object.entries(projTotals).sort((a,b)=>b[1]-a[1])
+  Object.entries(projTotals).sort((a,b)=>byName(a[0], b[0]))
     .forEach(([p,h]) => aoa.push([p, r2(h), grand ? Math.round(h/grand*1000)/1000 : 0]));
   aoa.push(['Total', r2(grand), 1]);
 
@@ -11442,7 +11755,7 @@ function buildTsSummarySheet(sheets, teamArr, month) {
   // Collect all unique project column names
   const allCols=new Set();
   sheets.forEach(s=>(s.columns||[]).forEach(c=>allCols.add(tsColLabel(c))));
-  const colNames=[...allCols];
+  const colNames=[...allCols].sort(byName);
 
   // Row 1: title (matches "Timesheet Summary — April 2026")
   // Row 2: blank
@@ -11649,6 +11962,56 @@ function nbToggleLeaveHours() {
   if(field && start !== end) document.getElementById('leaveHours').value = '';
 }
 
+/* Set while an existing leave is being changed rather than a new one added.
+   Plans change — a WFH day that did not happen, a sick day that turned out to
+   be two — and every type can be edited or removed, WFH included. */
+let editingLeaveId = null;
+
+function syncLeaveModalMode() {
+  const btn  = document.getElementById('leaveSubmitBtn');
+  const note = document.getElementById('leaveEditNote');
+  if(btn)  btn.textContent = editingLeaveId ? 'Save changes' : 'Add Leave';
+  if(note) note.style.display = editingLeaveId ? '' : 'none';
+}
+
+function resetLeaveForm() {
+  document.getElementById('leaveStart').value = '';
+  document.getElementById('leaveEnd').value = '';
+  document.getElementById('leaveType').value = 'annual';
+  const fd = document.getElementById('leaveFullDay'); if(fd) fd.checked = true;
+  const st = document.getElementById('leaveStartTime'); if(st) st.value = DEFAULT_START_T;
+  const et = document.getElementById('leaveEndTime');   if(et) et.value = DEFAULT_END_T;
+  nbToggleLeaveTimes();
+  const hf = document.getElementById('leaveHoursField'); if(hf) hf.style.display = 'none';
+  if(typeof renderLeaveHoursHint === 'function') renderLeaveHoursHint();
+}
+
+function cancelLeaveEdit() {
+  editingLeaveId = null;
+  resetLeaveForm();
+  syncLeaveModalMode();
+  renderMyLeavesList();
+}
+
+/* Load one back into the form. Saving replaces it, so the old entry and the
+   hours it put on the timesheet are cleared before the new one is written. */
+function editLeave(leaveId) {
+  const l = leaves.find(x => String(x.id) === String(leaveId));
+  if(!l) { showToast('That leave is no longer there'); return; }
+  editingLeaveId = String(l.id);
+  document.getElementById('leaveStart').value = l.startDate || '';
+  document.getElementById('leaveEnd').value   = l.endDate || '';
+  document.getElementById('leaveType').value  = l.type || 'annual';
+  const fd = document.getElementById('leaveFullDay');
+  if(fd) fd.checked = l.fullDay !== false;
+  const st = document.getElementById('leaveStartTime'); if(st) st.value = l.startTime || DEFAULT_START_T;
+  const et = document.getElementById('leaveEndTime');   if(et) et.value = l.endTime   || DEFAULT_END_T;
+  nbToggleLeaveTimes();
+  if(typeof renderLeaveHoursHint === 'function') renderLeaveHoursHint();
+  syncLeaveModalMode();
+  renderMyLeavesList();
+}
+
 function openLeaveModal() {
   if(isTimesheetOnly() || isHR()) { showToast('Leave requests are not available for this account'); return; }
   // Everyone submits only for themselves — no dropdown needed
@@ -11657,14 +12020,9 @@ function openLeaveModal() {
   personSel.innerHTML = `<option value="${currentUser.id}">${currentUser.name}</option>`;
   personSel.style.display = 'none';
   personLbl.style.display = 'none';
-  document.getElementById('leaveStart').value = '';
-  document.getElementById('leaveEnd').value = '';
-  document.getElementById('leaveType').value = 'annual';
-  const fd = document.getElementById('leaveFullDay'); if(fd) fd.checked = true;
-  const st = document.getElementById('leaveStartTime'); if(st) st.value = DEFAULT_START_T;
-  const et = document.getElementById('leaveEndTime');   if(et) et.value = DEFAULT_END_T;
-  nbToggleLeaveTimes();
-  document.getElementById('leaveHoursField').style.display = 'none';
+  editingLeaveId = null;
+  resetLeaveForm();
+  syncLeaveModalMode();
   // Show existing leaves for this person
   renderMyLeavesList();
   openOverlay('leaveModal');
@@ -11674,38 +12032,55 @@ function renderMyLeavesList() {
   const container = document.getElementById('myLeavesList');
   if(!container) return;
   const uid = currentUser.id; // always own leaves only
-  const today = new Date().toISOString().slice(0,10);
+  const today = (typeof jordanTodayStr === 'function') ? jordanTodayStr()
+              : new Date().toISOString().slice(0,10);
+  /* Everything, not just what is still to come. A WFH day you did not end up
+     taking is in the past by the time you notice, and leaving it there was
+     the reason it could not be removed. */
   const myLeaves = leaves.filter(l =>
     String(l.personId) === String(currentUser.id) && // only own leaves
-    l.status !== 'rejected' &&
-    l.endDate >= today // only current and future
+    l.status !== 'rejected'
   ).sort((a,b) => a.startDate > b.startDate ? -1 : 1);
 
   if(!myLeaves.length) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:12px">No upcoming leaves.</div>';
+    container.innerHTML = '<div style="color:var(--muted);font-size:12px">Nothing recorded yet.</div>';
     return;
   }
-  container.innerHTML = myLeaves.map(l => {
-    const person = personById(l.personId);
-    const badge = l.type === 'sick'
-      ? '<span class="leave-badge sick">Sick</span>'
-      : l.type === 'business'
-      ? '<span class="leave-badge business">Business</span>'
-      : l.type === 'wfh'
-      ? '<span class="leave-badge wfh">WFH</span>'
-      : '<span class="leave-badge annual">Annual</span>';
-    // Nothing is awaiting approval any more, so a status badge only adds noise.
-    const statusBadge = l.status === 'rejected'
-      ? '<span style="font-size:10px;color:var(--red);font-weight:600">Removed</span>' : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
+  const upcoming = myLeaves.filter(l => l.endDate >= today).length;
+  container.innerHTML = myLeaves.map((l, i) => {
+    const header = i === upcoming && upcoming >= 0 && i < myLeaves.length
+      ? `<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 6px">Already passed</div>` : '';
+    return header + leaveRowHtml(l, uid);
+  }).join('');
+}
+
+function leaveRowHtml(l, uid) {
+  const person = personById(l.personId);
+  const badge = l.type === 'sick'
+    ? '<span class="leave-badge sick">Sick</span>'
+    : l.type === 'business'
+    ? '<span class="leave-badge business">Business</span>'
+    : l.type === 'wfh'
+    ? '<span class="leave-badge wfh">WFH</span>'
+    : '<span class="leave-badge annual">Annual</span>';
+  const span = l.startDate === l.endDate
+    ? fmtDateEU(l.startDate) : `${fmtDateEU(l.startDate)} → ${fmtDateEU(l.endDate)}`;
+  // A part day is the one case where the times matter to read it back
+  const part = (l.fullDay === false && l.startTime && l.endTime)
+    ? ` · ${l.startTime}–${l.endTime}` : '';
+  const beingEdited = editingLeaveId && String(editingLeaveId) === String(l.id);
+  const btn = 'background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);cursor:pointer';
+  return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:${beingEdited?'#fffbf0':'var(--surface2)'};border-radius:8px;border:1px solid ${beingEdited?'#e8d49a':'var(--border)'};margin-bottom:6px">
       ${uid === null ? `<div class="avatar" style="background:${person?person.c.bg:'#eee'};color:${person?person.c.fg:'#666'};width:24px;height:24px;font-size:9px;flex-shrink:0">${person?initials(person.name):'?'}</div>` : ''}
       <div style="flex:1;min-width:0">
         ${uid === null ? `<div style="font-size:12px;font-weight:600">${person?person.name:''}</div>` : ''}
-        <div style="font-size:11px;color:var(--muted)">${l.startDate} → ${l.endDate} ${badge} ${statusBadge}</div>
+        <div style="font-size:11px;color:var(--muted)">${span}${part} ${badge}</div>
       </div>
-      <button onclick="cancelLeave('${l.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--muted);cursor:pointer" title="Remove leave">✕</button>
+      ${beingEdited
+        ? `<span style="font-size:10px;font-weight:700;color:#8a6d1f;text-transform:uppercase;letter-spacing:0.3px;flex-shrink:0">editing</span>`
+        : `<button onclick="editLeave('${l.id}')" style="${btn}" title="Change the dates or type">✎</button>`}
+      <button onclick="cancelLeave('${l.id}')" style="${btn}" title="Remove this">✕</button>
     </div>`;
-  }).join('');
 }
 
 async function submitLeave() {
@@ -11727,6 +12102,25 @@ async function submitLeave() {
   // timesheet, calendar and grid reflect it — there is nothing to approve.
   const status = 'approved';
   const approvedBy = currentUser.id;
+
+  /* Editing replaces: the old entry and whatever it put on the timesheet go
+     first, then the new one is written. Doing it this way means an edit can
+     never leave half of the old leave behind — it runs the same removal the
+     ✕ button runs, which is the path that is known to clean up properly. */
+  const wasEdit = !!editingLeaveId;
+  if(editingLeaveId) {
+    const old = leaves.find(x => String(x.id) === String(editingLeaveId));
+    const oldId = editingLeaveId;
+    editingLeaveId = null;
+    const { error: delErr } = await sb.from('leaves').delete().eq('id', oldId);
+    if(delErr) {
+      showToast('Could not change that leave — ' + (delErr.message || 'try again'), 7000);
+      editingLeaveId = oldId;
+      return;
+    }
+    leaves = leaves.filter(x => String(x.id) !== String(oldId));
+    if(old) await removeLeaveFromTimesheets(old.personId, old.startDate, old.endDate, old.type, oldId);
+  }
 
   const {data, error} = await sb.from('leaves').insert([{
     person_id: personId,
@@ -11752,7 +12146,12 @@ async function submitLeave() {
   renderHeaderBalances();
   closeModal('leaveModal');
   renderWeekly(); renderMonthly();
-  showToast(status === 'approved' ? 'Leave added ✓' : 'Leave request submitted — pending manager approval ✓');
+  // If their timesheet is open, the pre-filled hours there have just changed
+  if(currentUser && String(currentUser.id) === String(personId)) {
+    const tsView = document.getElementById('view-timesheet');
+    if(tsView && !tsView.classList.contains('hidden') && typeof loadUserTimesheet === 'function') loadUserTimesheet();
+  }
+  showToast(wasEdit ? 'Leave updated ✓' : 'Leave added ✓');
 }
 
 async function injectLeaveIntoTimesheets(personId, startDate, endDate, type, leaveId, leaveHours) {
@@ -12394,7 +12793,7 @@ async function loadHRSummary() {
   });
 
   const grandTotal = Object.values(totals).reduce((a,b)=>a+b,0);
-  const colNames = Object.keys(totals).sort();
+  const colNames = Object.keys(totals).sort(byName);
 
   if(!colNames.length) {
     container.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">No timesheet data found for this period.</div>';
@@ -12464,7 +12863,7 @@ async function exportHRSummary() {
       monthData[ts.month][col.name] = hrs;
     });
   });
-  const colNames = Object.keys(totals).sort();
+  const colNames = Object.keys(totals).sort(byName);
   const months = Object.keys(monthData).sort();
   const aoa = [
     [`Multi-Month Timesheet Summary — ${person?person.name:''}`, '', `${fromMonth} to ${toMonth}`],
@@ -12487,7 +12886,7 @@ async function exportHRSummary() {
 // ══════════════════════════════════════════════════════════════════════════
 function populateHRProjectControls() {
   const projSel = document.getElementById('hrProjSel');
-  if(projSel) projSel.innerHTML = projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(projSel) projSel.innerHTML = sortedProjects(projects).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const opts = getTsMonthOptions();
   const optHtml = opts.map(o=>`<option value="${o.val}">${o.label.replace(' (upcoming)','')}</option>`).join('');
   ['hrProjFrom','hrProjTo'].forEach(id=>{
@@ -13187,7 +13586,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-05-v107 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-06-v112 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
