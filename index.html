@@ -3710,6 +3710,7 @@ function applyLogin() {
   }
 
   applyGlobalChrome();
+  lastSyncAt = Date.now();
 }
 
 /* Visibility rules that apply to every account, run AFTER each branch —
@@ -9433,40 +9434,116 @@ const NB_MARGIN      = 36;    // page margin left, right, top
 const NB_GAP         = 12;    // gap between notes
 
 /* ── Storage ──────────────────────────────────────────────────── */
-function notesKey() { return currentUser ? 'wt_notes_' + currentUser.id : null; }
+function notesKey()   { return currentUser ? 'wt_notes_' + currentUser.id : null; }
+/* When this browser last wrote notes. Kept beside the notes rather than inside
+   them so the stored shape does not change. */
+function notesStampKey() { return currentUser ? 'wt_notes_at_' + currentUser.id : null; }
+
+function localNotesStamp() {
+  const k = notesStampKey(); if(!k) return 0;
+  const v = Number(localStorage.getItem(k) || 0);
+  return isFinite(v) ? v : 0;
+}
+
 function loadNotes() {
   const k = notesKey(); if (!k) return [];
   try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch(e) { return []; }
 }
+
+/* True while something typed here has not reached the database yet. The
+   auto-reload refuses to run while this is set. */
+let notesDirty = false;
+
 function saveNotes(s) {
   const k = notesKey();
-  if (k) localStorage.setItem(k, JSON.stringify(s));
-  if (currentUser) {
-    sb.from('user_notes').upsert({
-      user_id: String(currentUser.id),
-      notes_data: JSON.stringify(s),
-      updated_at: new Date().toISOString()
-    }).then(()=>{}).catch(e => console.warn('notes save error:', e.message));
+  const payload = JSON.stringify(s);
+  const now = Date.now();
+  if (k) {
+    try {
+      localStorage.setItem(k, payload);
+      const sk = notesStampKey(); if(sk) localStorage.setItem(sk, String(now));
+    } catch(e) { console.warn('notes could not be stored locally:', e); }
   }
+  if (!currentUser) return;
+
+  notesDirty = true;
+  /* Supabase hands errors back in the response rather than throwing, so a
+     .catch() alone never fired — which is how notes went missing before.
+     Read the error, and keep the dirty flag up if the write did not land. */
+  sb.from('user_notes').upsert({
+    user_id: String(currentUser.id),
+    notes_data: payload,
+    updated_at: new Date(now).toISOString()
+  }).then(res => {
+    if (res && res.error) {
+      console.warn('notes save refused:', res.error.message || res.error);
+      showToast('⚠ Notes could not be saved just now — they are still here, keep this tab open', 7000);
+      return;                        // still dirty, so nothing reloads over them
+    }
+    notesDirty = false;
+  }, err => {
+    console.warn('notes save failed:', err && err.message || err);
+    showToast('⚠ Notes could not be saved just now — they are still here, keep this tab open', 7000);
+  });
 }
+
 async function loadNotesFromSupabase() {
   if (!currentUser) return;
   try {
     const {data} = await sb.from('user_notes')
-      .select('notes_data').eq('user_id', String(currentUser.id)).maybeSingle();
+      .select('notes_data,updated_at').eq('user_id', String(currentUser.id)).maybeSingle();
     const k = notesKey();
-    if (data && data.notes_data && k) {
+    const serverAt = data && data.updated_at ? Date.parse(data.updated_at) : 0;
+    const localAt  = localNotesStamp();
+    const haveLocal = !!(k && localStorage.getItem(k) && localStorage.getItem(k) !== '[]');
+
+    if (data && data.notes_data && k && (!haveLocal || serverAt >= localAt)) {
+      /* The server copy only replaces what is here when it is at least as new.
+         Overwriting unconditionally is what let one tab's reload wipe another
+         tab's newer notes. */
       localStorage.setItem(k, data.notes_data);
-    } else if (k) {
+      const sk = notesStampKey(); if(sk) localStorage.setItem(sk, String(serverAt || Date.now()));
+    } else if (k && haveLocal && localAt > serverAt) {
+      // What is here is newer — push it up rather than throwing it away
       const local = localStorage.getItem(k);
-      if (local && local !== '[]') {
-        await sb.from('user_notes').upsert({ user_id: String(currentUser.id), notes_data: local, updated_at: new Date().toISOString() });
-      }
+      const { error } = await sb.from('user_notes').upsert({
+        user_id: String(currentUser.id), notes_data: local,
+        updated_at: new Date(localAt).toISOString() });
+      if (error) console.warn('could not push local notes up:', error.message);
     }
     seedStarterNotesIfEmpty();   // only fires when nothing exists at all
     renderNotesView();
   } catch(e) { console.warn('loadNotesFromSupabase error:', e.message); }
 }
+
+/* Typing is written 800ms after you stop. Switching tabs or closing one should
+   not have to wait for that, and a backgrounded tab has its timers throttled,
+   so the pending write is forced out now. */
+function flushNotesNow() {
+  if (typeof nbSaveTimer !== 'undefined' && nbSaveTimer) {
+    clearTimeout(nbSaveTimer); nbSaveTimer = null;
+    if (typeof currentNoteSection !== 'undefined' && currentNoteSection) {
+      try { saveAllNotes(currentNoteSection); } catch(e) {}
+    }
+  }
+  if (typeof stickySaveTimer !== 'undefined' && stickySaveTimer) {
+    clearTimeout(stickySaveTimer); stickySaveTimer = null;
+  }
+}
+
+/* Another tab in this browser saved notes: take the newer copy rather than
+   carrying on from a stale array and overwriting it on the next keystroke. */
+window.addEventListener('storage', (e) => {
+  if (!currentUser || !e.key) return;
+  if (e.key !== notesKey()) return;
+  const view = document.getElementById('view-notes');
+  const editing = document.activeElement &&
+                  (document.activeElement.isContentEditable || document.activeElement.closest?.('.nb-note'));
+  if (editing) return;                       // never yank text out from under a cursor
+  if (view && !view.classList.contains('hidden') && typeof renderNotesView === 'function') {
+    try { renderNotesView(); } catch(err) {}
+  }
+});
 
 /* ── Helpers ──────────────────────────────────────────────────── */
 function canvasWidth() {
@@ -13830,32 +13907,175 @@ async function markNotifsRead(ids) {
   await sb.from('notifications').update({read_at: Date.now()}).in('id', ids);
 }
 
+/* ══════════════════════════════════════════════════════════════
+   STAYING IN STEP WITH THE DATABASE
+
+   Realtime on its own is not enough. The websocket it rides on dies
+   whenever a laptop sleeps, a network drops, or a tab sits in the
+   background long enough for the browser or a company proxy to close
+   idle connections — and nothing on the page says so. The tab then
+   shows yesterday's data for as long as it stays open, which is exactly
+   what happens to a tracker left open overnight and walked up to in
+   the morning.
+
+   So: come back to a tab that has been sitting for a while and the page
+   reloads itself, the way any ordinary website behaves. A short absence
+   gets a quiet re-read of the data instead, which is cheaper and does
+   not interrupt anything.
+   ══════════════════════════════════════════════════════════════ */
+
+let lastSyncAt   = Date.now();
+let syncing      = false;
+let hiddenSince  = null;
+let rtChannel    = null;
+let rtHealthy    = false;
+
+const SYNC_AFTER_AWAY   = 45 * 1000;        // a short absence → quiet re-read
+const SYNC_BACKSTOP     = 5 * 60 * 1000;    // and every so often while in view
+const RELOAD_AFTER_IDLE = 15 * 60 * 1000;   // away this long → reload the page
+
+/* Never pull the rug from under somebody mid-edit. A refresh that wiped a
+   half-typed row would be worse than stale data. */
+function midEdit() {
+  if(typeof notesDirty !== 'undefined' && notesDirty) return true;   // a note has not landed yet
+  if(document.querySelector('.overlay.open')) return true;
+  if(typeof opsPeopleEditMode !== 'undefined' && opsPeopleEditMode) return true;
+  if(typeof opsNewRows !== 'undefined' && opsNewRows && opsNewRows.length) return true;
+  const el = document.activeElement;
+  if(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return true;
+  // Their own timesheet holds unsaved cells in the page until the draft saves
+  const ts = document.getElementById('view-timesheet');
+  if(ts && !ts.classList.contains('hidden')) return true;
+  return false;
+}
+
+/* Reading this page is not editing it, so a reload costs nothing — but a
+   half-filled timesheet or an open window is real work, and a hard reload
+   would throw it away. In those cases the data is re-read quietly instead. */
+function safeToReload() { return !midEdit(); }
+
+/* The actual reload, in one named place so it can be exercised on its own. */
+function hardReload() { location.reload(); }
+
+/* Re-read everything and redraw, without the page blinking. Used for short
+   absences, and wherever a full reload would cost somebody their typing. */
+async function resyncNow() {
+  if(syncing || !currentUser) return;
+  if(midEdit()) return;                      // the next tick will try again
+  syncing = true;
+  try {
+    await loadAllData();
+
+    // currentUser points at a row that loadAllData has just replaced
+    const id = currentUser.id;
+    const fresh = id === 9999 ? HR_USER : id === 9998 ? OPS_USER
+                : (allTeam.find(p => String(p.id) === String(id)) || null);
+    if(fresh) currentUser = fresh;
+
+    applyDeptScope();
+    refreshWorkLists();
+    if(typeof renderWeekly === 'function')  renderWeekly();
+    if(typeof renderMonthly === 'function') renderMonthly();
+    try { if(typeof reloadNotifications === 'function') await reloadNotifications(); } catch(e) {}
+    if(typeof updateInboxBadge === 'function')    updateInboxBadge();
+    if(typeof renderHeaderBalances === 'function') renderHeaderBalances();
+    if(typeof renderOpsFinance === 'function' && document.getElementById('opsFinanceBody')) {
+      try { renderOpsFinance(); } catch(e) {}
+    }
+    lastSyncAt = Date.now();
+  } catch(e) {
+    console.warn('refresh failed:', e && e.message || e);
+  } finally {
+    syncing = false;
+  }
+}
+
+/* Landing on a tab that has been sitting for a while: reload the page the
+   way any website would. This also picks up a newly deployed version, so a
+   tab open since before a deployment stops running last week's code. */
+function catchUpOnReturn() {
+  const idleFor = Date.now() - lastSyncAt;
+  if(idleFor >= RELOAD_AFTER_IDLE) {
+    if(safeToReload()) { hardReload(); return; }
+    resyncNow();                 // work in progress — refresh the data only
+    return;
+  }
+  if(idleFor >= SYNC_AFTER_AWAY) {
+    resyncNow();
+    resubscribeRealtime();       // the socket rarely survives a nap
+  }
+}
+
+function startSyncWatchers() {
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden) {
+      hiddenSince = Date.now();
+      /* Timers are throttled in a background tab, so anything waiting on the
+         800ms "stopped typing" delay is written out now instead. */
+      if(typeof flushNotesNow === 'function') flushNotesNow();
+      return;
+    }
+    hiddenSince = null;
+    catchUpOnReturn();
+  });
+
+  // Clicking back into the window counts as landing on it too
+  window.addEventListener('focus', catchUpOnReturn);
+  window.addEventListener('blur',    () => { if(typeof flushNotesNow === 'function') flushNotesNow(); });
+  window.addEventListener('pagehide',() => { if(typeof flushNotesNow === 'function') flushNotesNow(); });
+
+  // Laptop lid, wifi drop, VPN reconnect
+  window.addEventListener('online', () => { catchUpOnReturn(); resubscribeRealtime(); });
+
+  /* While somebody is sitting in front of it, keep the data current quietly
+     rather than reloading the page under them. */
+  setInterval(() => {
+    if(document.hidden) return;
+    if(Date.now() - lastSyncAt >= SYNC_BACKSTOP) resyncNow();
+  }, 30 * 1000);
+}
+
+function resubscribeRealtime() {
+  try { if(rtChannel) sb.removeChannel(rtChannel); } catch(e) {}
+  rtChannel = null;
+  rtHealthy = false;
+  try { subscribeRealtime(); } catch(e) { console.warn('could not resubscribe:', e); }
+}
+
 // ── REALTIME: subscribe to all table changes ─────────────────────
 function subscribeRealtime() {
-  sb.channel('all-changes')
+  rtChannel = sb.channel('all-changes')
     .on('postgres_changes', {event:'*', schema:'public', table:'projects'}, async () => {
+      noteLiveUpdate();
       await reloadProjects(); renderWeekly(); renderMonthly(); renderProjects(); updateSummary();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'team'}, async () => {
+      noteLiveUpdate();
       await reloadTeam(); renderWeekly(); updateSummary(); populateLoginSelect();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'overrides'}, async () => {
+      noteLiveUpdate();
       await reloadOverrides(); renderWeekly(); updateSummary();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'notifications'}, async () => {
+      noteLiveUpdate();
       await reloadNotifications(); updateInboxBadge();
       if(!document.getElementById('view-mywork').classList.contains('hidden')) renderMyWork();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'contracts'}, async () => {
+      noteLiveUpdate();
       await reloadFinanceData(); renderProjects(); renderOpsFinance();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'milestones'}, async () => {
+      noteLiveUpdate();
       await reloadFinanceData(); renderProjects(); renderOpsFinance();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'subcontractor_pos'}, async () => {
+      noteLiveUpdate();
       await reloadFinanceData(); renderProjects(); renderOpsFinance();
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'app_settings'}, async () => {
+      noteLiveUpdate();
       /* A department or an activity Admin just added reaches everyone who is
          already signed in, rather than waiting for them to reload. */
       await loadAppSettings();
@@ -13864,6 +14084,7 @@ function subscribeRealtime() {
       if(typeof populateTsColDropdown === 'function') { try { populateTsColDropdown(); } catch(e){} }
     })
     .on('postgres_changes', {event:'*', schema:'public', table:'timesheets'}, async () => {
+      noteLiveUpdate();
       // So a newly submitted timesheet shows up for its manager (and for
       // Admin's override list) without anyone having to navigate away and back.
       await loadPendingTimesheets();
@@ -13876,8 +14097,27 @@ function subscribeRealtime() {
       if(typeof mwTab !== 'undefined' && mwTab === 'timesheets') renderTimesheetApprovals();
       if(document.getElementById('opsPendingApprovals')) renderOpsPendingApprovals();
     })
-    .subscribe();
+    /* The status callback is the part that was missing. Without it a dead
+       channel looks exactly like a quiet one, and the page waits forever
+       for an event that can no longer arrive. */
+    .subscribe((status) => {
+      if(status === 'SUBSCRIBED') {
+        if(!rtHealthy) { rtHealthy = true; resyncNow('channel back'); }
+        return;
+      }
+      if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        rtHealthy = false;
+        // Give the network a moment, then rebuild the channel from scratch
+        setTimeout(() => { if(!rtHealthy && !document.hidden) resubscribeRealtime(); }, 4000);
+      }
+    });
+  // Anything that arrives over the channel means we are current again
+  lastSyncAt = Date.now();
 }
+
+/* Every realtime handler above refreshes one slice of the data; this records
+   that the page is in step so the header pill and the backstop agree. */
+function noteLiveUpdate() { lastSyncAt = Date.now(); }
 /* The "Try again" link both warning messages above point to — reuses
    reloadFinanceData() itself rather than a second copy of the same
    mapping logic, so there's exactly one place this data ever gets parsed. */
@@ -13958,7 +14198,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-06-v123 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-13-v126 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
@@ -13986,7 +14226,7 @@ window.addEventListener('load', async function() {
   } catch(e) {}
   syncStickyOffsets();
   subscribeRealtime();
-  
+  startSyncWatchers();
 });
 </script>
 </body>
