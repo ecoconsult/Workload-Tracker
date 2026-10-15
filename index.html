@@ -13926,7 +13926,7 @@ async function markNotifsRead(ids) {
 
 let lastSyncAt   = Date.now();
 let syncing      = false;
-let hiddenSince  = null;
+let awaySince    = null;   // when this tab was last left
 let rtChannel    = null;
 let rtHealthy    = false;
 
@@ -13934,28 +13934,100 @@ const SYNC_AFTER_AWAY   = 45 * 1000;        // a short absence → quiet re-read
 const SYNC_BACKSTOP     = 5 * 60 * 1000;    // and every so often while in view
 const RELOAD_AFTER_IDLE = 15 * 60 * 1000;   // away this long → reload the page
 
-/* Never pull the rug from under somebody mid-edit. A refresh that wiped a
-   half-typed row would be worse than stale data. */
+/* Two different questions, and conflating them is what stopped the reload
+   from ever happening.
+
+   Unsaved work is a genuine reason not to throw the page away. Merely having
+   a page open is not — the old check treated "the timesheet tab is showing"
+   as unsaved work, so anyone who left the tracker on their own timesheet
+   never got a reload, and a field that still held focus from before you
+   switched away blocked it too. */
+function unsavedWork() {
+  if(typeof notesDirty !== 'undefined' && notesDirty) return 'a note has not saved yet';
+  if(document.querySelector('.overlay.open'))          return 'a window is open';
+  if(typeof opsPeopleEditMode !== 'undefined' && opsPeopleEditMode) return 'people are being edited';
+  if(typeof opsNewRows !== 'undefined' && opsNewRows && opsNewRows.length) return 'a new person is half-entered';
+  if(typeof tsSaveTimer !== 'undefined' && tsSaveTimer) return 'a timesheet entry has not saved yet';
+  return null;
+}
+
+/* The quiet refresh redraws the page under the cursor, so it also holds off
+   while somebody is actually typing. A reload does not need this: it only
+   ever runs when you have just come back to the tab. */
 function midEdit() {
-  if(typeof notesDirty !== 'undefined' && notesDirty) return true;   // a note has not landed yet
-  if(document.querySelector('.overlay.open')) return true;
-  if(typeof opsPeopleEditMode !== 'undefined' && opsPeopleEditMode) return true;
-  if(typeof opsNewRows !== 'undefined' && opsNewRows && opsNewRows.length) return true;
+  if(unsavedWork()) return true;
   const el = document.activeElement;
   if(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return true;
-  // Their own timesheet holds unsaved cells in the page until the draft saves
-  const ts = document.getElementById('view-timesheet');
-  if(ts && !ts.classList.contains('hidden')) return true;
   return false;
 }
 
-/* Reading this page is not editing it, so a reload costs nothing — but a
-   half-filled timesheet or an open window is real work, and a hard reload
-   would throw it away. In those cases the data is re-read quietly instead. */
-function safeToReload() { return !midEdit(); }
+/* Anything waiting on a debounce is written out before the tab goes away, so
+   "unsaved" is true for a few hundred milliseconds rather than indefinitely. */
+function flushPendingWrites() {
+  if(typeof flushNotesNow === 'function') { try { flushNotesNow(); } catch(e) {} }
+  if(typeof tsSaveTimer !== 'undefined' && tsSaveTimer && typeof tsData !== 'undefined' && tsData) {
+    try {
+      clearTimeout(tsSaveTimer); tsSaveTimer = null;
+      sb.from('timesheets').upsert({
+        id:String(tsData.id), person_id:String(tsData.person_id),
+        person_name: tsOwnerName(tsData.person_id), month:tsData.month,
+        columns:tsData.columns, rows:tsData.rows, notes:tsData.notes||{},
+        submitted:false, locked:false
+      });
+    } catch(e) {}
+  }
+}
+
+function safeToReload() { return !unsavedWork(); }
 
 /* The actual reload, in one named place so it can be exercised on its own. */
 function hardReload() { location.reload(); }
+
+/* ── PICKING UP A NEWLY DEPLOYED VERSION ──────────────────────
+   Code only changes when the page is loaded again, so without this
+   everyone would have to know to press refresh after every deployment.
+   The page watches the file it came from and takes the new one as soon
+   as it can do so without interrupting anybody — silently if the tab is
+   in the background, which is the usual case. */
+const BUILD = '2026-10-15-v128';
+let buildTag        = null;    // what the server last said this file was
+let newBuildPending = false;
+
+async function checkForNewBuild(firstLook) {
+  if(newBuildPending) return;
+  if(!/^https?:/.test(location.protocol)) return;        // opened from a file
+  try {
+    if(firstLook) {
+      /* Once at startup, read the file properly and compare the build stamp.
+         A browser can hand us a cached copy without asking the server, so the
+         page cannot assume what it is running is what is published. */
+      const res = await fetch(location.pathname + '?b=' + Date.now(), { cache:'no-store' });
+      if(!res.ok) return;
+      buildTag = res.headers.get('etag') || res.headers.get('last-modified') || null;
+      const text = await res.text();
+      const m = text.match(/build (\d{4}-\d{2}-\d{2}-v\d+) loaded/);
+      if(m && m[1] !== BUILD) { newBuildPending = true; takeNewBuildWhenSafe(); }
+      return;
+    }
+    // Afterwards just ask whether the file changed — a few bytes, not a megabyte
+    const res = await fetch(location.pathname, { method:'HEAD', cache:'no-store' });
+    if(!res.ok) return;
+    const tag = res.headers.get('etag') || res.headers.get('last-modified');
+    if(!tag) return;
+    /* No baseline yet — the startup check must have been blocked or offline.
+       Do the proper comparison rather than spending this poll just learning
+       what the current file is called. */
+    if(buildTag === null) return checkForNewBuild(true);
+    if(tag !== buildTag) { newBuildPending = true; takeNewBuildWhenSafe(); }
+  } catch(e) { /* offline or blocked — try again later */ }
+}
+
+function takeNewBuildWhenSafe() {
+  if(!newBuildPending) return;
+  const why = unsavedWork();
+  if(why) { console.log('Tracker: a new version is waiting —', why); return; }
+  hardReload();
+}
 
 /* Re-read everything and redraw, without the page blinking. Used for short
    absences, and wherever a full reload would cost somebody their typing. */
@@ -13992,39 +14064,55 @@ async function resyncNow() {
 
 /* Landing on a tab that has been sitting for a while: reload the page the
    way any website would. This also picks up a newly deployed version, so a
-   tab open since before a deployment stops running last week's code. */
+   tab open since before a deployment stops running last week's code.
+
+   The decision is made on how long you were AWAY — not on when the data last
+   changed. Keying it on the data was the bug: every edit anyone in the company
+   makes arrives over the live connection and counts as activity, so in a busy
+   week the page always looked current and never reloaded, however long the tab
+   had been sitting. */
 function catchUpOnReturn() {
-  const idleFor = Date.now() - lastSyncAt;
-  if(idleFor >= RELOAD_AFTER_IDLE) {
-    if(safeToReload()) { hardReload(); return; }
-    resyncNow();                 // work in progress — refresh the data only
+  const awayFor = awaySince ? Date.now() - awaySince : 0;
+  awaySince = null;
+  if(newBuildPending) { takeNewBuildWhenSafe(); }
+
+  if(awayFor >= RELOAD_AFTER_IDLE) {
+    const why = unsavedWork();
+    if(!why) { hardReload(); return; }
+    console.log('Tracker: skipping the reload —', why);
+    resyncNow();                 // work in progress: refresh the data only
     return;
   }
-  if(idleFor >= SYNC_AFTER_AWAY) {
+  if(awayFor >= SYNC_AFTER_AWAY) {
     resyncNow();
     resubscribeRealtime();       // the socket rarely survives a nap
   }
 }
 
+/* One place to record that the tab has gone away, whichever event says so.
+   Both fire in different browsers and in different ways — a background tab
+   fires visibilitychange, another window taking focus fires blur — and the
+   first one to notice is the one that counts. */
+function markAway() {
+  if(awaySince === null) awaySince = Date.now();
+  flushPendingWrites();
+  /* A tab nobody is looking at is the perfect moment to take a new version:
+     the reload happens out of sight and they come back to the current one. */
+  setTimeout(takeNewBuildWhenSafe, 400);
+}
+
 function startSyncWatchers() {
   document.addEventListener('visibilitychange', () => {
-    if(document.hidden) {
-      hiddenSince = Date.now();
-      /* Timers are throttled in a background tab, so anything waiting on the
-         800ms "stopped typing" delay is written out now instead. */
-      if(typeof flushNotesNow === 'function') flushNotesNow();
-      return;
-    }
-    hiddenSince = null;
+    if(document.hidden) { markAway(); return; }
     catchUpOnReturn();
   });
 
-  // Clicking back into the window counts as landing on it too
+  // Another window taking focus is leaving too, and coming back is returning
+  window.addEventListener('blur',  markAway);
   window.addEventListener('focus', catchUpOnReturn);
-  window.addEventListener('blur',    () => { if(typeof flushNotesNow === 'function') flushNotesNow(); });
-  window.addEventListener('pagehide',() => { if(typeof flushNotesNow === 'function') flushNotesNow(); });
+  window.addEventListener('pagehide', flushPendingWrites);
 
-  // Laptop lid, wifi drop, VPN reconnect
+  // Waking from sleep: the network comes back before anything else notices
   window.addEventListener('online', () => { catchUpOnReturn(); resubscribeRealtime(); });
 
   /* While somebody is sitting in front of it, keep the data current quietly
@@ -14033,6 +14121,23 @@ function startSyncWatchers() {
     if(document.hidden) return;
     if(Date.now() - lastSyncAt >= SYNC_BACKSTOP) resyncNow();
   }, 30 * 1000);
+
+  // Has a new version been published? A HEAD request, so this costs nothing.
+  checkForNewBuild(true);
+  setInterval(() => checkForNewBuild(false), 3 * 60 * 1000);
+
+  /* A laptop that slept fires no events a sleeping page could run. The gap
+     between two ticks of this clock is the only evidence it happened, so a
+     jump of more than a minute is treated as having been away. */
+  let lastTick = Date.now();
+  setInterval(() => {
+    const now = Date.now(), gap = now - lastTick;
+    lastTick = now;
+    if(gap > 60 * 1000) {
+      if(awaySince === null) awaySince = now - gap;
+      if(!document.hidden) catchUpOnReturn();
+    }
+  }, 20 * 1000);
 }
 
 function resubscribeRealtime() {
@@ -14198,7 +14303,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-13-v126 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-15-v128 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
