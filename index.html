@@ -6113,18 +6113,20 @@ function renderProjectBilling(p, bare) {
     const stageRows = stages.map(st => `
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)">
         <div style="display:flex;align-items:flex-start;gap:8px;min-width:0">
-          <input type="checkbox" ${st.status!=='pending'?'checked':''} ${(!manage||st.status!=='pending')?'disabled':''}
-            style="width:14px;height:14px;margin-top:2px;flex-shrink:0;accent-color:var(--green);cursor:${manage&&st.status==='pending'?'pointer':'default'}"
-            onchange="markSubPOStageDue('${s.id}','${st.id}')">
+          <input type="checkbox" ${st.status!=='pending'?'checked':''} ${(!manage||st.status==='paid')?'disabled':''}
+            title="${st.status==='paid'?'Already paid — undo the payment first':st.status==='due'?'Untick to put this back to not yet due':'Tick when this payment falls due'}"
+            style="width:14px;height:14px;margin-top:2px;flex-shrink:0;accent-color:var(--green);cursor:${manage&&st.status!=='paid'?'pointer':'default'}"
+            onchange="toggleSubPOStageDue('${s.id}','${st.id}')">
           <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(st.description)} · ${fmtMoney(st.amount)}
-            ${st.paidAt?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${fmtShortDate(st.paidAt)}</div>`:''}
+            ${st.paidAt?`<div style="font-size:9px;color:var(--muted);margin-top:2px">Paid ${fmtShortDate(st.paidAt)}${st.paidBy?` · recorded by ${escapeAttr(st.paidBy)}`:''}</div>`:''}
             ${st.invoiceFileUrl?`<a href="${st.invoiceFileUrl}" target="_blank" style="font-size:9px;color:var(--blue)">📄 Invoice</a>`:''}
           </div>
         </div>
         <div style="text-align:right;flex-shrink:0">
           <div style="font-size:10px;font-weight:600;color:${SUBPO_STAGE_COLOR[st.status]}">${SUBPO_STAGE_LABEL[st.status]}</div>
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
-            ${financeAdmin && st.status==='due'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOStagePaid('${s.id}','${st.id}')">Mark paid</button>`:''}
+            ${manage && st.status==='due'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOStagePaid('${s.id}','${st.id}')">Mark paid</button>`:''}
+            ${manage && st.status==='paid'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="undoSubPOStagePaid('${s.id}','${st.id}')" title="Recorded by mistake? Puts it back to ready to pay">Undo payment</button>`:''}
             ${manage && st.status!=='paid'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPOStage('${s.id}','${st.id}')" title="Edit">✎</button>`:''}
           </div>
         </div>
@@ -6145,7 +6147,8 @@ function renderProjectBilling(p, bare) {
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
             ${confirmWork && s.status==='issued'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="markSubPOConfirmed('${s.id}')">Confirm work done</button>`:''}
             ${!confirmWork && s.status==='issued'?`<span style="font-size:9px;color:var(--muted)" title="Only the project manager can confirm this">awaiting the PM</span>`:''}
-            ${financeAdmin && !stages.length && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
+            ${manage && !stages.length && s.status==='ready_to_pay'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markSubPOPaid('${s.id}')">Mark paid</button>`:''}
+            ${manage && !stages.length && s.status==='paid'?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="undoSubPOPaid('${s.id}')" title="Recorded by mistake? Puts it back to ready to pay">Undo payment</button>`:''}
             ${manage?`<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditSubPO('${s.id}')" title="Edit">✎</button>`:''}
           </div>
         </div>
@@ -6710,11 +6713,38 @@ async function deleteSubPOStage() {
   renderProjects(); renderOpsFinance();
   showToast('Deleted');
 }
+/* The tick goes both ways. Ticking says a payment has fallen due;
+   unticking takes that back, for the ordinary case of ticking the wrong
+   line. A paid stage is not unticked here — the payment is undone first,
+   so money is never quietly un-owed without someone saying so. */
+function toggleSubPOStageDue(subPOId, stageId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
+  if(st.status === 'due')  return unmarkSubPOStageDue(subPOId, stageId);
+  if(st.status === 'paid') { showToast('Already paid — use Undo payment first'); renderProjects(); return; }
+  return markSubPOStageDue(subPOId, stageId);
+}
+
+async function unmarkSubPOStageDue(subPOId, stageId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can change this'); renderProjects(); return; }
+  st.status = 'pending'; st.dueAt = null;
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'stage no longer due', st.description, fmtMoney(st.amount), proj.name);
+  // Finance was told this was ready to pay, so Finance is told it is not.
+  await notifyFinance('subpo_ready',
+    `${s.subcontractorName} — "${st.description}" on "${proj.name}" is no longer ready to pay (${fmtMoney(st.amount)}), put back by ${currentUser?currentUser.name:'someone'}.`, proj.id);
+  renderProjects(); renderOpsFinance();
+  showToast('Put back to not yet due ✓');
+}
+
 async function markSubPOStageDue(subPOId, stageId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
   const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
   const proj = projById(s.projectId);
-  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); return; }
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can confirm this'); renderProjects(); return; }
   st.status = 'due'; st.dueAt = new Date().toISOString();
   await saveSubPO(s);
   await writeAudit('subcontractor_po', s.id, 'stage due', st.description, fmtMoney(st.amount), proj.name);
@@ -6722,23 +6752,60 @@ async function markSubPOStageDue(subPOId, stageId) {
   renderProjects(); renderOpsFinance();
   showToast('Marked ready to pay — Finance notified ✓');
 }
+/* Recording a payment is Finance's job, but the PM can do it too — if
+   Finance has paid the subcontractor and not got round to ticking it, the
+   PM is not left staring at a PO that says money is still owed. Whoever
+   records it is stamped on the stage and shown on the line, so it is
+   always clear whether this came from Finance or from the PM, and the
+   other side is notified rather than finding out later. */
 async function markSubPOStagePaid(subPOId, stageId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
   const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
-  if(!isFinanceRole()) { showToast('Only Finance can confirm a payment'); return; }
-  if(!confirm(`Mark ${fmtMoney(st.amount)} as paid to ${s.subcontractorName} for "${st.description}"?`)) return;
   const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can record a payment'); return; }
+  const byFinance = isFinanceRole();
+  if(!confirm(`Mark ${fmtMoney(st.amount)} as paid to ${s.subcontractorName} for "${st.description}"?`
+            + (byFinance ? '' : '\n\nYou are recording this as the project manager. Finance will be notified to check it against the books.'))) return;
   st.status = 'paid'; st.paidAt = new Date().toISOString();
+  st.paidBy = currentUser ? currentUser.name : 'Unknown';
+  st.paidById = currentUser ? currentUser.id : null;
   // Once every stage is settled the PO itself is finished.
   if(subPOStages(s).every(x => x.status === 'paid')) { s.status = 'paid'; s.paidAt = new Date().toISOString(); }
   await saveSubPO(s);
-  await writeAudit('subcontractor_po', s.id, 'stage paid', st.description, fmtMoney(st.amount), proj?proj.name:'');
-  if(proj && proj.creatorId) {
-    addNotification(proj.creatorId, 'subpo_paid',
-      { message:`${s.subcontractorName} was paid ${fmtMoney(st.amount)} (${st.description}) on "${proj.name}".`, projectId: proj.id });
+  await writeAudit('subcontractor_po', s.id, 'stage paid', st.description, fmtMoney(st.amount), proj.name);
+  if(byFinance) {
+    // Finance recorded it — the PM is the one who needs to know.
+    if(proj.creatorId) {
+      addNotification(proj.creatorId, 'subpo_paid',
+        { message:`${s.subcontractorName} was paid ${fmtMoney(st.amount)} (${st.description}) on "${proj.name}".`, projectId: proj.id });
+    }
+  } else {
+    // The PM recorded it — Finance needs to reconcile it.
+    await notifyFinance('subpo_paid',
+      `${currentUser?currentUser.name:'The PM'} recorded ${fmtMoney(st.amount)} as paid to ${s.subcontractorName} ("${st.description}") on "${proj.name}" — please check it against the books.`, proj.id);
   }
   renderOpsFinance(); renderProjects();
-  showToast('Marked paid ✓');
+  showToast(byFinance ? 'Marked paid ✓' : 'Marked paid — Finance notified ✓');
+}
+
+/* A payment recorded in error has to be reversible, or the first slip is
+   permanent. This puts the stage back to ready to pay and reopens the PO
+   if closing it was what settled it. */
+async function undoSubPOStagePaid(subPOId, stageId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const st = subPOStages(s).find(x => x.id === stageId); if(!st) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can change this'); return; }
+  if(!confirm(`Undo the ${fmtMoney(st.amount)} payment to ${s.subcontractorName} for "${st.description}"?\n\n`
+            + `It goes back to ready to pay. This does not reverse anything at the bank.`)) return;
+  st.status = 'due'; st.paidAt = null; st.paidBy = null; st.paidById = null;
+  if(s.status === 'paid') { s.status = 'ready_to_pay'; s.paidAt = null; }
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'stage payment undone', st.description, fmtMoney(st.amount), proj.name);
+  await notifyFinance('subpo_ready',
+    `${currentUser?currentUser.name:'Someone'} undid the ${fmtMoney(st.amount)} payment to ${s.subcontractorName} ("${st.description}") on "${proj.name}" — it is back to ready to pay.`, proj.id);
+  renderOpsFinance(); renderProjects();
+  showToast('Payment undone — back to ready to pay ✓');
 }
 
 /* Called the moment a deliverable is ticked complete (self-completed or
@@ -7123,23 +7190,49 @@ async function markMilestonePaid(milestoneId) {
 }
 async function markSubPOPaid(subPOId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
-  if(!isFinanceRole()) { showToast('Only Finance can confirm a subcontractor payment'); return; }
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can record a payment'); return; }
   // Hard guard against double payment: a PO split into payments must only
   // ever be settled one payment at a time, never in full through here.
   if(subPOStages(s).length) {
     showToast('This PO is split into separate payments — pay each one individually'); return;
   }
-  if(!confirm(`Mark ${fmtMoney(s.amount)} as paid to ${s.subcontractorName}?`)) return;
-  const proj = projById(s.projectId);
+  const byFinance = isFinanceRole();
+  if(!confirm(`Mark ${fmtMoney(s.amount)} as paid to ${s.subcontractorName}?`
+            + (byFinance ? '' : '\n\nYou are recording this as the project manager. Finance will be notified to check it against the books.'))) return;
   s.status = 'paid'; s.paidAt = new Date().toISOString();
+  s.paidBy = currentUser ? currentUser.name : 'Unknown';
+  s.paidById = currentUser ? currentUser.id : null;
   await saveSubPO(s);
-  await writeAudit('subcontractor_po', s.id, 'status', 'ready_to_pay', 'paid', proj?proj.name:'');
-  if(proj && proj.creatorId) {
-    addNotification(proj.creatorId, 'subpo_paid',
-      { message:`${s.subcontractorName} was paid ${fmtMoney(s.amount)} on "${proj.name}".`, projectId: proj.id });
+  await writeAudit('subcontractor_po', s.id, 'status', 'ready_to_pay', 'paid', proj.name);
+  if(byFinance) {
+    if(proj.creatorId) {
+      addNotification(proj.creatorId, 'subpo_paid',
+        { message:`${s.subcontractorName} was paid ${fmtMoney(s.amount)} on "${proj.name}".`, projectId: proj.id });
+    }
+  } else {
+    await notifyFinance('subpo_paid',
+      `${currentUser?currentUser.name:'The PM'} recorded ${fmtMoney(s.amount)} as paid to ${s.subcontractorName} on "${proj.name}" — please check it against the books.`, proj.id);
   }
   renderOpsFinance(); renderProjects();
-  showToast('Marked paid ✓');
+  showToast(byFinance ? 'Marked paid ✓' : 'Marked paid — Finance notified ✓');
+}
+
+/* Same reversal as a stage payment, for a PO that was never split. */
+async function undoSubPOPaid(subPOId) {
+  const s = subPOs.find(x => x.id === subPOId); if(!s) return;
+  const proj = projById(s.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can change this'); return; }
+  if(subPOStages(s).length) { showToast('This PO is split into payments — undo the individual payment'); return; }
+  if(!confirm(`Undo the ${fmtMoney(s.amount)} payment to ${s.subcontractorName}?\n\n`
+            + `It goes back to ready to pay. This does not reverse anything at the bank.`)) return;
+  s.status = 'ready_to_pay'; s.paidAt = null; s.paidBy = null; s.paidById = null;
+  await saveSubPO(s);
+  await writeAudit('subcontractor_po', s.id, 'status', 'paid', 'ready_to_pay', proj.name);
+  await notifyFinance('subpo_ready',
+    `${currentUser?currentUser.name:'Someone'} undid the ${fmtMoney(s.amount)} payment to ${s.subcontractorName} on "${proj.name}" — it is back to ready to pay.`, proj.id);
+  renderOpsFinance(); renderProjects();
+  showToast('Payment undone — back to ready to pay ✓');
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -14033,7 +14126,7 @@ function hardReload() { location.reload(); }
    The page watches the file it came from and takes the new one as soon
    as it can do so without interrupting anybody — silently if the tab is
    in the background, which is the usual case. */
-const BUILD = '2026-10-28-v129';
+const BUILD = '2026-10-28-v130';
 let buildTag        = null;    // what the server last said this file was
 let newBuildPending = false;
 
@@ -14347,7 +14440,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-28-v129 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-28-v130 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
