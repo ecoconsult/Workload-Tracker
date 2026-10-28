@@ -6027,7 +6027,9 @@ function milestoneTimeline(m) {
     ['Reached', m.reachedAt], ['Invoiced', m.invoicedAt], ['Sent', m.sentAt], ['Paid', m.paidAt]
   ].filter(([,d]) => d);
   if(!steps.length) return '';
-  return steps.map(([label,d]) => `${label} ${fmtShortDate(d)}`).join(' → ');
+  const line = steps.map(([label,d]) => `${label} ${fmtShortDate(d)}`).join(' → ');
+  // Who recorded the payment matters when it could have been either side.
+  return m.paidAt && m.paidBy ? `${line} · recorded by ${escapeAttr(m.paidBy)}` : line;
 }
 function subPOTimeline(s) {
   const steps = [['Confirmed', s.confirmedAt], ['Paid', s.paidAt]].filter(([,d]) => d);
@@ -6065,9 +6067,12 @@ function renderProjectBilling(p, bare) {
       const checked = m.status !== 'pending';
       return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border)">
         <div style="display:flex;align-items:flex-start;gap:8px;min-width:0">
-          <input type="checkbox" ${checked?'checked':''} ${(!confirmWork||checked)?'disabled':''}
-            title="${checked ? '' : confirmWork ? 'Tick once this part of the work is done' : 'Only the project manager can confirm the work is done'}"
-            style="width:15px;height:15px;margin-top:2px;cursor:${confirmWork&&!checked?'pointer':'default'};flex-shrink:0;accent-color:var(--green)" onchange="markMilestoneReached('${m.id}')">
+          <input type="checkbox" ${checked?'checked':''} ${(!confirmWork||(checked&&m.status!=='reached'))?'disabled':''}
+            title="${!confirmWork ? 'Only the project manager can confirm the work is done'
+                   : m.status==='pending' ? 'Tick once this part of the work is done'
+                   : m.status==='reached' ? 'Untick to put this back to not yet reached'
+                   : 'Already invoiced — this can no longer be changed'}"
+            style="width:15px;height:15px;margin-top:2px;cursor:${confirmWork&&(m.status==='pending'||m.status==='reached')?'pointer':'default'};flex-shrink:0;accent-color:var(--green)" onchange="toggleMilestoneReached('${m.id}')">
           <div style="font-size:11px;color:var(--text2);min-width:0">${escapeAttr(m.description)} · ${m.percentage}% = ${fmtMoney(m.amount)}
             ${stalled?`<div style="font-size:9px;color:var(--orange);margin-top:2px">⏱ ${stalledDays}d, not yet reached</div>`:''}
             ${timeline?`<div style="font-size:9px;color:var(--muted);margin-top:2px">${timeline}</div>`:''}
@@ -6079,7 +6084,8 @@ function renderProjectBilling(p, bare) {
           <div style="display:flex;gap:4px;justify-content:flex-end;margin-top:3px;flex-wrap:wrap">
             ${financeAdmin && m.status==='reached' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--blue);color:#fff;border-color:var(--blue)" onclick="openIssueInvoice('${m.id}')">Issue invoice</button>` : ''}
             ${financeAdmin && m.status==='invoiced' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" title="Raised before Admin took over sending — confirm it reached the client" onclick="markMilestoneSent('${m.id}')">Mark sent to client</button>` : ''}
-            ${financeAdmin && m.status==='sent' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markMilestonePaid('${m.id}')">Mark paid</button>` : ''}
+            ${manage && m.status==='sent' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px;background:var(--green);color:#fff;border-color:var(--green)" onclick="markMilestonePaid('${m.id}')">Mark paid</button>` : ''}
+            ${manage && m.status==='paid' ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="undoMilestonePaid('${m.id}')" title="Recorded by mistake? Puts it back to sent to client">Undo payment</button>` : ''}
             ${manage ? `<button class="btn btn-sm" style="font-size:9px;padding:2px 6px" onclick="openEditMilestone('${m.id}')" title="Edit">✎</button>` : ''}
           </div>
         </div>
@@ -6424,6 +6430,39 @@ async function deleteMilestoneItem() {
   renderProjects(); renderOpsFinance();
   showToast('Deleted');
 }
+/* Reaching a milestone is the PM's call, and so is taking it back. Once
+   Finance has raised an invoice against it the tick is frozen — the
+   invoice is out in the world by then, and quietly un-reaching the work
+   behind it would leave the two out of step. */
+function toggleMilestoneReached(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  if(m.status === 'reached') return unmarkMilestoneReached(milestoneId);
+  if(m.status !== 'pending') {
+    showToast('Already invoiced — ask Finance to cancel the invoice first');
+    renderProjects(); renderOpsFinance();
+    return;
+  }
+  return markMilestoneReached(milestoneId);
+}
+
+async function unmarkMilestoneReached(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!proj || !canConfirmWork(proj)) {
+    showToast('Only the project manager can change this');
+    renderProjects(); renderOpsFinance();
+    return;
+  }
+  m.status = 'pending'; m.reachedAt = null; m.reachedBy = null;
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'reached', 'pending', proj.name);
+  // Finance was told to invoice this, so Finance is told not to.
+  await notifyFinance('milestone_ready',
+    `"${m.description}" on "${proj.name}" is no longer ready to invoice (${fmtMoney(m.amount)}) — put back by ${currentUser?currentUser.name:'the PM'}.`, proj.id);
+  renderProjects(); renderOpsFinance();
+  showToast('Put back to not yet reached ✓');
+}
+
 async function markMilestoneReached(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
   const proj = projById(m.projectId);
@@ -7171,22 +7210,54 @@ async function saveIssueInvoice() {
   renderOpsFinance(); renderProjects();
   showToast('Invoice issued and sent to the client ✓');
 }
+/* Recording that the client has paid is Finance's job, but the PM can do
+   it too — if the money has landed and Finance has not got round to
+   ticking it, the project should not keep reporting it as outstanding.
+   Whoever records it is stamped on the line and the other side is told,
+   so it is never unclear where the entry came from. Raising and sending
+   the invoice itself stays with Finance, as it should. */
 async function markMilestonePaid(milestoneId) {
   const m = milestones.find(x => x.id === milestoneId); if(!m) return;
-  if(!isFinanceRole()) { showToast('Only Finance can confirm a client payment'); return; }
-  if(!confirm(`Mark ${fmtMoney(m.amount)} as received from the client?`)) return;
   const proj = projById(m.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can record a payment'); return; }
+  const byFinance = isFinanceRole();
+  if(!confirm(`Mark ${fmtMoney(m.amount)} as received from the client?`
+            + (byFinance ? '' : '\n\nYou are recording this as the project manager. Finance will be notified to check it against the books.'))) return;
   m.status = 'paid'; m.paidAt = new Date().toISOString();
+  m.paidBy = currentUser ? currentUser.name : 'Unknown';
+  m.paidById = currentUser ? currentUser.id : null;
   await saveMilestoneRow(m);
-  await writeAudit('milestone', m.id, 'status', 'sent', 'paid', proj?proj.name:'');
-  if(proj && proj.creatorId) {
-    const note = `Payment received from the client for "${m.description}" on "${proj.name}" — ${fmtMoney(m.amount)}.`;
-    addNotification(proj.creatorId, 'payment_received', { message: note, projectId: proj.id });
-    const pm = personById(proj.creatorId);
-    if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Payment received — ${proj.name}`, note); } catch(e) {} }
+  await writeAudit('milestone', m.id, 'status', 'sent', 'paid', proj.name);
+  if(byFinance) {
+    if(proj.creatorId) {
+      const note = `Payment received from the client for "${m.description}" on "${proj.name}" — ${fmtMoney(m.amount)}.`;
+      addNotification(proj.creatorId, 'payment_received', { message: note, projectId: proj.id });
+      const pm = personById(proj.creatorId);
+      if(pm && pm.email) { try { await sendApprovalEmail(pm.email, pm.name, 'Finance', `Payment received — ${proj.name}`, note); } catch(e) {} }
+    }
+  } else {
+    await notifyFinance('payment_received',
+      `${currentUser?currentUser.name:'The PM'} recorded ${fmtMoney(m.amount)} as received from the client for "${m.description}" on "${proj.name}" — please check it against the books.`, proj.id);
   }
   renderOpsFinance(); renderProjects();
-  showToast('Marked paid — PM notified ✓');
+  showToast(byFinance ? 'Marked paid — PM notified ✓' : 'Marked paid — Finance notified ✓');
+}
+
+/* A client payment recorded in error goes back to sent, so the invoice is
+   still out with the client and simply unpaid again. */
+async function undoMilestonePaid(milestoneId) {
+  const m = milestones.find(x => x.id === milestoneId); if(!m) return;
+  const proj = projById(m.projectId);
+  if(!proj || !canManageFinance(proj)) { showToast('Only the PM or Finance can change this'); return; }
+  if(!confirm(`Undo the ${fmtMoney(m.amount)} payment recorded for "${m.description}"?\n\n`
+            + `It goes back to sent to client, still unpaid. This does not change anything at the bank.`)) return;
+  m.status = 'sent'; m.paidAt = null; m.paidBy = null; m.paidById = null;
+  await saveMilestoneRow(m);
+  await writeAudit('milestone', m.id, 'status', 'paid', 'sent', proj.name);
+  await notifyFinance('payment_received',
+    `${currentUser?currentUser.name:'Someone'} undid the ${fmtMoney(m.amount)} payment recorded for "${m.description}" on "${proj.name}" — it is back to sent to client.`, proj.id);
+  renderOpsFinance(); renderProjects();
+  showToast('Payment undone — back to sent to client ✓');
 }
 async function markSubPOPaid(subPOId) {
   const s = subPOs.find(x => x.id === subPOId); if(!s) return;
@@ -14126,7 +14197,7 @@ function hardReload() { location.reload(); }
    The page watches the file it came from and takes the new one as soon
    as it can do so without interrupting anybody — silently if the tab is
    in the background, which is the usual case. */
-const BUILD = '2026-10-28-v130';
+const BUILD = '2026-10-28-v131';
 let buildTag        = null;    // what the server last said this file was
 let newBuildPending = false;
 
@@ -14440,7 +14511,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-28-v130 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-28-v131 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
