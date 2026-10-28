@@ -3318,7 +3318,7 @@ function saveEditProject() {
   const budgetEl = document.getElementById('epBudget');
   if(budgetEl && proj.isProposal && canSeeBudget(proj)) {
     const raw = budgetEl.value.trim();
-    const next = raw === '' ? null : Number(raw);
+    const next = raw === '' ? null : toFils(raw);
     if(raw !== '' && !isFinite(next)) { showToast(`"${raw}" is not a valid budget`); return; }
     const before = (proj.budget === undefined || proj.budget === null) ? null : Number(proj.budget);
     if(next !== before) { budgetChange = { before, next }; proj.budget = next; }
@@ -6152,8 +6152,12 @@ function renderProjectBilling(p, bare) {
       </div>
       ${stages.length?(()=>{
         const paidSoFar = stages.filter(x=>x.status==='paid').reduce((t,x)=>t+Number(x.amount||0),0);
-        const diff = Math.abs(assigned-Number(s.amount||0));
-        return `<div style="font-size:9px;color:var(--muted);margin-top:4px">${fmtMoney(assigned)} of ${fmtMoney(s.amount)} split into ${stages.length} payment${stages.length===1?'':'s'}${diff>0.5?` · ${fmtMoney(diff)} ${assigned>Number(s.amount||0)?'over':'unassigned'}`:''}${paidSoFar?` · ${fmtMoney(paidSoFar)} already paid, only the rest will be billed on completion`:''}</div>`;
+        /* Tolerance is one fils, not half a dinar. The old half-dinar
+           slack meant a split that was 0.40 short of the PO total read as
+           fully assigned, so the missing 400 fils never got paid to
+           anyone. Anything that rounds to a fils or more is now shown. */
+        const diff = Math.abs(toFils(assigned - Number(s.amount||0)));
+        return `<div style="font-size:9px;color:var(--muted);margin-top:4px">${fmtMoney(assigned)} of ${fmtMoney(s.amount)} split into ${stages.length} payment${stages.length===1?'':'s'}${diff>=0.001?` · ${fmtMoney(diff)} ${assigned>Number(s.amount||0)?'over':'unassigned'}`:''}${paidSoFar?` · ${fmtMoney(paidSoFar)} already paid, only the rest will be billed on completion`:''}</div>`;
       })():''}
       ${stageRows}
       ${manage && s.status!=='paid'?`<button class="btn btn-sm" style="font-size:10px;margin-top:6px" onclick="openAddSubPOStage('${s.id}')">+ Split into payments${stages.length?'':' (optional)'}</button>`:''}
@@ -6264,7 +6268,7 @@ async function saveContractItem() {
     if(valueChanged) {
       const affected = milestones.filter(m => m.contractId === c.id && ['pending','reached'].includes(m.status) && m.percentage);
       for(const m of affected) {
-        m.amount = Math.round((c.value * m.percentage / 100) * 100) / 100;
+        m.amount = toFils(c.value * m.percentage / 100);
         await saveMilestoneRow(m);
         recalced++;
       }
@@ -6317,7 +6321,9 @@ function updateMilestonePctPreview() {
   if(!preview) return;
   if(milestoneEntryMode === 'pct') {
     const pct = parseFloat(document.getElementById('milestonePct').value);
-    preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(c.value * pct / 100)}` : '';
+    // Rounded to the fils here so the preview shows the exact figure that
+    // will be stored, never a hair more or less.
+    preview.textContent = (c && pct >= 0) ? `= ${fmtMoney(toFils(c.value * pct / 100))}` : '';
   } else {
     // readAmountJOD resolves whichever currency is active, so this always
     // reflects the real JOD figure regardless of what unit was typed.
@@ -6373,7 +6379,7 @@ async function saveMilestoneItem() {
   if(milestoneEntryMode === 'pct') {
     percentage = parseFloat(document.getElementById('milestonePct').value);
     if(!percentage || percentage <= 0 || percentage > 100) { showToast('⚠ Please enter a percentage between 0 and 100'); return; }
-    amount = c ? Math.round((c.value * percentage / 100) * 100) / 100 : null;
+    amount = c ? toFils(c.value * percentage / 100) : null;
   } else {
     amount = readAmountJOD('milestoneAmountFixed');
     if(!amount || amount <= 0 || isNaN(amount)) { showToast('⚠ Please enter an amount'); return; }
@@ -6597,7 +6603,7 @@ function subPOStageResolvedAmount() {
   if(!po) return NaN;
   if(subPOStageMode === 'pct') {
     const pct = parseFloat(document.getElementById('subPOStagePct').value);
-    return isNaN(pct) ? NaN : Math.round((Number(po.amount||0) * pct / 100) * 100) / 100;
+    return isNaN(pct) ? NaN : toFils(Number(po.amount||0) * pct / 100);
   }
   return readAmountJOD('subPOStageAmount');
 }
@@ -8551,9 +8557,43 @@ async function notifyAdminOfBudgetChange(proj, before, next) {
   }
   showToast('Budget updated — Admin notified');
 }
+/* The dinar divides into 1000 fils, so a fils is the smallest amount of
+   money that can exist. Every figure the app stores is snapped to it, by
+   this one function, so an amount is never held at a precision finer
+   than money actually has, and never coarser either. */
+function toFils(n) {
+  const v = Number(n);
+  if(!isFinite(v)) return NaN;
+  return Math.round(v * 1000) / 1000;
+}
+
+/* Money is never rounded for display — it is shown to the fils, exactly
+   as it is held.
+
+   This used to print whole dinars, and that quietly invented money. A
+   JOD 5,850 purchase order split 25% / 50% / 25% holds 1,462.500 +
+   2,925.000 + 1,462.500, which is 5,850 to the fils. Rounded to whole
+   dinars for display it read 1,463 + 2,925 + 1,463 — 5,851 on screen,
+   a dinar that does not exist, on the very page someone pays from.
+
+   So: a whole amount prints with no decimals (JOD 5,850), and anything
+   with a fraction prints it (JOD 1,462.50). Values are snapped to the
+   fils first, which also clears the floating-point dust left behind by
+   adding stage amounts together, so a column of figures always sums to
+   the total printed at its foot. A figure that is not a number at all
+   shows as a dash rather than as "NaN" or a misleading zero. */
 function fmtMoney(n) {
-  const v = Number(n || 0);
-  return 'JOD ' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  // An absent figure is nothing, which is genuinely zero. A figure that
+  // is present but not a number is a fault somewhere upstream, and it
+  // shows as a dash — printing "JOD 0" for it would hide real money.
+  let v = (n === null || n === undefined || n === '') ? 0 : toFils(n);
+  if(!isFinite(v)) return 'JOD —';
+  if(Object.is(v, -0)) v = 0;
+  const whole = Number.isInteger(v);
+  return 'JOD ' + v.toLocaleString('en-US', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 3
+  });
 }
 
 /* One conversion, used by every amount field that accepts USD entry —
@@ -8563,7 +8603,7 @@ function fmtMoney(n) {
    fields. Everything downstream (Finance, the ledger, every display)
    only ever sees JOD. */
 const USD_TO_JOD = 0.708;
-function usdToJod(usd) { return Math.round(usd * USD_TO_JOD * 100) / 100; }
+function usdToJod(usd) { return toFils(usd * USD_TO_JOD); }
 
 const currencyFieldMode = {}; // fieldId -> 'jod' | 'usd'
 
@@ -8606,7 +8646,11 @@ function readAmountJOD(fieldId) {
     const usd = parseFloat((document.getElementById(fieldId + 'Usd')||{}).value);
     return isNaN(usd) ? NaN : usdToJod(usd);
   }
-  return parseFloat((document.getElementById(fieldId)||{}).value);
+  /* Snapped to the fils on the way in, so nothing finer than real money
+     ever reaches the database — a typo of 1462.5678 is stored as
+     1,462.568, not carried around at a precision money does not have. */
+  const jod = parseFloat((document.getElementById(fieldId)||{}).value);
+  return isNaN(jod) ? NaN : toFils(jod);
 }
 function resetAmountCurrency(fieldId) {
   const usdInput = document.getElementById(fieldId + 'Usd');
@@ -13989,7 +14033,7 @@ function hardReload() { location.reload(); }
    The page watches the file it came from and takes the new one as soon
    as it can do so without interrupting anybody — silently if the tab is
    in the background, which is the usual case. */
-const BUILD = '2026-10-15-v128';
+const BUILD = '2026-10-28-v129';
 let buildTag        = null;    // what the server last said this file was
 let newBuildPending = false;
 
@@ -14303,7 +14347,7 @@ function renderAll() { renderWeekly(); renderMonthly(); renderProjects(); update
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', async function() {
-  console.log('ECO Workload Tracker — build 2026-10-15-v128 loaded');
+  console.log('ECO Workload Tracker — build 2026-10-28-v129 loaded');
   document.querySelectorAll('.overlay').forEach(function(o) {
     o.addEventListener('click', function(e){ if(e.target===o) o.classList.remove('open'); });
   });
